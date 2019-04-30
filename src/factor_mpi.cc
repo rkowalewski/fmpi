@@ -3,6 +3,7 @@
 #include <iostream>
 #include <iterator>
 #include <sstream>
+#include <unordered_map>
 #include <utility>
 #include <vector>
 
@@ -28,9 +29,20 @@ std::ostream& operator<<(
   return os;
 }
 
-struct PAIR : std::pair<std::string, double> {
+struct StringDoublePair : std::pair<std::string, double> {
   using std::pair<std::string, double>::pair;
 };
+
+bool operator<(StringDoublePair const& lhs, StringDoublePair const& rhs)
+{
+  return lhs.second < rhs.second;
+}
+
+std::ostream& operator<<(std::ostream& os, StringDoublePair const& p)
+{
+  os << "{" << p.first << ", " << p.second << "}";
+  return os;
+}
 
 template <class T>
 inline constexpr T mod(T a, T b)
@@ -162,21 +174,46 @@ void printVector(InputIt begin, InputIt end, int me)
   std::cout << os.str();
 }
 
+auto medianReduce(double myMedian, int root, MPI_Comm comm)
+{
+  int me, nr;
+  MPI_Comm_rank(comm, &me);
+  MPI_Comm_size(comm, &nr);
+  std::vector<double> meds;
+
+  meds.reserve(nr);
+
+  MPI_Gather(&myMedian, 1, MPI_DOUBLE, &meds[0], 1, MPI_DOUBLE, root, comm);
+
+  if (me == root) {
+#if 0
+    std::cout << "medians: ";
+    std::copy(
+        &meds[0], &meds[nr], std::ostream_iterator<double>(std::cout, " "));
+    std::cout << "\n";
+#endif
+    auto nth = &meds[0] + nr / 2;
+    std::nth_element(&meds[0], nth, &meds[0] + nr);
+    return *nth;
+  }
+  else {
+    return -1.0;
+  }
+}
+
+constexpr size_t KB = 1 << 10;
+constexpr size_t MB = 1 << 20;
+
+constexpr size_t niters   = 3;
+constexpr size_t minbytes = 256 * KB;
+constexpr size_t maxbytes = 512 * KB;
+
 int main(int argc, char* argv[])
 {
   constexpr int n_ranks = 6;
   using value_t         = int;
 
-  constexpr size_t KB = (1 << 10) / sizeof(value_t);
-  constexpr size_t MB = (KB << 10);
-
-  // constexpr size_t sz_begin = 16 * KB;
-  constexpr size_t sz_begin = 256 * KB;
-
-  constexpr size_t sz_max = 128 * MB;
-
-  std::vector<int>  data, out, correct;
-  std::vector<PAIR> times;
+  std::vector<int> data, out, correct;
 
   MPI_Init(&argc, &argv);
   int      me, nr;
@@ -184,87 +221,168 @@ int main(int argc, char* argv[])
   MPI_Comm_rank(MPI_COMM_WORLD, &me);
   MPI_Comm_size(MPI_COMM_WORLD, &nr);
 
-  int  idx = 0;
-  auto gen = [me, nr, &idx]() { return me * nr + idx++; };
-
   auto clock           = SynchronizedClock{};
   bool is_clock_synced = clock.Init(comm);
   assert(is_clock_synced);
 
   std::mt19937_64 generator(rko::random_seed_seq::get_instance());
 
-  std::generate(std::begin(data), std::end(data), gen);
+  using measurements_t = std::unordered_map<std::string, std::vector<double>>;
 
-  for (int i = 0; i < std::log2(sz_max / sz_begin); ++i) {
-    std::shuffle(std::begin(data), std::end(data), generator);
-    auto   sz_local = sz_begin * (1 << i);
-    size_t nels     = nr * sz_local;
-    data.resize(nels);
-    out.resize(nels);
-    correct.resize(nels);
+  measurements_t measurements;
 
-    auto barrier = clock.Barrier(comm);
-    assert(barrier.Success(comm));
+  std::array<std::string, 4> algos = {
+      "AlltoAll", "FactorParty", "FlatFactor", "FlatHandshake"};
 
-    auto now = ChronoClockNow();
-    MPI_Alltoall(
-        std::addressof(*std::begin(data)),
-        sz_begin,
-        MPI_INT,
-        std::addressof(*std::begin(correct)),
-        sz_begin,
-        MPI_INT,
-        MPI_COMM_WORLD);
-    auto duration = ChronoClockNow() - now;
+  std::vector<std::vector<StringDoublePair>> results;
+  // results.reserve(niters);
 
-    times.push_back(std::make_pair("AlltoAll", duration));
-    barrier = clock.Barrier(comm);
-    assert(barrier.Success(comm));
+  auto n_sizes = std::log2(maxbytes / minbytes);
 
-    factorParty(std::begin(data), std::begin(out), sz_begin, MPI_COMM_WORLD);
-    duration = ChronoClockNow() - now;
-    times.push_back(std::make_pair("Factor Party", duration));
+  if (me == 0) std::cout << "sizes: " << n_sizes << "\n";
 
-    barrier = clock.Barrier(comm);
-    assert(barrier.Success(comm));
+  for (size_t stage = 0; stage <= n_sizes; ++stage) {
+    auto n_l_elems = minbytes * (1 << stage) / sizeof(value_t);
+    auto n_g_elems = size_t(nr) * n_l_elems;
 
-    assert(
-        std::equal(std::begin(correct), std::end(correct), std::begin(out)));
+    data.resize(n_g_elems);
+    out.resize(n_g_elems);
+    correct.resize(n_g_elems);
 
-    now = ChronoClockNow();
+    int  idx = 0;
+    auto gen = [me, nr, &idx]() { return me * nr + idx++; };
 
-    flatFactor_selfLoops(
-        std::begin(data), std::begin(out), sz_begin, MPI_COMM_WORLD);
-    duration = ChronoClockNow() - now;
-    times.push_back(std::make_pair("FlatFactor", duration));
+    std::generate(std::begin(data), std::end(data), gen);
 
-    assert(
-        std::equal(std::begin(correct), std::end(correct), std::begin(out)));
+    for (size_t it = 0; it < niters; ++it) {
+      std::shuffle(std::begin(data), std::end(data), generator);
 
-    barrier = clock.Barrier(comm);
-    assert(barrier.Success(comm));
-    now = ChronoClockNow();
-    flatHandshake(
-        std::begin(data), std::begin(out), sz_begin, MPI_COMM_WORLD);
-    duration = ChronoClockNow() - now;
-    times.push_back(std::make_pair("Flat Handshake", duration));
+      auto barrier = clock.Barrier(comm);
+      assert(barrier.Success(comm));
 
-    assert(
-        std::equal(std::begin(correct), std::end(correct), std::begin(out)));
+      auto now = ChronoClockNow();
+      MPI_Alltoall(
+          std::addressof(*std::begin(data)),
+          n_l_elems,
+          MPI_INT,
+          std::addressof(*std::begin(correct)),
+          n_l_elems,
+          MPI_INT,
+          MPI_COMM_WORLD);
+      auto duration = ChronoClockNow() - now;
+      measurements["AlltoAll"].emplace_back(duration);
 
-    barrier = clock.Barrier(comm);
-    assert(barrier.Success(comm));
+      barrier = clock.Barrier(comm);
+      assert(barrier.Success(comm));
+
+      now = ChronoClockNow();
+      factorParty(
+          std::begin(data), std::begin(out), n_l_elems, MPI_COMM_WORLD);
+      duration = ChronoClockNow() - now;
+      measurements["FactorParty"].emplace_back(duration);
+
+      assert(std::equal(
+          std::begin(correct), std::end(correct), std::begin(out)));
+
+      barrier = clock.Barrier(comm);
+      assert(barrier.Success(comm));
+
+      now = ChronoClockNow();
+      flatFactor_selfLoops(
+          std::begin(data), std::begin(out), n_l_elems, MPI_COMM_WORLD);
+      duration = ChronoClockNow() - now;
+      measurements["FlatFactor"].emplace_back(duration);
+
+      assert(std::equal(
+          std::begin(correct), std::end(correct), std::begin(out)));
+
+      barrier = clock.Barrier(comm);
+      assert(barrier.Success(comm));
+
+      now = ChronoClockNow();
+      flatHandshake(
+          std::begin(data), std::begin(out), n_l_elems, MPI_COMM_WORLD);
+      duration = ChronoClockNow() - now;
+      measurements["FlatHandshake"].emplace_back(duration);
+
+      assert(std::equal(
+          std::begin(correct), std::end(correct), std::begin(out)));
+
+      barrier = clock.Barrier(comm);
+      assert(barrier.Success(comm));
+
+      barrier = clock.Barrier(comm);
+      assert(barrier.Success(comm));
+    }
+
+    std::vector<StringDoublePair> ranking;
+
+    for (auto const& algo : algos) {
+      auto mid = (niters / 2);
+
+      std::nth_element(
+          measurements[algo].begin(),
+          measurements[algo].begin() + mid,
+          measurements[algo].end());
+
+      auto med = medianReduce(measurements[algo][mid], 0, comm);
+
+      if (me == 0) {
+        ranking.emplace_back(StringDoublePair{algo, med});
+      }
+    }
 
     if (me == 0) {
-      std::cout << "KB: " << sz_local * sizeof(value_t) / (1 << 10) << "\n";
+      std::sort(ranking.begin(), ranking.end());
+      assert(ranking.size() == algos.size());
+      results.emplace_back(std::move(ranking));
+      assert(results.size() == (stage + 1));
+
+#if 0
+      auto& res = results[stage];
+
+      std::cout << "(" << stage
+                << ") KB = " << n_g_elems * sizeof(value_t) / KB
+                << " medians: ";
       std::copy(
-          std::begin(times),
-          std::end(times),
-          std::ostream_iterator<PAIR>(std::cout, "\n"));
+          res.begin(),
+          res.end(),
+          std::ostream_iterator<StringDoublePair>(std::cout, " "));
+      std::cout << "\n";
+#endif
     }
-    times.clear();
-    barrier = clock.Barrier(comm);
-    assert(barrier.Success(comm));
+
+#if 0
+    if (me == 0) {
+      std::cout << "KB: " << n_g_elems * sizeof(value_t) / KB << "\n";
+      for (auto& kv : measurements) {
+        std::cout << kv.first << ": ";
+        std::copy(
+            std::begin(kv.second),
+            std::end(kv.second),
+            std::ostream_iterator<double>(std::cout, ", "));
+        std::cout << "\n";
+
+        std::cout << "2nd element: " << kv.second[1] << "\n";
+      }
+
+      std::cout << "\n";
+    }
+#endif
+
+    measurements.clear();
+  }
+
+  if (me == 0) {
+    for (std::size_t i = 0; i <= n_sizes; ++i) {
+      std::cout << "(" << i << ") KB = " << minbytes * (1 << i) * nr / KB
+                << " medians: ";
+      std::copy(
+          std::begin(results[i]),
+          std::end(results[i]),
+          std::ostream_iterator<StringDoublePair>(std::cout, ", "));
+      std::cout << "\n";
+    }
   }
 
   MPI_Finalize();
