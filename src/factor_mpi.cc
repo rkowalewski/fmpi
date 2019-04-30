@@ -1,5 +1,6 @@
 #include <algorithm>
 #include <cassert>
+#include <functional>
 #include <iostream>
 #include <iterator>
 #include <sstream>
@@ -15,19 +16,6 @@
 #include <synchronized_barrier.hpp>
 
 using rank_pair = std::pair<int, int>;
-
-std::ostream& operator<<(std::ostream& os, std::pair<int, int> const& p)
-{
-  os << "{" << p.first << ", " << p.second << "}";
-  return os;
-}
-
-std::ostream& operator<<(
-    std::ostream& os, std::pair<std::string, double> const& p)
-{
-  os << "{" << p.first << ", " << p.second << "}";
-  return os;
-}
 
 struct StringDoublePair : std::pair<std::string, double> {
   using std::pair<std::string, double>::pair;
@@ -85,7 +73,7 @@ inline void factorParty(InputIt begin, OutputIt out, int nels, MPI_Comm comm)
       partner[pair.second] = pair.first;
     }
 
-    MPI_Sendrecv(
+    auto res = MPI_Sendrecv(
         std::addressof(*(begin + partner[me] * nels)),
         nels,
         MPI_INT,
@@ -98,14 +86,14 @@ inline void factorParty(InputIt begin, OutputIt out, int nels, MPI_Comm comm)
         100,
         comm,
         MPI_STATUS_IGNORE);
+    assert(res == MPI_SUCCESS);
   }
 
   std::copy(begin + me * nels, begin + me * nels + nels, out + me * nels);
 }
 
 template <class InputIt, class OutputIt>
-inline void flatFactor_selfLoops(
-    InputIt begin, OutputIt out, int nels, MPI_Comm comm)
+inline void flatFactor(InputIt begin, OutputIt out, int nels, MPI_Comm comm)
 {
   int me, nr;
   MPI_Comm_rank(comm, &me);
@@ -113,7 +101,7 @@ inline void flatFactor_selfLoops(
 
   for (int i = 1; i <= nr; ++i) {
     auto partner = mod(i - me, nr);
-    MPI_Sendrecv(
+    auto res     = MPI_Sendrecv(
         std::addressof(*(begin + partner * nels)),
         nels,
         MPI_INT,
@@ -126,6 +114,7 @@ inline void flatFactor_selfLoops(
         100,
         comm,
         MPI_STATUS_IGNORE);
+    assert(res == MPI_SUCCESS);
   }
 }
 
@@ -138,7 +127,7 @@ inline void flatHandshake(
   MPI_Comm_size(comm, &nr);
   for (int i = 1; i < nr; ++i) {
     auto pair = std::make_pair(mod(me + i, nr), mod(me - i, nr));
-    MPI_Sendrecv(
+    auto res  = MPI_Sendrecv(
         std::addressof(*(begin + pair.first * nels)),
         nels,
         MPI_INT,
@@ -151,9 +140,25 @@ inline void flatHandshake(
         100,
         comm,
         MPI_STATUS_IGNORE);
+    assert(res == MPI_SUCCESS);
   }
 
   std::copy(begin + me * nels, begin + me * nels + nels, out + me * nels);
+}
+
+template <class InputIt, class OutputIt>
+inline void MpiAlltoAll(InputIt begin, OutputIt out, int nels, MPI_Comm comm)
+{
+  auto res = MPI_Alltoall(
+      std::addressof(*begin),
+      nels,
+      MPI_INT,
+      std::addressof(*out),
+      nels,
+      MPI_INT,
+      MPI_COMM_WORLD);
+
+  assert(res == MPI_SUCCESS);
 }
 
 template <class InputIt, class Gen>
@@ -195,19 +200,31 @@ auto medianReduce(double myMedian, int root, MPI_Comm comm)
   }
 }
 
+template <class InputIt, class OutputIt, class F>
+auto run_algorithm(
+    F&& f, InputIt begin, OutputIt out, int nels, MPI_Comm comm)
+{
+  auto start = ChronoClockNow();
+  f(begin, out, nels, comm);
+  return ChronoClockNow() - start;
+}
+
 constexpr size_t KB = 1 << 10;
 constexpr size_t MB = 1 << 20;
 
 constexpr size_t niters   = 3;
 constexpr size_t minbytes = 256 * KB;
-constexpr size_t maxbytes = 512 * KB;
+constexpr size_t maxbytes = 64 * MB;
 
 int main(int argc, char* argv[])
 {
   constexpr int n_ranks = 6;
-  using value_t         = int;
 
-  std::vector<int> data, out, correct;
+  using value_t     = int;
+  using container_t = std::vector<value_t>;
+  using iterator_t  = typename container_t::iterator;
+
+  container_t data, out, correct;
 
   MPI_Init(&argc, &argv);
   int      me, nr;
@@ -225,15 +242,23 @@ int main(int argc, char* argv[])
 
   measurements_t measurements;
 
-  std::array<std::string, 4> algos = {
-      "AlltoAll", "FactorParty", "FlatFactor", "FlatHandshake"};
+  using function_t = std::function<void(
+      typename container_t::iterator,
+      typename container_t::iterator,
+      int,
+      MPI_Comm)>;
 
-  std::vector<std::vector<StringDoublePair>> results;
-  // results.reserve(niters);
+  function_t f = MpiAlltoAll<
+      typename container_t::iterator,
+      typename container_t::iterator>;
+
+  std::array<std::pair<std::string, function_t>, 4> algos2 = {
+      std::make_pair("AlltoAll", MpiAlltoAll<iterator_t, iterator_t>),
+      std::make_pair("FactorParty", factorParty<iterator_t, iterator_t>),
+      std::make_pair("FlatFactor", flatFactor<iterator_t, iterator_t>),
+      std::make_pair("FlatHandshake", flatHandshake<iterator_t, iterator_t>)};
 
   auto n_sizes = std::log2(maxbytes / minbytes);
-
-  if (me == 0) std::cout << "sizes: " << n_sizes << "\n";
 
   for (size_t stage = 0; stage <= n_sizes; ++stage) {
     auto n_l_elems = minbytes * (1 << stage) / sizeof(value_t);
@@ -251,10 +276,8 @@ int main(int argc, char* argv[])
     for (size_t it = 0; it < niters; ++it) {
       std::shuffle(std::begin(data), std::end(data), generator);
 
-      auto barrier = clock.Barrier(comm);
-      assert(barrier.Success(comm));
-
-      auto now = ChronoClockNow();
+      // first we want to obtain the correct result which we can verify then
+      // with our own algorithms
       MPI_Alltoall(
           std::addressof(*std::begin(data)),
           n_l_elems,
@@ -263,91 +286,71 @@ int main(int argc, char* argv[])
           n_l_elems,
           MPI_INT,
           MPI_COMM_WORLD);
-      auto duration = ChronoClockNow() - now;
-      measurements["AlltoAll"].emplace_back(duration);
 
-      barrier = clock.Barrier(comm);
-      assert(barrier.Success(comm));
+      for (auto& algo : algos2) {
+        // We always want to guarantee that all processors start at the same
+        // time, so this is a real barrier
+        auto barrier = clock.Barrier(comm);
+        assert(barrier.Success(comm));
 
-      now = ChronoClockNow();
-      factorParty(
-          std::begin(data), std::begin(out), n_l_elems, MPI_COMM_WORLD);
-      duration = ChronoClockNow() - now;
-      measurements["FactorParty"].emplace_back(duration);
+        auto t = run_algorithm(
+            algo.second,
+            std::begin(data),
+            std::begin(out),
+            n_l_elems,
+            MPI_COMM_WORLD);
 
-      assert(std::equal(
-          std::begin(correct), std::end(correct), std::begin(out)));
+        measurements[algo.first].emplace_back(t);
 
-      barrier = clock.Barrier(comm);
-      assert(barrier.Success(comm));
-
-      now = ChronoClockNow();
-      flatFactor_selfLoops(
-          std::begin(data), std::begin(out), n_l_elems, MPI_COMM_WORLD);
-      duration = ChronoClockNow() - now;
-      measurements["FlatFactor"].emplace_back(duration);
-
-      assert(std::equal(
-          std::begin(correct), std::end(correct), std::begin(out)));
-
-      barrier = clock.Barrier(comm);
-      assert(barrier.Success(comm));
-
-      now = ChronoClockNow();
-      flatHandshake(
-          std::begin(data), std::begin(out), n_l_elems, MPI_COMM_WORLD);
-      duration = ChronoClockNow() - now;
-      measurements["FlatHandshake"].emplace_back(duration);
-
-      assert(std::equal(
-          std::begin(correct), std::end(correct), std::begin(out)));
-
-      barrier = clock.Barrier(comm);
-      assert(barrier.Success(comm));
-
-      barrier = clock.Barrier(comm);
-      assert(barrier.Success(comm));
+        assert(std::equal(
+            std::begin(correct), std::end(correct), std::begin(out)));
+      }
     }
 
     std::vector<StringDoublePair> ranking;
 
-    for (auto const& algo : algos) {
+    constexpr int root = 0;
+
+    for (auto const& algo : algos2) {
       auto mid = (niters / 2);
 
-      std::nth_element(
-          measurements[algo].begin(),
-          measurements[algo].begin() + mid,
-          measurements[algo].end());
+      auto& results = measurements[algo.first];
 
-      auto med = medianReduce(measurements[algo][mid], 0, comm);
+      // local median
+      std::nth_element(results.begin(), results.begin() + mid, results.end());
 
-      if (me == 0) {
-        ranking.emplace_back(StringDoublePair{algo, med});
+      // global median
+      auto med = medianReduce(results[mid], root, comm);
+
+      // collect the global median into a vector
+      if (me == root) {
+        ranking.emplace_back(StringDoublePair{algo.first, med});
       }
     }
 
-    if (me == 0) {
+    if (me == root) {
+      assert(ranking.size() == algos2.size());
+      // sort the median vector
       std::sort(ranking.begin(), ranking.end());
-      assert(ranking.size() == algos.size());
-      results.emplace_back(std::move(ranking));
-      assert(results.size() == (stage + 1));
 
-    }
-
-    //reset measurements for next iteration
-    measurements.clear();
-  }
-
-  if (me == 0) {
-    for (std::size_t i = 0; i <= n_sizes; ++i) {
-      std::cout << "(" << i << ") KB = " << minbytes * (1 << i) * nr / KB
-                << " medians: ";
+      std::cout << "(" << stage << ") Global Volume (KB) "
+                << n_g_elems * sizeof(value_t) / KB
+                << ", Message Size per Proc (KB) = "
+                << n_l_elems * sizeof(value_t) / KB << ", ranking: ";
+      // print until second to last
       std::copy(
-          std::begin(results[i]),
-          std::end(results[i]),
+          std::begin(ranking),
+          std::end(ranking) - 1,
           std::ostream_iterator<StringDoublePair>(std::cout, ", "));
-      std::cout << "\n";
+      // print last
+      std::cout << *(std::prev(ranking.end()));
+
+      // flush stdio buffer
+      std::cout << std::endl;
     }
+
+    // reset measurements for next iteration
+    measurements.clear();
   }
 
   MPI_Finalize();
