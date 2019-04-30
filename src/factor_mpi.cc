@@ -186,12 +186,6 @@ auto medianReduce(double myMedian, int root, MPI_Comm comm)
   MPI_Gather(&myMedian, 1, MPI_DOUBLE, &meds[0], 1, MPI_DOUBLE, root, comm);
 
   if (me == root) {
-#if 0
-    std::cout << "medians: ";
-    std::copy(
-        &meds[0], &meds[nr], std::ostream_iterator<double>(std::cout, " "));
-    std::cout << "\n";
-#endif
     auto nth = &meds[0] + nr / 2;
     std::nth_element(&meds[0], nth, &meds[0] + nr);
     return *nth;
@@ -338,38 +332,9 @@ int main(int argc, char* argv[])
       results.emplace_back(std::move(ranking));
       assert(results.size() == (stage + 1));
 
-#if 0
-      auto& res = results[stage];
-
-      std::cout << "(" << stage
-                << ") KB = " << n_g_elems * sizeof(value_t) / KB
-                << " medians: ";
-      std::copy(
-          res.begin(),
-          res.end(),
-          std::ostream_iterator<StringDoublePair>(std::cout, " "));
-      std::cout << "\n";
-#endif
     }
 
-#if 0
-    if (me == 0) {
-      std::cout << "KB: " << n_g_elems * sizeof(value_t) / KB << "\n";
-      for (auto& kv : measurements) {
-        std::cout << kv.first << ": ";
-        std::copy(
-            std::begin(kv.second),
-            std::end(kv.second),
-            std::ostream_iterator<double>(std::cout, ", "));
-        std::cout << "\n";
-
-        std::cout << "2nd element: " << kv.second[1] << "\n";
-      }
-
-      std::cout << "\n";
-    }
-#endif
-
+    //reset measurements for next iteration
     measurements.clear();
   }
 
