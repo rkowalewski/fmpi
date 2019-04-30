@@ -1,8 +1,8 @@
-MPICXX = mpic++
-CXX=g++
+MPICXX ?= mpic++
+CXX ?= g++
 
 INCLUDES= -Iinclude -Iexternal/MPISynchronizedBarrier/include
-CXXFLAGS =  -std=c++14 -O3 $(INCLUDES)
+CXXFLAGS =  -std=c++14 -O3 $(INCLUDES) -DNDEBUG -Wall
 
 .PHONY: clean all
 

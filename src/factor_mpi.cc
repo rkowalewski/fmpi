@@ -1,6 +1,5 @@
 #include <algorithm>
 #include <cassert>
-#include <cstring>
 #include <functional>
 #include <iostream>
 #include <iterator>
@@ -8,6 +7,7 @@
 #include <unordered_map>
 #include <utility>
 #include <vector>
+#include <cstring>
 
 #include <mpi.h>
 
@@ -210,13 +210,6 @@ auto run_algorithm(
   return ChronoClockNow() - start;
 }
 
-constexpr size_t KB = 1 << 10;
-constexpr size_t MB = 1 << 20;
-
-constexpr size_t niters   = 3;
-constexpr size_t minbytes = 256 * KB;
-constexpr size_t maxbytes = 16 * MB;
-
 extern char** environ;
 
 void print_env()
@@ -240,6 +233,16 @@ void print_env()
     env_var_kv = *(environ + i);
   }
 }
+
+constexpr size_t KB = 1 << 10;
+constexpr size_t MB = 1 << 20;
+
+constexpr size_t niters       = 3;
+constexpr size_t minblocksize = 1 * KB;
+
+// This are approximately 25 GB
+// constexpr size_t capacity_per_node = (size_t(1) << 24) * 28 * 28 * 2;
+constexpr size_t capacity_per_node = 16 * KB;
 
 int main(int argc, char* argv[])
 {
@@ -287,15 +290,26 @@ int main(int argc, char* argv[])
       std::make_pair("FlatFactor", flatFactor<iterator_t, iterator_t>),
       std::make_pair("FlatHandshake", flatHandshake<iterator_t, iterator_t>)};
 
-  auto n_sizes = std::log2(maxbytes / minbytes);
+  // We have to half the capacity because we do not in-place all to all
+  // We again half by the number of processors
+  const size_t maxblocksize = capacity_per_node / (2 * nr * nr);
+
+  auto n_sizes = std::log2(maxblocksize / minblocksize);
 
   for (size_t stage = 0; stage <= n_sizes; ++stage) {
-    auto n_l_elems = minbytes * (1 << stage) / sizeof(value_t);
-    auto n_g_elems = size_t(nr) * n_l_elems;
+    auto blocksize = minblocksize * (1 << stage) / sizeof(value_t);
+    auto n_g_elems = size_t(nr) * blocksize;
+
+    if (me == 0) {
+      std::cout << "stage: " << stage << ", global size: " << n_g_elems
+                << ", local size: " << blocksize << std::endl;
+    }
 
     data.resize(n_g_elems);
     out.resize(n_g_elems);
+#ifndef NDEBUG
     correct.resize(n_g_elems);
+#endif
 
     int  idx = 0;
     auto gen = [me, nr, &idx]() { return me * nr + idx++; };
@@ -305,16 +319,24 @@ int main(int argc, char* argv[])
     for (size_t it = 0; it < niters; ++it) {
       std::shuffle(std::begin(data), std::end(data), generator);
 
+      assert(blocksize > 0 && blocksize < std::numeric_limits<int>::max());
+
       // first we want to obtain the correct result which we can verify then
       // with our own algorithms
-      MPI_Alltoall(
+#ifndef NDEBUG
+      auto res = MPI_Alltoall(
           std::addressof(*std::begin(data)),
-          n_l_elems,
+          blocksize,
           MPI_INT,
           std::addressof(*std::begin(correct)),
-          n_l_elems,
+          blocksize,
           MPI_INT,
           MPI_COMM_WORLD);
+#else
+      auto res = MPI_SUCCESS;
+#endif
+
+      assert(res == MPI_SUCCESS);
 
       for (auto& algo : algos2) {
         // We always want to guarantee that all processors start at the same
@@ -326,7 +348,7 @@ int main(int argc, char* argv[])
             algo.second,
             std::begin(data),
             std::begin(out),
-            n_l_elems,
+            blocksize,
             MPI_COMM_WORLD);
 
         measurements[algo.first].emplace_back(t);
@@ -363,9 +385,9 @@ int main(int argc, char* argv[])
       std::sort(ranking.begin(), ranking.end());
 
       std::cout << "(" << stage << ") Global Volume (KB) "
-                << n_g_elems * sizeof(value_t) / KB
+                << n_g_elems * nr * sizeof(value_t) / KB
                 << ", Message Size per Proc (KB) = "
-                << n_l_elems * sizeof(value_t) / KB << ", ranking: ";
+                << blocksize * sizeof(value_t) / KB << ", ranking: ";
       // print until second to last
       std::copy(
           std::begin(ranking),
