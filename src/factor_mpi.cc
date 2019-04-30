@@ -1,5 +1,6 @@
 #include <algorithm>
 #include <cassert>
+#include <cstring>
 #include <functional>
 #include <iostream>
 #include <iterator>
@@ -214,7 +215,31 @@ constexpr size_t MB = 1 << 20;
 
 constexpr size_t niters   = 3;
 constexpr size_t minbytes = 256 * KB;
-constexpr size_t maxbytes = 64 * MB;
+constexpr size_t maxbytes = 16 * MB;
+
+extern char** environ;
+
+void print_env()
+{
+  int   i          = 1;
+  char* env_var_kv = *environ;
+
+  for (; env_var_kv != 0; ++i) {
+    // Split into key and value:
+    char*       flag_name_cstr  = env_var_kv;
+    char*       flag_value_cstr = std::strstr(env_var_kv, "=");
+    int         flag_name_len   = flag_value_cstr - flag_name_cstr;
+    std::string flag_name(flag_name_cstr, flag_name_cstr + flag_name_len);
+    std::string flag_value(flag_value_cstr + 1);
+
+    if (std::strstr(flag_name.c_str(), "OMPI_") ||
+        std::strstr(flag_name.c_str(), "I_MPI_")) {
+      std::cout << flag_name << " = " << flag_value << "\n";
+    }
+
+    env_var_kv = *(environ + i);
+  }
+}
 
 int main(int argc, char* argv[])
 {
@@ -231,6 +256,10 @@ int main(int argc, char* argv[])
   MPI_Comm comm = MPI_COMM_WORLD;
   MPI_Comm_rank(MPI_COMM_WORLD, &me);
   MPI_Comm_size(MPI_COMM_WORLD, &nr);
+
+  if (me == 0) {
+    print_env();
+  }
 
   auto clock           = SynchronizedClock{};
   bool is_clock_synced = clock.Init(comm);
