@@ -1,5 +1,5 @@
 #include <algorithm>
-#include <cassert>
+#include <cstring>
 #include <functional>
 #include <iostream>
 #include <iterator>
@@ -7,7 +7,16 @@
 #include <unordered_map>
 #include <utility>
 #include <vector>
-#include <cstring>
+
+#ifdef NDEBUG
+#define ASSERT(x)    \
+  do {               \
+    (void)sizeof(x); \
+  } while (0)
+#else
+#include <cassert>
+#define ASSERT(x) assert(x)
+#endif
 
 #include <mpi.h>
 
@@ -36,7 +45,7 @@ std::ostream& operator<<(std::ostream& os, StringDoublePair const& p)
 template <class T>
 inline constexpr T mod(T a, T b)
 {
-  assert(b > 0);
+  ASSERT(b > 0);
   T ret = a % b;
   return (ret >= 0) ? (ret) : (ret + b);
 }
@@ -54,7 +63,7 @@ inline void factorParty(InputIt begin, OutputIt out, int nels, MPI_Comm comm)
   MPI_Comm_rank(comm, &me);
   MPI_Comm_size(comm, &nr);
 
-  assert(nr % 2 == 0);
+  ASSERT(nr % 2 == 0);
 
   // We have 2n ranks
   auto n = nr / 2;
@@ -87,7 +96,7 @@ inline void factorParty(InputIt begin, OutputIt out, int nels, MPI_Comm comm)
         100,
         comm,
         MPI_STATUS_IGNORE);
-    assert(res == MPI_SUCCESS);
+    ASSERT(res == MPI_SUCCESS);
   }
 
   std::copy(begin + me * nels, begin + me * nels + nels, out + me * nels);
@@ -115,7 +124,7 @@ inline void flatFactor(InputIt begin, OutputIt out, int nels, MPI_Comm comm)
         100,
         comm,
         MPI_STATUS_IGNORE);
-    assert(res == MPI_SUCCESS);
+    ASSERT(res == MPI_SUCCESS);
   }
 }
 
@@ -141,7 +150,7 @@ inline void flatHandshake(
         100,
         comm,
         MPI_STATUS_IGNORE);
-    assert(res == MPI_SUCCESS);
+    ASSERT(res == MPI_SUCCESS);
   }
 
   std::copy(begin + me * nels, begin + me * nels + nels, out + me * nels);
@@ -159,7 +168,7 @@ inline void MpiAlltoAll(InputIt begin, OutputIt out, int nels, MPI_Comm comm)
       MPI_INT,
       MPI_COMM_WORLD);
 
-  assert(res == MPI_SUCCESS);
+  ASSERT(res == MPI_SUCCESS);
 }
 
 template <class InputIt, class Gen>
@@ -237,17 +246,15 @@ void print_env()
 constexpr size_t KB = 1 << 10;
 constexpr size_t MB = 1 << 20;
 
-constexpr size_t niters       = 3;
+constexpr size_t niters       = 10;
 constexpr size_t minblocksize = 1 * KB;
 
 // This are approximately 25 GB
-// constexpr size_t capacity_per_node = (size_t(1) << 24) * 28 * 28 * 2;
-constexpr size_t capacity_per_node = 16 * KB;
+// constexpr size_t capacity_per_node = (size_t(1) << 25) * 28 * 28;
+constexpr size_t capacity_per_node = 32 * MB;
 
 int main(int argc, char* argv[])
 {
-  constexpr int n_ranks = 6;
-
   using value_t     = int;
   using container_t = std::vector<value_t>;
   using iterator_t  = typename container_t::iterator;
@@ -266,7 +273,7 @@ int main(int argc, char* argv[])
 
   auto clock           = SynchronizedClock{};
   bool is_clock_synced = clock.Init(comm);
-  assert(is_clock_synced);
+  ASSERT(is_clock_synced);
 
   std::mt19937_64 generator(rko::random_seed_seq::get_instance());
 
@@ -280,11 +287,7 @@ int main(int argc, char* argv[])
       int,
       MPI_Comm)>;
 
-  function_t f = MpiAlltoAll<
-      typename container_t::iterator,
-      typename container_t::iterator>;
-
-  std::array<std::pair<std::string, function_t>, 4> algos2 = {
+  std::array<std::pair<std::string, function_t>, 4> algos = {
       std::make_pair("AlltoAll", MpiAlltoAll<iterator_t, iterator_t>),
       std::make_pair("FactorParty", factorParty<iterator_t, iterator_t>),
       std::make_pair("FlatFactor", flatFactor<iterator_t, iterator_t>),
@@ -292,18 +295,19 @@ int main(int argc, char* argv[])
 
   // We have to half the capacity because we do not in-place all to all
   // We again half by the number of processors
-  const size_t maxblocksize = capacity_per_node / (2 * nr * nr);
+  // const size_t number_nodes = nr / 28;
+  const size_t number_nodes   = 1;
+  const size_t procs_per_node = nr / number_nodes;
+
+  const size_t maxblocksize =
+      capacity_per_node / (2 * procs_per_node * procs_per_node);
 
   auto n_sizes = std::log2(maxblocksize / minblocksize);
 
   for (size_t stage = 0; stage <= n_sizes; ++stage) {
-    auto blocksize = minblocksize * (1 << stage) / sizeof(value_t);
+    auto blocksize =
+        minblocksize * (1 << stage) / (sizeof(value_t) * number_nodes);
     auto n_g_elems = size_t(nr) * blocksize;
-
-    if (me == 0) {
-      std::cout << "stage: " << stage << ", global size: " << n_g_elems
-                << ", local size: " << blocksize << std::endl;
-    }
 
     data.resize(n_g_elems);
     out.resize(n_g_elems);
@@ -319,7 +323,7 @@ int main(int argc, char* argv[])
     for (size_t it = 0; it < niters; ++it) {
       std::shuffle(std::begin(data), std::end(data), generator);
 
-      assert(blocksize > 0 && blocksize < std::numeric_limits<int>::max());
+      ASSERT(blocksize > 0 && blocksize < std::numeric_limits<int>::max());
 
       // first we want to obtain the correct result which we can verify then
       // with our own algorithms
@@ -336,13 +340,13 @@ int main(int argc, char* argv[])
       auto res = MPI_SUCCESS;
 #endif
 
-      assert(res == MPI_SUCCESS);
+      ASSERT(res == MPI_SUCCESS);
 
-      for (auto& algo : algos2) {
+      for (auto& algo : algos) {
         // We always want to guarantee that all processors start at the same
         // time, so this is a real barrier
         auto barrier = clock.Barrier(comm);
-        assert(barrier.Success(comm));
+        ASSERT(barrier.Success(comm));
 
         auto t = run_algorithm(
             algo.second,
@@ -353,7 +357,7 @@ int main(int argc, char* argv[])
 
         measurements[algo.first].emplace_back(t);
 
-        assert(std::equal(
+        ASSERT(std::equal(
             std::begin(correct), std::end(correct), std::begin(out)));
       }
     }
@@ -362,7 +366,7 @@ int main(int argc, char* argv[])
 
     constexpr int root = 0;
 
-    for (auto const& algo : algos2) {
+    for (auto const& algo : algos) {
       auto mid = (niters / 2);
 
       auto& results = measurements[algo.first];
@@ -380,7 +384,7 @@ int main(int argc, char* argv[])
     }
 
     if (me == root) {
-      assert(ranking.size() == algos2.size());
+      ASSERT(ranking.size() == algos.size());
       // sort the median vector
       std::sort(ranking.begin(), ranking.end());
 
