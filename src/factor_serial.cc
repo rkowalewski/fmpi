@@ -98,7 +98,7 @@ inline void flatHandshake(int nr)
 
 int main(int argc, char* argv[])
 {
-  constexpr int n_ranks = 2;
+  constexpr int n_ranks = 16;
 
   std::cout << "Flat Factor excluding self loops:\n";
   factorParty(n_ranks);

@@ -8,20 +8,12 @@
 #include <utility>
 #include <vector>
 
-#ifdef NDEBUG
-#define ASSERT(x)    \
-  do {               \
-    (void)sizeof(x); \
-  } while (0)
-#else
-#include <cassert>
-#define ASSERT(x) assert(x)
-#endif
-
 #include <mpi.h>
 
-#include "Timer.h"
-#include "random.h"
+#include <Macros.h>
+#include <Random.h>
+#include <Timer.h>
+#include <Types.h>
 
 #include <synchronized_barrier.hpp>
 
@@ -63,6 +55,9 @@ inline void factorParty(InputIt begin, OutputIt out, int nels, MPI_Comm comm)
   MPI_Comm_rank(comm, &me);
   MPI_Comm_size(comm, &nr);
 
+  constexpr auto mpi_datatype = mpi::mpi_datatype<
+      typename std::iterator_traits<InputIt>::value_type>::value;
+
   ASSERT(nr % 2 == 0);
 
   // We have 2n ranks
@@ -86,12 +81,12 @@ inline void factorParty(InputIt begin, OutputIt out, int nels, MPI_Comm comm)
     auto res = MPI_Sendrecv(
         std::addressof(*(begin + partner[me] * nels)),
         nels,
-        MPI_INT,
+        mpi_datatype,
         partner[me],
         100,
         std::addressof(*(out + partner[me] * nels)),
         nels,
-        MPI_INT,
+        mpi_datatype,
         partner[me],
         100,
         comm,
@@ -109,22 +104,31 @@ inline void flatFactor(InputIt begin, OutputIt out, int nels, MPI_Comm comm)
   MPI_Comm_rank(comm, &me);
   MPI_Comm_size(comm, &nr);
 
+  constexpr auto mpi_datatype = mpi::mpi_datatype<
+      typename std::iterator_traits<InputIt>::value_type>::value;
+
   for (int i = 1; i <= nr; ++i) {
     auto partner = mod(i - me, nr);
-    auto res     = MPI_Sendrecv(
-        std::addressof(*(begin + partner * nels)),
-        nels,
-        MPI_INT,
-        partner,
-        100,
-        std::addressof(*(out + partner * nels)),
-        nels,
-        MPI_INT,
-        partner,
-        100,
-        comm,
-        MPI_STATUS_IGNORE);
-    ASSERT(res == MPI_SUCCESS);
+
+    if (partner == me) {
+      std::copy(begin + me * nels, begin + me * nels + nels, out + me * nels);
+    }
+    else {
+      auto res = MPI_Sendrecv(
+          std::addressof(*(begin + partner * nels)),
+          nels,
+          mpi_datatype,
+          partner,
+          100,
+          std::addressof(*(out + partner * nels)),
+          nels,
+          mpi_datatype,
+          partner,
+          100,
+          comm,
+          MPI_STATUS_IGNORE);
+      ASSERT(res == MPI_SUCCESS);
+    }
   }
 }
 
@@ -135,17 +139,21 @@ inline void flatHandshake(
   int me, nr;
   MPI_Comm_rank(comm, &me);
   MPI_Comm_size(comm, &nr);
+
+  constexpr auto mpi_datatype = mpi::mpi_datatype<
+      typename std::iterator_traits<InputIt>::value_type>::value;
+
   for (int i = 1; i < nr; ++i) {
     auto pair = std::make_pair(mod(me + i, nr), mod(me - i, nr));
     auto res  = MPI_Sendrecv(
         std::addressof(*(begin + pair.first * nels)),
         nels,
-        MPI_INT,
+        mpi_datatype,
         pair.first,
         100,
         std::addressof(*(out + pair.second * nels)),
         nels,
-        MPI_INT,
+        mpi_datatype,
         pair.second,
         100,
         comm,
@@ -159,13 +167,16 @@ inline void flatHandshake(
 template <class InputIt, class OutputIt>
 inline void MpiAlltoAll(InputIt begin, OutputIt out, int nels, MPI_Comm comm)
 {
+  constexpr auto mpi_datatype = mpi::mpi_datatype<
+      typename std::iterator_traits<InputIt>::value_type>::value;
+
   auto res = MPI_Alltoall(
       std::addressof(*begin),
       nels,
-      MPI_INT,
+      mpi_datatype,
       std::addressof(*out),
       nels,
-      MPI_INT,
+      mpi_datatype,
       MPI_COMM_WORLD);
 
   ASSERT(res == MPI_SUCCESS);
@@ -259,10 +270,21 @@ int main(int argc, char* argv[])
   using container_t = std::vector<value_t>;
   using iterator_t  = typename container_t::iterator;
 
-  container_t data, out, correct;
+  using benchmark_t = std::function<void(
+      typename container_t::iterator,
+      typename container_t::iterator,
+      int,
+      MPI_Comm)>;
+
+  using measurements_t = std::unordered_map<std::string, std::vector<double>>;
+
+  constexpr auto mpi_datatype = mpi::mpi_datatype<value_t>::value;
 
   MPI_Init(&argc, &argv);
-  int      me, nr;
+
+  int         me, nr;
+  container_t data, out, correct;
+
   MPI_Comm comm = MPI_COMM_WORLD;
   MPI_Comm_rank(MPI_COMM_WORLD, &me);
   MPI_Comm_size(MPI_COMM_WORLD, &nr);
@@ -277,17 +299,9 @@ int main(int argc, char* argv[])
 
   std::mt19937_64 generator(rko::random_seed_seq::get_instance());
 
-  using measurements_t = std::unordered_map<std::string, std::vector<double>>;
-
   measurements_t measurements;
 
-  using function_t = std::function<void(
-      typename container_t::iterator,
-      typename container_t::iterator,
-      int,
-      MPI_Comm)>;
-
-  std::array<std::pair<std::string, function_t>, 4> algos = {
+  std::array<std::pair<std::string, benchmark_t>, 4> algos = {
       std::make_pair("AlltoAll", MpiAlltoAll<iterator_t, iterator_t>),
       std::make_pair("FactorParty", factorParty<iterator_t, iterator_t>),
       std::make_pair("FlatFactor", flatFactor<iterator_t, iterator_t>),
@@ -304,9 +318,9 @@ int main(int argc, char* argv[])
 
   auto n_sizes = std::log2(maxblocksize / minblocksize);
 
-  for (size_t stage = 0; stage <= n_sizes; ++stage) {
+  for (size_t step = 0; step <= n_sizes; ++step) {
     auto blocksize =
-        minblocksize * (1 << stage) / (sizeof(value_t) * number_nodes);
+        minblocksize * (1 << step) / (sizeof(value_t) * number_nodes);
     auto n_g_elems = size_t(nr) * blocksize;
 
     data.resize(n_g_elems);
@@ -323,6 +337,7 @@ int main(int argc, char* argv[])
     for (size_t it = 0; it < niters; ++it) {
       std::shuffle(std::begin(data), std::end(data), generator);
 
+      // Required by good old 32-bit MPI
       ASSERT(blocksize > 0 && blocksize < std::numeric_limits<int>::max());
 
       // first we want to obtain the correct result which we can verify then
@@ -331,10 +346,10 @@ int main(int argc, char* argv[])
       auto res = MPI_Alltoall(
           std::addressof(*std::begin(data)),
           blocksize,
-          MPI_INT,
+          mpi_datatype,
           std::addressof(*std::begin(correct)),
           blocksize,
-          MPI_INT,
+          mpi_datatype,
           MPI_COMM_WORLD);
 #else
       auto res = MPI_SUCCESS;
@@ -388,10 +403,10 @@ int main(int argc, char* argv[])
       // sort the median vector
       std::sort(ranking.begin(), ranking.end());
 
-      std::cout << "(" << stage << ") Global Volume (KB) "
+      std::cout << "(" << step << ") Global Volume (KB) "
                 << n_g_elems * nr * sizeof(value_t) / KB
-                << ", Message Size per Proc (KB) = "
-                << blocksize * sizeof(value_t) / KB << ", ranking: ";
+                << ", Blocksize (KB) = " << blocksize * sizeof(value_t) / KB
+                << ", ranking: ";
       // print until second to last
       std::copy(
           std::begin(ranking),
