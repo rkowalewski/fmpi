@@ -1,3 +1,5 @@
+#ifndef TYPES_H__INCLUDED
+#define TYPES_H__INCLUDED
 #include <mpi.h>
 
 #include <type_traits>
@@ -24,3 +26,4 @@ struct mpi_datatype {
 };
 
 }  // namespace mpi
+#endif
