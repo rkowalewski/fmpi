@@ -105,7 +105,7 @@ constexpr size_t minblocksize = 1 * KB;
 
 // This are approximately 25 GB
 // constexpr size_t capacity_per_node = (size_t(1) << 25) * 28 * 28;
-constexpr size_t capacity_per_node = 32 * MB;
+constexpr size_t capacity_per_node = 100 * MB;
 
 int main(int argc, char* argv[])
 {
@@ -126,8 +126,8 @@ int main(int argc, char* argv[])
 
   measurements_t measurements;
 
-#if 0
-  std::array<std::pair<std::string, benchmark_t>, 5> algos = {
+#if 1
+  std::array<std::pair<std::string, benchmark_t>, 6> algos = {
       std::make_pair("AlltoAll", MpiAlltoAll<iterator_t, iterator_t>),
       std::make_pair("FactorParty", factorParty<iterator_t, iterator_t>),
       std::make_pair("FlatFactor", flatFactor<iterator_t, iterator_t>),
@@ -168,7 +168,7 @@ int main(int argc, char* argv[])
       capacity_per_node / (2 * procs_per_node * procs_per_node);
   auto n_sizes = std::log2(maxblocksize / minblocksize);
 #else
-  size_t                                             n_sizes = 1;
+  size_t                                             n_sizes = 0;
 #endif
 
   for (size_t step = 0; step <= n_sizes; ++step) {
@@ -229,8 +229,6 @@ int main(int argc, char* argv[])
             blocksize,
             MPI_COMM_WORLD);
 
-        printVector(out.begin(), out.end(), me);
-
         measurements[algo.first].emplace_back(t);
 
         ASSERT(std::equal(
@@ -284,11 +282,6 @@ int main(int argc, char* argv[])
     measurements.clear();
   }
 
-  if (me == 0) {
-    for (int i = 0; i < 2; ++i) {
-      std::cout << i << "\n";
-    }
-  }
   MPI_Finalize();
 
   return 0;
