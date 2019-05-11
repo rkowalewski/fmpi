@@ -29,9 +29,6 @@ constexpr size_t minblocksize = 1 * KB;
 // This are approximately 25 GB
 constexpr size_t capacity_per_node = (size_t(1) << 25) * 28 * 28;
 
-constexpr size_t procs_per_node = 28;
-
-
 int main(int argc, char* argv[])
 {
   using value_t     = int;
@@ -71,24 +68,35 @@ int main(int argc, char* argv[])
   MPI_Comm_rank(MPI_COMM_WORLD, &me);
   MPI_Comm_size(MPI_COMM_WORLD, &nr);
 
+  if (argc == 1) {
+    if (me == 0) {
+      std::cout << "usage: " << argv[0] << " [number of nodes]\n";
+    }
+    MPI_Finalize();
+    return 1;
+  }
+
+
   ASSERT(nr >= 1);
+
+  auto nnodes = std::atoi(argv[1]);
 
   if (me == 0) {
     print_env();
   }
-
-  auto clock           = SynchronizedClock{};
-  bool is_clock_synced = clock.Init(comm);
-  ASSERT(is_clock_synced);
 
   std::mt19937_64 generator(random_seed_seq::get_instance());
 
   // We have to half the capacity because we do not in-place all to all
   // We again half by the number of processors
   // const size_t number_nodes = nr / 28;
-  const size_t number_nodes   = 1;
+  ASSERT((nr % nnodes) == 0);
 
-  ASSERT((nr % procs_per_node) == 0);
+  auto procs_per_node = nr / nnodes;
+
+  auto clock           = SynchronizedClock{};
+  bool is_clock_synced = clock.Init(comm);
+  ASSERT(is_clock_synced);
 
   const size_t maxblocksize =
       capacity_per_node / (2 * procs_per_node * procs_per_node);
@@ -96,7 +104,7 @@ int main(int argc, char* argv[])
 
   for (size_t step = 0; step <= n_sizes; ++step) {
     auto blocksize =
-        minblocksize * (1 << step) / (sizeof(value_t) * number_nodes);
+        minblocksize * (1 << step) / (sizeof(value_t) * nnodes);
 
     // Required by good old 32-bit MPI
     ASSERT(blocksize > 0 && blocksize < std::numeric_limits<int>::max());
