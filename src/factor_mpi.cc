@@ -27,8 +27,9 @@ constexpr size_t niters       = 10;
 constexpr size_t minblocksize = 1 * KB;
 
 // This are approximately 25 GB
-// constexpr size_t capacity_per_node = (size_t(1) << 25) * 28 * 28;
-constexpr size_t capacity_per_node = 100 * MB;
+constexpr size_t capacity_per_node = (size_t(1) << 25) * 28 * 28;
+
+constexpr size_t procs_per_node = 28;
 
 
 int main(int argc, char* argv[])
@@ -52,8 +53,9 @@ int main(int argc, char* argv[])
       std::make_pair("Bruck_Mod", alltoall_bruck_mod<iterator_t, iterator_t>)
       };
 #else
-  std::array<std::pair<std::string, benchmark_t>, 1> algos = {std::make_pair(
-      "Bruck_Mod", alltoall_bruck_mod<iterator_t, iterator_t>)};
+  std::array<std::pair<std::string, benchmark_t>, 2> algos = {std::make_pair(
+      "Bruck", alltoall_bruck<iterator_t, iterator_t>),
+      std::make_pair("Bruck_Mod", alltoall_bruck_mod<iterator_t, iterator_t>)};
 #endif
 
   using measurements_t = std::unordered_map<std::string, std::vector<double>>;
@@ -81,27 +83,20 @@ int main(int argc, char* argv[])
 
   std::mt19937_64 generator(random_seed_seq::get_instance());
 
-#ifdef NDEBUG
   // We have to half the capacity because we do not in-place all to all
   // We again half by the number of processors
   // const size_t number_nodes = nr / 28;
   const size_t number_nodes   = 1;
-  const size_t procs_per_node = nr / number_nodes;
+
+  ASSERT((nr % procs_per_node) == 0);
 
   const size_t maxblocksize =
       capacity_per_node / (2 * procs_per_node * procs_per_node);
   auto n_sizes = std::log2(maxblocksize / minblocksize);
-#else
-  size_t                                             n_sizes = 0;
-#endif
 
   for (size_t step = 0; step <= n_sizes; ++step) {
-#ifdef NDEBUG
     auto blocksize =
         minblocksize * (1 << step) / (sizeof(value_t) * number_nodes);
-#else
-    auto blocksize = 1;
-#endif
 
     // Required by good old 32-bit MPI
     ASSERT(blocksize > 0 && blocksize < std::numeric_limits<int>::max());
