@@ -16,86 +16,9 @@
 #include <Random.h>
 #include <Timer.h>
 #include <Types.h>
+#include <Benchmark.h>
 
 #include <synchronized_barrier.hpp>
-
-template <class InputIt>
-void printVector(InputIt begin, InputIt end, int me);
-
-struct StringDoublePair : std::pair<std::string, double> {
-  using std::pair<std::string, double>::pair;
-};
-
-bool operator<(StringDoublePair const& lhs, StringDoublePair const& rhs)
-{
-  return lhs.second < rhs.second;
-}
-
-std::ostream& operator<<(std::ostream& os, StringDoublePair const& p)
-{
-  os << "{" << p.first << ", " << p.second << "}";
-  return os;
-}
-
-template <class InputIt, class Gen>
-inline void random_data(InputIt begin, InputIt end, Gen gen)
-{
-  std::generate(begin, end, gen);
-}
-
-auto medianReduce(double myMedian, int root, MPI_Comm comm)
-{
-  int me, nr;
-  MPI_Comm_rank(comm, &me);
-  MPI_Comm_size(comm, &nr);
-  std::vector<double> meds;
-
-  meds.reserve(nr);
-
-  MPI_Gather(&myMedian, 1, MPI_DOUBLE, &meds[0], 1, MPI_DOUBLE, root, comm);
-
-  if (me == root) {
-    auto nth = &meds[0] + nr / 2;
-    std::nth_element(&meds[0], nth, &meds[0] + nr);
-    return *nth;
-  }
-  else {
-    return -1.0;
-  }
-}
-
-template <class InputIt, class OutputIt, class F>
-auto run_algorithm(
-    F&& f, InputIt begin, OutputIt out, int blocksize, MPI_Comm comm)
-{
-  auto start = ChronoClockNow();
-  f(begin, out, blocksize, comm);
-  return ChronoClockNow() - start;
-}
-
-extern char** environ;
-
-void print_env()
-{
-  int   i          = 1;
-  char* env_var_kv = *environ;
-
-  for (; env_var_kv != 0; ++i) {
-    // Split into key and value:
-    char*       flag_name_cstr  = env_var_kv;
-    char*       flag_value_cstr = std::strstr(env_var_kv, "=");
-    int         flag_name_len   = flag_value_cstr - flag_name_cstr;
-    std::string flag_name(flag_name_cstr, flag_name_cstr + flag_name_len);
-    std::string flag_value(flag_value_cstr + 1);
-
-    if (std::strstr(flag_name.c_str(), "OMPI_") ||
-        std::strstr(flag_name.c_str(), "I_MPI_")) {
-      std::cout << flag_name << " = " << flag_value << "\n";
-    }
-
-    env_var_kv = *(environ + i);
-  }
-}
 
 constexpr size_t KB = 1 << 10;
 constexpr size_t MB = 1 << 20;
@@ -106,6 +29,7 @@ constexpr size_t minblocksize = 1 * KB;
 // This are approximately 25 GB
 // constexpr size_t capacity_per_node = (size_t(1) << 25) * 28 * 28;
 constexpr size_t capacity_per_node = 100 * MB;
+
 
 int main(int argc, char* argv[])
 {
@@ -118,14 +42,6 @@ int main(int argc, char* argv[])
       typename container_t::iterator,
       int,
       MPI_Comm)>;
-
-  using measurements_t = std::unordered_map<std::string, std::vector<double>>;
-
-  int         me, nr;
-  container_t data, out, correct;
-
-  measurements_t measurements;
-
 #if 1
   std::array<std::pair<std::string, benchmark_t>, 6> algos = {
       std::make_pair("AlltoAll", MpiAlltoAll<iterator_t, iterator_t>),
@@ -139,6 +55,14 @@ int main(int argc, char* argv[])
   std::array<std::pair<std::string, benchmark_t>, 1> algos = {std::make_pair(
       "Bruck_Mod", alltoall_bruck_mod<iterator_t, iterator_t>)};
 #endif
+
+  using measurements_t = std::unordered_map<std::string, std::vector<double>>;
+
+  int         me, nr;
+  container_t data, out, correct;
+
+  measurements_t measurements;
+
 
   MPI_Init(&argc, &argv);
   MPI_Comm comm = MPI_COMM_WORLD;
@@ -155,7 +79,7 @@ int main(int argc, char* argv[])
   bool is_clock_synced = clock.Init(comm);
   ASSERT(is_clock_synced);
 
-  std::mt19937_64 generator(rko::random_seed_seq::get_instance());
+  std::mt19937_64 generator(random_seed_seq::get_instance());
 
 #ifdef NDEBUG
   // We have to half the capacity because we do not in-place all to all
@@ -286,3 +210,6 @@ int main(int argc, char* argv[])
 
   return 0;
 }
+
+
+

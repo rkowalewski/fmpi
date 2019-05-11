@@ -1,7 +1,6 @@
 #ifndef RANDOM_H__INCLUDED
 #define RANDOM_H__INCLUDED
 #include <random>
-namespace rko {
 
 struct random_seed_seq {
   template <typename It>
@@ -21,7 +20,5 @@ struct random_seed_seq {
  private:
   std::random_device device;
 };
-
-}  // namespace rko
 
 #endif
