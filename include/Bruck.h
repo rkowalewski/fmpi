@@ -11,7 +11,13 @@
 #include <vector>
 
 #include <Math.h>
+#include <Timer.h>
 #include <Types.h>
+
+extern double time_local_rotate;
+extern double time_sendbuf;
+extern double time_recvbuf;
+extern double time_comm;
 
 template <class InputIt, class OutputIt>
 inline void alltoall_bruck(
@@ -140,25 +146,34 @@ inline void alltoall_bruck_mod(
 
   auto nels = size_t(nr) * blocksize;
 
-  // Phase 1: Local Rotate, out[(me + block) % nr] = begin[(me - block) % nr]
-  // This procedure can be achieved efficiently in two substeps
+  std::unique_ptr<value_t[]> send_recv_buf;
 
-  // a) reverse_copy all blocks
-  for (rank_t block = 0; block < nr; ++block) {
-    std::copy(
-        begin + (nr - block - 1) * blocksize,
-        begin + (nr - block) * blocksize,
-        out + block * blocksize);
+  auto t = ChronoClockNow();
+
+  {
+    // Phase 1: Local Rotate, out[(me + block) % nr] = begin[(me - block) %
+    // nr] This procedure can be achieved efficiently in two substeps
+
+    // a) reverse_copy all blocks
+    for (rank_t block = 0; block < nr; ++block) {
+      std::copy(
+          begin + (nr - block - 1) * blocksize,
+          begin + (nr - block) * blocksize,
+          out + block * blocksize);
+    }
+
+    // b) rotate by (n - 2 * me - 1) % n
+    auto shift = mod(nr - 2 * me - 1, nr);
+    std::rotate(out, out + shift * blocksize, out + nels);
+
+    // Phase 2: Communication Rounds
+    send_recv_buf.reset(new value_t[nels]);
   }
 
-  // b) rotate by (n - 2 * me - 1) % n
-  auto shift = mod(nr - 2 * me - 1, nr);
-  std::rotate(out, out + shift * blocksize, out + nels);
+  time_local_rotate += ChronoClockNow() - t;
 
-  // Phase 2: Communication Rounds
-  auto send_recv_buf = std::unique_ptr<value_t[]>{new value_t[nels]};
-  auto send_buf      = &send_recv_buf[0];
-  auto recv_buf      = &send_recv_buf[nels / 2];
+  auto send_buf = &send_recv_buf[0];
+  auto recv_buf = &send_recv_buf[nels / 2];
 
   // range = [0..log2(nr)]
   for (auto r = 0; r < std::ceil(std::log2(nr)); ++r) {
@@ -171,21 +186,27 @@ inline void alltoall_bruck_mod(
     // a) pack blocks into a contigous send buffer
     size_t count = 0;
 
-    for (auto block = me; block < me + nr; ++block) {
-      //
-      auto myblock = block - me;
-      auto myidx   = block % nr;
-      if (myblock & j) {
-        std::copy(
-            // begin
-            out + myidx * blocksize,
-            // end
-            out + myidx * blocksize + blocksize,
-            // tmp buf
-            send_buf + count * blocksize);
-        ++count;
+    t = ChronoClockNow();
+
+    {
+      for (auto block = me; block < me + nr; ++block) {
+        //
+        auto myblock = block - me;
+        auto myidx   = block % nr;
+        if (myblock & j) {
+          std::copy(
+              // begin
+              out + myidx * blocksize,
+              // end
+              out + myidx * blocksize + blocksize,
+              // tmp buf
+              send_buf + count * blocksize);
+          ++count;
+        }
       }
     }
+
+    time_sendbuf += ChronoClockNow() - t;
 
     // b) exchange
     auto res = MPI_Sendrecv(
@@ -205,18 +226,25 @@ inline void alltoall_bruck_mod(
 
     // c) unpack blocks into recv buffer
     count = 0;
-    for (auto block = src; block < src + nr; ++block) {
-      // Map from block to their idx
-      auto theirblock = block - src;
-      if (theirblock & j) {
-        auto myblock = (theirblock + me) % nr;
-        std::copy(
-            recv_buf + count * blocksize,
-            recv_buf + count * blocksize + blocksize,
-            out + myblock * blocksize);
-        ++count;
+
+    t = ChronoClockNow();
+
+    {
+      for (auto block = src; block < src + nr; ++block) {
+        // Map from block to their idx
+        auto theirblock = block - src;
+        if (theirblock & j) {
+          auto myblock = (theirblock + me) % nr;
+          std::copy(
+              recv_buf + count * blocksize,
+              recv_buf + count * blocksize + blocksize,
+              out + myblock * blocksize);
+          ++count;
+        }
       }
     }
+
+    time_recvbuf += ChronoClockNow() - t;
   }
 }
 

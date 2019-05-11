@@ -11,12 +11,12 @@
 
 #include <mpi.h>
 
+#include <Benchmark.h>
 #include <Bruck.h>
 #include <Debug.h>
 #include <Random.h>
 #include <Timer.h>
 #include <Types.h>
-#include <Benchmark.h>
 
 #include <synchronized_barrier.hpp>
 
@@ -27,7 +27,13 @@ constexpr size_t niters       = 10;
 constexpr size_t minblocksize = 1 * KB;
 
 // This are approximately 25 GB
-constexpr size_t capacity_per_node = (size_t(1) << 25) * 28 * 28;
+//constexpr size_t capacity_per_node = (size_t(1) << 25) * 28 * 28;
+constexpr size_t capacity_per_node = size_t(1) << 20;
+
+double time_local_rotate;
+double time_sendbuf;
+double time_recvbuf;
+double time_comm;
 
 int main(int argc, char* argv[])
 {
@@ -47,12 +53,13 @@ int main(int argc, char* argv[])
       std::make_pair("FlatFactor", flatFactor<iterator_t, iterator_t>),
       std::make_pair("FlatHandshake", flatHandshake<iterator_t, iterator_t>),
       std::make_pair("Bruck", alltoall_bruck<iterator_t, iterator_t>),
-      std::make_pair("Bruck_Mod", alltoall_bruck_mod<iterator_t, iterator_t>)
-      };
+      std::make_pair(
+          "Bruck_Mod", alltoall_bruck_mod<iterator_t, iterator_t>)};
 #else
-  std::array<std::pair<std::string, benchmark_t>, 2> algos = {std::make_pair(
-      "Bruck", alltoall_bruck<iterator_t, iterator_t>),
-      std::make_pair("Bruck_Mod", alltoall_bruck_mod<iterator_t, iterator_t>)};
+  std::array<std::pair<std::string, benchmark_t>, 2> algos = {
+      std::make_pair("Bruck", alltoall_bruck<iterator_t, iterator_t>),
+      std::make_pair(
+          "Bruck_Mod", alltoall_bruck_mod<iterator_t, iterator_t>)};
 #endif
 
   using measurements_t = std::unordered_map<std::string, std::vector<double>>;
@@ -61,7 +68,6 @@ int main(int argc, char* argv[])
   container_t data, out, correct;
 
   measurements_t measurements;
-
 
   MPI_Init(&argc, &argv);
   MPI_Comm comm = MPI_COMM_WORLD;
@@ -75,7 +81,6 @@ int main(int argc, char* argv[])
     MPI_Finalize();
     return 1;
   }
-
 
   ASSERT(nr >= 1);
 
@@ -103,8 +108,7 @@ int main(int argc, char* argv[])
   auto n_sizes = std::log2(maxblocksize / minblocksize);
 
   for (size_t step = 0; step <= n_sizes; ++step) {
-    auto blocksize =
-        minblocksize * (1 << step) / (sizeof(value_t) * nnodes);
+    auto blocksize = minblocksize * (1 << step) / (sizeof(value_t) * nnodes);
 
     // Required by good old 32-bit MPI
     ASSERT(blocksize > 0 && blocksize < std::numeric_limits<int>::max());
@@ -142,6 +146,11 @@ int main(int argc, char* argv[])
 #endif
 
       ASSERT(res == MPI_SUCCESS);
+
+      time_local_rotate = 0;
+      time_sendbuf      = 0;
+      time_recvbuf      = 0;
+      time_comm         = 0;
 
       for (auto const& algo : algos) {
         // We always want to guarantee that all processors start at the same
@@ -184,6 +193,10 @@ int main(int argc, char* argv[])
       }
     }
 
+    auto medRotate  = medianReduce(time_local_rotate, root, comm);
+    auto medSendBuf = medianReduce(time_sendbuf, root, comm);
+    auto medRecvBuf = medianReduce(time_recvbuf, root, comm);
+
     if (me == root) {
       ASSERT(ranking.size() == algos.size());
       // sort the median vector
@@ -201,6 +214,13 @@ int main(int argc, char* argv[])
       // print last
       std::cout << *(std::prev(ranking.end()));
 
+      std::cout << "\n";
+
+      std::cout
+        << "time rotate  : " << medRotate << "\n"
+        << "time send_buf: " << medSendBuf << "\n"
+        << "time recv_buf: " << medRecvBuf << "\n";
+
       // flush stdio buffer
       std::cout << std::endl;
     }
@@ -213,6 +233,3 @@ int main(int argc, char* argv[])
 
   return 0;
 }
-
-
-
