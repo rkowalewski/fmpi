@@ -23,12 +23,14 @@
 constexpr size_t KB = 1 << 10;
 constexpr size_t MB = 1 << 20;
 
-constexpr size_t niters       = 10;
-constexpr size_t minblocksize = KB;
+constexpr size_t niters = 10;
+
+constexpr size_t minblocksize = 128;
+/* constexpr size_t maxblocksize = runtime argument */
 
 // This are approximately 25 GB
 // constexpr size_t capacity_per_node = 32 * MB * 28 * 28;
-constexpr size_t capacity_per_node = MB;
+constexpr size_t capacity_per_node = 2 * MB;
 
 // The container where we store our
 using value_t     = int;
@@ -101,18 +103,30 @@ int main(int argc, char* argv[])
   // Then we divide by the number of PEs per node
   // Then we divide again divide by number of PEs to obtain the largest
   // blocksize.
-  const size_t maxblocksize =
-      capacity_per_node / (2 * procs_per_node * procs_per_node);
+  const size_t maxprocsize = capacity_per_node / (2 * procs_per_node);
 
-  for (size_t blocksize = minblocksize, step = 0; blocksize <= maxblocksize;
+  // We have to divide the maximum capacity per proc by the number of PE
+  // to get the largest possible block size
+  const size_t maxblocksize = maxprocsize / nr;
+
+  auto nsteps = static_cast<size_t>(std::log2(maxblocksize)) -
+                static_cast<size_t>(std::log2(minblocksize));
+
+  nsteps = std::min<std::size_t>(nsteps, 15);
+
+  ASSERT(minblocksize >= sizeof(value_t));
+
+  for (size_t blocksize = minblocksize, step = 1; step <= nsteps;
        blocksize *= 2, ++step) {
-    // Each PE sends nchunks to all other PEs
-    auto nchunks = blocksize / (sizeof(value_t) * nhosts);
+    // each process sends sencount to all other PEs
+    auto sendcount = blocksize / sizeof(value_t);
+
+    ASSERT(blocksize % sizeof(value_t) == 0);
 
     // Required by good old 32-bit MPI
-    ASSERT(nchunks > 0 && nchunks < std::numeric_limits<int>::max());
+    ASSERT(sendcount > 0 && sendcount < std::numeric_limits<int>::max());
 
-    auto nels = size_t(nr) * nchunks;
+    auto nels = sendcount * nr;
 
     data.reset(new value_t[nels]);
     out.reset(new value_t[nels]);
@@ -124,7 +138,7 @@ int main(int argc, char* argv[])
 
     for (size_t it = 0; it < niters; ++it) {
 #ifdef NDEBUG
-      std::shuffle(std::begin(data), std::end(data), generator);
+      std::shuffle(&(data[0]), &(data[nels]), generator);
 #endif
 
       // first we want to obtain the correct result which we can verify then
@@ -134,10 +148,10 @@ int main(int argc, char* argv[])
           typename std::iterator_traits<iterator_t>::value_type>::value;
       auto res = MPI_Alltoall(
           &(data[0]),
-          nchunks,
+          sendcount,
           mpi_datatype,
           &(correct[0]),
-          nchunks,
+          sendcount,
           mpi_datatype,
           MPI_COMM_WORLD);
 #else
@@ -153,7 +167,7 @@ int main(int argc, char* argv[])
         ASSERT(barrier.Success(comm));
 
         auto t = run_algorithm(
-            algo.second, &(data[0]), &(out[0]), nchunks, MPI_COMM_WORLD);
+            algo.second, &(data[0]), &(out[0]), sendcount, MPI_COMM_WORLD);
 
         measurements[algo.first].emplace_back(t);
 
@@ -184,13 +198,29 @@ int main(int argc, char* argv[])
 
     if (me == root) {
       ASSERT(ranking.size() == algos.size());
+
+      if (step == 1) {
+        // print header
+        std::cout
+            << "Nodes, Procs, Round, NBytes.KB, Blocksize, Algo, Time\n";
+      }
+
       // sort the median vector
       std::sort(ranking.begin(), ranking.end());
 
+      for (auto const& m : ranking) {
+        std::cout << nhosts << ", " << nr << ", " << step << ", "
+                  << nels * nr * sizeof(value_t) / KB << ", " << blocksize
+                  << ", " << m.first << ", " << m.second << std::endl;
+      }
+
+#if 0
       std::cout << "(" << step << ") Global Volume (KB) "
                 << nels * nr * sizeof(value_t) / KB
-                << ", blocksize (KB) = " << nchunks * sizeof(value_t) / KB
+                << ", blocksize (KB) = " << nblocks * sizeof(value_t) / KB
                 << ", ranking: ";
+
+
       // print until second to last
       std::copy(
           std::begin(ranking),
@@ -203,6 +233,7 @@ int main(int argc, char* argv[])
 
       // flush stdio buffer
       std::cout << std::endl;
+#endif
     }
 
     // reset measurements for next iteration
