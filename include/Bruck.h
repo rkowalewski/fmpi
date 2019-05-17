@@ -242,6 +242,10 @@ inline void factorParty(
   MPI_Comm_rank(comm, &me);
   MPI_Comm_size(comm, &nr);
 
+  if (nr % 2) {
+    return;
+  }
+
   constexpr auto mpi_datatype = mpi::mpi_datatype<
       typename std::iterator_traits<InputIt>::value_type>::value;
 
@@ -374,8 +378,13 @@ inline void hypercube(
   MPI_Comm_rank(comm, &me);
   MPI_Comm_size(comm, &nr);
 
+
   ASSERT(nr > 0);
-  ASSERT((nr & (nr - 1)) == 0);
+  auto isPower2 = (nr & (nr - 1)) == 0;
+
+  if (!isPower2) {
+    return;
+  }
 
   constexpr auto mpi_datatype = mpi::mpi_datatype<
       typename std::iterator_traits<InputIt>::value_type>::value;
