@@ -30,11 +30,6 @@ constexpr size_t minblocksize = KB;
 // constexpr size_t capacity_per_node = 32 * MB * 28 * 28;
 constexpr size_t capacity_per_node = MB;
 
-double time_local_rotate;
-double time_sendbuf;
-double time_recvbuf;
-double time_comm;
-
 // The container where we store our
 using value_t     = int;
 using container_t = std::unique_ptr<value_t[]>;
@@ -43,11 +38,19 @@ using iterator_t  = typename container_t::pointer;
 using benchmark_t =
     std::function<void(iterator_t, iterator_t, int, MPI_Comm)>;
 
-std::array<std::pair<std::string, benchmark_t>, 6> algos = {
+std::array<std::pair<std::string, benchmark_t>, 7> algos = {
+    // Classic MPI All to All
     std::make_pair("AlltoAll", MpiAlltoAll<iterator_t, iterator_t>),
+    // One Factorizations based on Graph Theory
     std::make_pair("FactorParty", factorParty<iterator_t, iterator_t>),
     std::make_pair("FlatFactor", flatFactor<iterator_t, iterator_t>),
+    // A Simple Flat Handshake which sends and receives never to/from the same
+    // rank
     std::make_pair("FlatHandshake", flatHandshake<iterator_t, iterator_t>),
+    // Hierarchical XOR Shift Hypercube, works only if #PEs is power of two
+    std::make_pair("Hypercube", hypercube<iterator_t, iterator_t>),
+    // Bruck Algorithms, first the original one, then a modified version which
+    // omits the last local rotation step
     std::make_pair("Bruck", alltoall_bruck<iterator_t, iterator_t>),
     std::make_pair("Bruck_Mod", alltoall_bruck_mod<iterator_t, iterator_t>)};
 
@@ -143,11 +146,6 @@ int main(int argc, char* argv[])
 
       ASSERT(res == MPI_SUCCESS);
 
-      time_local_rotate = 0;
-      time_sendbuf      = 0;
-      time_recvbuf      = 0;
-      time_comm         = 0;
-
       for (auto const& algo : algos) {
         // We always want to guarantee that all processors start at the same
         // time, so this is a real barrier
@@ -184,10 +182,6 @@ int main(int argc, char* argv[])
       }
     }
 
-    auto medRotate  = medianReduce(time_local_rotate, root, comm);
-    auto medSendBuf = medianReduce(time_sendbuf, root, comm);
-    auto medRecvBuf = medianReduce(time_recvbuf, root, comm);
-
     if (me == root) {
       ASSERT(ranking.size() == algos.size());
       // sort the median vector
@@ -206,10 +200,6 @@ int main(int argc, char* argv[])
       std::cout << *(std::prev(ranking.end()));
 
       std::cout << "\n";
-
-      std::cout << "time rotate  : " << medRotate << "\n"
-                << "time send_buf: " << medSendBuf << "\n"
-                << "time recv_buf: " << medRecvBuf << "\n";
 
       // flush stdio buffer
       std::cout << std::endl;

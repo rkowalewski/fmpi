@@ -14,11 +14,6 @@
 #include <Timer.h>
 #include <Types.h>
 
-extern double time_local_rotate;
-extern double time_sendbuf;
-extern double time_recvbuf;
-extern double time_comm;
-
 template <class InputIt, class OutputIt>
 inline void alltoall_bruck(
     InputIt begin, OutputIt out, int blocksize, MPI_Comm comm)
@@ -148,8 +143,6 @@ inline void alltoall_bruck_mod(
 
   std::unique_ptr<value_t[]> send_recv_buf;
 
-  auto t = ChronoClockNow();
-
   {
     // Phase 1: Local Rotate, out[(me + block) % nr] = begin[(me - block) %
     // nr] This procedure can be achieved efficiently in two substeps
@@ -170,7 +163,6 @@ inline void alltoall_bruck_mod(
     send_recv_buf.reset(new value_t[nels]);
   }
 
-  time_local_rotate += ChronoClockNow() - t;
 
   auto send_buf = &send_recv_buf[0];
   auto recv_buf = &send_recv_buf[nels / 2];
@@ -185,8 +177,6 @@ inline void alltoall_bruck_mod(
 
     // a) pack blocks into a contigous send buffer
     size_t count = 0;
-
-    t = ChronoClockNow();
 
     {
       for (auto block = me; block < me + nr; ++block) {
@@ -206,7 +196,6 @@ inline void alltoall_bruck_mod(
       }
     }
 
-    time_sendbuf += ChronoClockNow() - t;
 
     // b) exchange
     auto res = MPI_Sendrecv(
@@ -227,8 +216,6 @@ inline void alltoall_bruck_mod(
     // c) unpack blocks into recv buffer
     count = 0;
 
-    t = ChronoClockNow();
-
     {
       for (auto block = src; block < src + nr; ++block) {
         // Map from block to their idx
@@ -244,7 +231,6 @@ inline void alltoall_bruck_mod(
       }
     }
 
-    time_recvbuf += ChronoClockNow() - t;
   }
 }
 
@@ -368,6 +354,44 @@ inline void flatHandshake(
         blocksize,
         mpi_datatype,
         pair.second,
+        100,
+        comm,
+        MPI_STATUS_IGNORE);
+    ASSERT(res == MPI_SUCCESS);
+  }
+
+  std::copy(
+      begin + me * blocksize,
+      begin + me * blocksize + blocksize,
+      out + me * blocksize);
+}
+
+template <class InputIt, class OutputIt>
+inline void hypercube(
+    InputIt begin, OutputIt out, int blocksize, MPI_Comm comm)
+{
+  int me, nr;
+  MPI_Comm_rank(comm, &me);
+  MPI_Comm_size(comm, &nr);
+
+  ASSERT(nr > 0);
+  ASSERT((nr & (nr - 1)) == 0);
+
+  constexpr auto mpi_datatype = mpi::mpi_datatype<
+      typename std::iterator_traits<InputIt>::value_type>::value;
+
+  for (int i = 1; i < nr; ++i) {
+    auto partner = me^i;
+    auto res  = MPI_Sendrecv(
+        std::addressof(*(begin + partner * blocksize)),
+        blocksize,
+        mpi_datatype,
+        partner,
+        100,
+        std::addressof(*(out + partner * blocksize)),
+        blocksize,
+        mpi_datatype,
+        partner,
         100,
         comm,
         MPI_STATUS_IGNORE);
