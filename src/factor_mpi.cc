@@ -24,44 +24,35 @@ constexpr size_t KB = 1 << 10;
 constexpr size_t MB = 1 << 20;
 
 constexpr size_t niters       = 10;
-constexpr size_t minblocksize = 1 * KB;
+constexpr size_t minblocksize = KB;
 
 // This are approximately 25 GB
-//constexpr size_t capacity_per_node = (size_t(1) << 25) * 28 * 28;
-constexpr size_t capacity_per_node = size_t(1) << 20;
+// constexpr size_t capacity_per_node = 32 * MB * 28 * 28;
+constexpr size_t capacity_per_node = MB;
 
 double time_local_rotate;
 double time_sendbuf;
 double time_recvbuf;
 double time_comm;
 
+// The container where we store our
+using value_t     = int;
+using container_t = std::unique_ptr<value_t[]>;
+using iterator_t  = typename container_t::pointer;
+
+using benchmark_t =
+    std::function<void(iterator_t, iterator_t, int, MPI_Comm)>;
+
+std::array<std::pair<std::string, benchmark_t>, 6> algos = {
+    std::make_pair("AlltoAll", MpiAlltoAll<iterator_t, iterator_t>),
+    std::make_pair("FactorParty", factorParty<iterator_t, iterator_t>),
+    std::make_pair("FlatFactor", flatFactor<iterator_t, iterator_t>),
+    std::make_pair("FlatHandshake", flatHandshake<iterator_t, iterator_t>),
+    std::make_pair("Bruck", alltoall_bruck<iterator_t, iterator_t>),
+    std::make_pair("Bruck_Mod", alltoall_bruck_mod<iterator_t, iterator_t>)};
+
 int main(int argc, char* argv[])
 {
-  using value_t     = int;
-  using container_t = std::vector<value_t>;
-  using iterator_t  = typename container_t::iterator;
-
-  using benchmark_t = std::function<void(
-      typename container_t::iterator,
-      typename container_t::iterator,
-      int,
-      MPI_Comm)>;
-#if 1
-  std::array<std::pair<std::string, benchmark_t>, 6> algos = {
-      std::make_pair("AlltoAll", MpiAlltoAll<iterator_t, iterator_t>),
-      std::make_pair("FactorParty", factorParty<iterator_t, iterator_t>),
-      std::make_pair("FlatFactor", flatFactor<iterator_t, iterator_t>),
-      std::make_pair("FlatHandshake", flatHandshake<iterator_t, iterator_t>),
-      std::make_pair("Bruck", alltoall_bruck<iterator_t, iterator_t>),
-      std::make_pair(
-          "Bruck_Mod", alltoall_bruck_mod<iterator_t, iterator_t>)};
-#else
-  std::array<std::pair<std::string, benchmark_t>, 2> algos = {
-      std::make_pair("Bruck", alltoall_bruck<iterator_t, iterator_t>),
-      std::make_pair(
-          "Bruck_Mod", alltoall_bruck_mod<iterator_t, iterator_t>)};
-#endif
-
   using measurements_t = std::unordered_map<std::string, std::vector<double>>;
 
   int         me, nr;
@@ -84,7 +75,7 @@ int main(int argc, char* argv[])
 
   ASSERT(nr >= 1);
 
-  auto nnodes = std::atoi(argv[1]);
+  auto nhosts = std::atoi(argv[1]);
 
   if (me == 0) {
     print_env();
@@ -95,33 +86,38 @@ int main(int argc, char* argv[])
   // We have to half the capacity because we do not in-place all to all
   // We again half by the number of processors
   // const size_t number_nodes = nr / 28;
-  ASSERT((nr % nnodes) == 0);
+  ASSERT((nr % nhosts) == 0);
 
-  auto procs_per_node = nr / nnodes;
+  auto procs_per_node = nr / nhosts;
 
   auto clock           = SynchronizedClock{};
   bool is_clock_synced = clock.Init(comm);
   ASSERT(is_clock_synced);
 
+  // We divide by two because we have in and out buffers
+  // Then we divide by the number of PEs per node
+  // Then we divide again divide by number of PEs to obtain the largest
+  // blocksize.
   const size_t maxblocksize =
       capacity_per_node / (2 * procs_per_node * procs_per_node);
-  auto n_sizes = std::log2(maxblocksize / minblocksize);
 
-  for (size_t step = 0; step <= n_sizes; ++step) {
-    auto blocksize = minblocksize * (1 << step) / (sizeof(value_t) * nnodes);
+  for (size_t blocksize = minblocksize, step = 0; blocksize <= maxblocksize;
+       blocksize *= 2, ++step) {
+    // Each PE sends nchunks to all other PEs
+    auto nchunks = blocksize / (sizeof(value_t) * nhosts);
 
     // Required by good old 32-bit MPI
-    ASSERT(blocksize > 0 && blocksize < std::numeric_limits<int>::max());
+    ASSERT(nchunks > 0 && nchunks < std::numeric_limits<int>::max());
 
-    auto n_g_elems = size_t(nr) * blocksize;
+    auto nels = size_t(nr) * nchunks;
 
-    data.resize(n_g_elems);
-    out.resize(n_g_elems);
+    data.reset(new value_t[nels]);
+    out.reset(new value_t[nels]);
 #ifndef NDEBUG
-    correct.resize(n_g_elems);
+    correct.reset(new value_t[nels]);
 #endif
 
-    std::iota(std::begin(data), std::end(data), me * nr);
+    std::iota(&(data[0]), &(data[nels]), me * nr);
 
     for (size_t it = 0; it < niters; ++it) {
 #ifdef NDEBUG
@@ -134,11 +130,11 @@ int main(int argc, char* argv[])
       constexpr auto mpi_datatype = mpi::mpi_datatype<
           typename std::iterator_traits<iterator_t>::value_type>::value;
       auto res = MPI_Alltoall(
-          std::addressof(*std::begin(data)),
-          blocksize,
+          &(data[0]),
+          nchunks,
           mpi_datatype,
-          std::addressof(*std::begin(correct)),
-          blocksize,
+          &(correct[0]),
+          nchunks,
           mpi_datatype,
           MPI_COMM_WORLD);
 #else
@@ -159,16 +155,11 @@ int main(int argc, char* argv[])
         ASSERT(barrier.Success(comm));
 
         auto t = run_algorithm(
-            algo.second,
-            std::begin(data),
-            std::begin(out),
-            blocksize,
-            MPI_COMM_WORLD);
+            algo.second, &(data[0]), &(out[0]), nchunks, MPI_COMM_WORLD);
 
         measurements[algo.first].emplace_back(t);
 
-        ASSERT(std::equal(
-            std::begin(correct), std::end(correct), std::begin(out)));
+        ASSERT(std::equal(&(correct[0]), &(correct[nels]), &(out[0])));
       }
     }
 
@@ -203,8 +194,8 @@ int main(int argc, char* argv[])
       std::sort(ranking.begin(), ranking.end());
 
       std::cout << "(" << step << ") Global Volume (KB) "
-                << n_g_elems * nr * sizeof(value_t) / KB
-                << ", Blocksize (KB) = " << blocksize * sizeof(value_t) / KB
+                << nels * nr * sizeof(value_t) / KB
+                << ", blocksize (KB) = " << nchunks * sizeof(value_t) / KB
                 << ", ranking: ";
       // print until second to last
       std::copy(
@@ -216,10 +207,9 @@ int main(int argc, char* argv[])
 
       std::cout << "\n";
 
-      std::cout
-        << "time rotate  : " << medRotate << "\n"
-        << "time send_buf: " << medSendBuf << "\n"
-        << "time recv_buf: " << medRecvBuf << "\n";
+      std::cout << "time rotate  : " << medRotate << "\n"
+                << "time send_buf: " << medSendBuf << "\n"
+                << "time recv_buf: " << medRecvBuf << "\n";
 
       // flush stdio buffer
       std::cout << std::endl;

@@ -1,11 +1,14 @@
 #include <cassert>
+#include <iomanip>
 #include <iostream>
+#include <iterator>
 #include <utility>
 #include <vector>
 
-using rank_pair = std::pair<int, int>;
-
-std::ostream& operator<<(std::ostream& os, rank_pair const& p)
+struct RankPair : std::pair<int, int> {
+  using std::pair<int, int>::pair;
+};
+std::ostream& operator<<(std::ostream& os, RankPair const& p)
 {
   os << "{" << p.first << ", " << p.second << "}";
   return os;
@@ -19,25 +22,25 @@ inline constexpr T mod(T a, T b)
   return (ret >= 0) ? (ret) : (ret + b);
 }
 
-inline constexpr rank_pair oneFactor_classic(int me, int r, int n)
+inline constexpr RankPair oneFactor_classic(int me, int r, int n)
 {
   auto k_bottom = 2 * n - 1;
-  return std::make_pair(mod(r + me, k_bottom) + 1, mod(r - me, k_bottom) + 1);
+  return RankPair(mod(r + me, k_bottom) + 1, mod(r - me, k_bottom) + 1);
 }
 
-inline void factorParty(int nr)
+inline auto factorParty(int nr)
 {
   assert(nr % 2 == 0);
 
   // We have 2n ranks
   auto n = nr / 2;
 
-  std::vector<int> partner;
-  partner.reserve(nr);
+  std::vector<std::vector<RankPair>> rounds(nr);
 
   // Rounds
   for (int r = 1; r < nr; ++r) {
-    std::cout << "F" << r << " = { ";
+    std::vector<int> partner;
+    partner.reserve(nr);
     partner[0] = r;
     partner[r] = 0;
 
@@ -49,63 +52,151 @@ inline void factorParty(int nr)
     }
 
     for (int i = 0; i < nr; ++i) {
-      std::cout << rank_pair{i, partner[i]} << ", ";
+      rounds[r].push_back(RankPair{i, partner[i]});
     }
-
-    std::cout << "}\n";
   }
-
-  std::cout << "F" << nr << " = { ";
 
   // self loops
   for (int r = 0; r < nr; ++r) {
-    auto pair = std::make_pair(r, r);
-    std::cout << pair << ", ";
+    rounds[0].push_back(RankPair(r, r));
   }
-  std::cout << "}\n";
+  return rounds;
 }
 
-inline void flatFactor_selfLoops(int nr)
+inline auto flatFactor_selfLoops(int nr)
 {
+  std::vector<std::vector<RankPair>> res(nr);
   for (int i = 1; i <= nr; ++i) {
-    std::cout << "F" << i << " = { ";
     for (int r = 0; r < nr; ++r) {
-      std::cout << rank_pair(r, mod(i - r, nr)) << ", ";
+      res[i - 1].push_back(RankPair(r, mod(i - r, nr)));
     }
-    std::cout << "}\n";
+    assert(res[i - 1].size() == nr);
   }
+  return res;
 }
 
 inline void flatHandshake(int nr)
 {
+  std::vector<std::vector<RankPair>> res(nr);
   for (int i = 1; i < nr; ++i) {
-    std::cout << "F" << i + 1 << " = { ";
     for (int r = 0; r < nr; ++r) {
-      auto pair = std::make_pair(mod(r + i, nr), mod(r - i, nr));
-      std::cout << pair << ", ";
+      res[i].push_back(RankPair(mod(r + i, nr), mod(r - i, nr)));
     }
+    assert(res[i].size() == nr);
+  }
+
+  // self loops
+  for (int r = 0; r < nr; ++r) {
+    res[0].push_back(RankPair(r, r));
+  }
+}
+
+inline auto hypercube(int nr)
+{
+  assert((nr & (nr - 1)) == 0);
+  std::vector<std::vector<RankPair>> res(nr);
+  for (int i = 1; i < nr; ++i) {
+    for (int r = 0; r < nr; ++r) {
+      res[i].push_back(RankPair(r, r ^ i));
+    }
+  }
+
+  for (int r = 0; r < nr; ++r) {
+    res[0].push_back(RankPair(r, r));
+  }
+
+  return res;
+}
+
+inline auto ndigits(int nr)
+{
+  size_t length = 1;
+  while (nr /= 10) length++;
+  return length;
+}
+
+void print_dot(
+    std::vector<std::vector<RankPair>> tournament, std::string title)
+{
+  auto n_ranks = tournament.size();
+  auto nd      = ndigits(n_ranks);
+  std::cout << "digraph G {\n";
+  std::cout << "graph [rankdir=LR]\n";
+  std::cout << "node [style=filled shape=circle]\n";
+  std::cout << "edge [arrowhead=none]\n";
+  std::cout << "labelloc=t\n";
+  std::cout << "label=\"" << title << "\"\n";
+
+  for (std::size_t p = 0; p < n_ranks + 1; ++p) {
+    std::cout << "subgraph p" << p << " {\n";
+    std::cout << "rank=same\n";
+    for (std::size_t r = 0; r < n_ranks; ++r) {
+      std::cout << "r";
+      std::cout << std::setfill('0') << std::setw(nd) << p;
+      std::cout << std::setfill('0') << std::setw(nd) << r;
+      if (p == 0) {
+        std::cout << " [label=\"\" xlabel=\"" << r << "\" width=.3]\n";
+      } else {
+        std::cout << " [label=\"\" width=.3]\n";
+      }
+    }
+    std::cout << "{edge [style=invis]\n";
+
+    for (std::size_t r = 0; r < n_ranks - 1; ++r) {
+      std::cout << "r";
+      std::cout << std::setfill('0') << std::setw(nd) << p;
+      std::cout << std::setfill('0') << std::setw(nd) << r;
+      std::cout << "->";
+    }
+
+    std::cout << "r";
+    std::cout << std::setfill('0') << std::setw(nd) << p;
+    std::cout << std::setfill('0') << std::setw(nd) << n_ranks - 1;
+    std::cout << "\n";
+
+    std::cout << "}\n";
     std::cout << "}\n";
   }
-  std::cout << "F" << nr << " = { ";
 
-  //self loops
-  for (int r = 0; r < nr; ++r) {
-    auto pair = std::make_pair(r, r);
-    std::cout << pair << ", ";
+  for (std::size_t p = 0; p < n_ranks; ++p) {
+    for (auto const& pair : tournament[p]) {
+      std::cout << "r";
+      std::cout << std::setfill('0') << std::setw(nd) << p;
+      std::cout << std::setfill('0') << std::setw(nd) << pair.first;
+      std::cout << "->r";
+      std::cout << std::setfill('0') << std::setw(nd) << p + 1;
+      std::cout << std::setfill('0') << std::setw(nd) << pair.second;
+      std::cout << "\n";
+    }
   }
+
   std::cout << "}\n";
 }
 
 int main(int argc, char* argv[])
 {
-  constexpr int n_ranks = 4;
+  constexpr int n_ranks = 8;
 
-  std::cout << "Flat Factor excluding self loops:\n";
-  factorParty(n_ranks);
-  std::cout << "\nFlat Factor including self loops:\n";
-  flatFactor_selfLoops(n_ranks);
-  std::cout << "\nFlat Handshake excluding self loops:\n";
-  flatHandshake(n_ranks);
+  // std::cout << "Flat Factor excluding self loops:\n";
+  auto rounds = flatFactor_selfLoops(n_ranks);
+  assert(rounds.size() == n_ranks);
+
+#if 0
+  for (auto const& r : rounds) {
+    std::copy(
+        r.begin(), r.end(), std::ostream_iterator<RankPair>(std::cout, " "));
+    std::cout << "\n";
+  }
+#else
+
+  print_dot(rounds, "flat factor");
+
+#endif
+
+  // std::cout << "\nFlat Factor including self loops:\n";
+  // flatFactor_selfLoops(n_ranks);
+  // std::cout << "\nFlat Handshake excluding self loops:\n";
+  // flatHandshake(n_ranks);
 
   return 0;
 }
