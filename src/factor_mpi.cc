@@ -12,7 +12,7 @@
 #include <mpi.h>
 
 #include <Benchmark.h>
-#include <Bruck.h>
+#include <AlltoAll.h>
 #include <Debug.h>
 #include <Random.h>
 #include <Timer.h>
@@ -42,19 +42,19 @@ using benchmark_t =
 
 std::array<std::pair<std::string, benchmark_t>, 7> algos = {
     // Classic MPI All to All
-    std::make_pair("AlltoAll", MpiAlltoAll<iterator_t, iterator_t>),
+    std::make_pair("AlltoAll", alltoall::MpiAlltoAll<iterator_t, iterator_t>),
     // One Factorizations based on Graph Theory
-    std::make_pair("FactorParty", factorParty<iterator_t, iterator_t>),
-    std::make_pair("FlatFactor", flatFactor<iterator_t, iterator_t>),
+    std::make_pair("FactorParty", alltoall::factorParty<iterator_t, iterator_t>),
+    std::make_pair("FlatFactor", alltoall::flatFactor<iterator_t, iterator_t>),
     // A Simple Flat Handshake which sends and receives never to/from the same
     // rank
-    std::make_pair("FlatHandshake", flatHandshake<iterator_t, iterator_t>),
+    std::make_pair("FlatHandshake", alltoall::flatHandshake<iterator_t, iterator_t>),
     // Hierarchical XOR Shift Hypercube, works only if #PEs is power of two
-    std::make_pair("Hypercube", hypercube<iterator_t, iterator_t>),
+    std::make_pair("Hypercube", alltoall::hypercube<iterator_t, iterator_t>),
     // Bruck Algorithms, first the original one, then a modified version which
     // omits the last local rotation step
-    std::make_pair("Bruck", alltoall_bruck<iterator_t, iterator_t>),
-    std::make_pair("Bruck_Mod", alltoall_bruck_mod<iterator_t, iterator_t>)};
+    std::make_pair("Bruck", alltoall::bruck<iterator_t, iterator_t>),
+    std::make_pair("Bruck_Mod", alltoall::bruck_mod<iterator_t, iterator_t>)};
 
 int main(int argc, char* argv[])
 {
