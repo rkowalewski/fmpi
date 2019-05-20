@@ -14,7 +14,7 @@ SRC_PATH := src
 
 all: build/factor_mpi.x build/factor_serial.x
 
-build/factor_mpi.x: src/factor_mpi.cc src/Benchmark.cc external/MPISynchronizedBarrier/lib/libmpisyncbarrier.a
+build/factor_mpi.x: src/factor_mpi.cc src/Benchmark.cc src/synchronized_barrier.cc
 	@mkdir -p build
 	$(MPICXX) $(CXXFLAGS) -o $@ $^
 
@@ -22,8 +22,6 @@ build/factor_serial.x:
 	@mkdir -p build
 	$(CXX) $(CXXFLAGS) -o $@ src/factor_serial.cc $^
 
-external/MPISynchronizedBarrier/lib/libmpisyncbarrier.a:
-	make -C external/MPISynchronizedBarrier clean rebuild
 
 clean:
 	rm -f build/*.x

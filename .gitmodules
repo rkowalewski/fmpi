@@ -1,3 +1,0 @@
-[submodule "external/MPISynchronizedBarrier"]
-	path = external/MPISynchronizedBarrier
-	url = https://github.com/MichaelAxtmann/MPISynchronizedBarrier.git

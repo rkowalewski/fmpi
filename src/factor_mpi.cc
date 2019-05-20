@@ -18,7 +18,7 @@
 #include <Timer.h>
 #include <Types.h>
 
-#include <synchronized_barrier.hpp>
+#include <synchronized_barrier.h>
 
 constexpr size_t KB = 1 << 10;
 constexpr size_t MB = 1 << 20;
