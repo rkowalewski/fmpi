@@ -3,6 +3,8 @@
 
 #include <Debug.h>
 
+namespace alltoall {
+
 template <class T>
 inline constexpr T mod(T a, T b)
 {
@@ -10,5 +12,7 @@ inline constexpr T mod(T a, T b)
   T ret = a % b;
   return (ret >= 0) ? (ret) : (ret + b);
 }
+
+}  // namespace alltoall
 
 #endif
