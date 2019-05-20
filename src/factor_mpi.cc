@@ -213,27 +213,6 @@ int main(int argc, char* argv[])
                   << nels * nr * sizeof(value_t) / KB << ", " << blocksize
                   << ", " << m.first << ", " << m.second << std::endl;
       }
-
-#if 0
-      std::cout << "(" << step << ") Global Volume (KB) "
-                << nels * nr * sizeof(value_t) / KB
-                << ", blocksize (KB) = " << nblocks * sizeof(value_t) / KB
-                << ", ranking: ";
-
-
-      // print until second to last
-      std::copy(
-          std::begin(ranking),
-          std::end(ranking) - 1,
-          std::ostream_iterator<StringDoublePair>(std::cout, ", "));
-      // print last
-      std::cout << *(std::prev(ranking.end()));
-
-      std::cout << "\n";
-
-      // flush stdio buffer
-      std::cout << std::endl;
-#endif
     }
 
     // reset measurements for next iteration
