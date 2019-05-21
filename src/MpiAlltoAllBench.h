@@ -1,6 +1,5 @@
-#ifndef BENCHMARK_H__INCLUDED
-#define BENCHMARK_H__INCLUDED
-
+#ifndef MPI_ALLTOALL_BENCH_H__INCLUDED
+#define MPI_ALLTOALL_BENCH_H__INCLUDED
 #include <mpi.h>
 
 #include <algorithm>
