@@ -13,8 +13,7 @@
 namespace alltoall {
 
 template <class InputIt, class OutputIt>
-inline void bruck(
-    InputIt begin, OutputIt out, int blocksize, MPI_Comm comm)
+inline void bruck(InputIt begin, OutputIt out, int blocksize, MPI_Comm comm)
 {
   using rank_t = int;
   rank_t me, nr;
@@ -22,8 +21,6 @@ inline void bruck(
   MPI_Comm_size(comm, &nr);
 
   using value_t = typename std::iterator_traits<InputIt>::value_type;
-
-  constexpr auto mpi_datatype = mpi::mpi_datatype<value_t>::value;
 
   // Phase 1: Process i rotates local elements by i blocks to the left in a
   // cyclic manner.
@@ -79,12 +76,12 @@ inline void bruck(
     auto res = MPI_Sendrecv(
         send_buf,
         blocksize * count,
-        mpi_datatype,
+        mpi::mpi_datatype<value_t>::type(),
         dst,
         100,
         recv_buf,
         blocksize * count,
-        mpi_datatype,
+        mpi::mpi_datatype<value_t>::type(),
         src,
         100,
         comm,
@@ -134,8 +131,6 @@ inline void bruck_mod(
   MPI_Comm_size(comm, &nr);
 
   using value_t = typename std::iterator_traits<InputIt>::value_type;
-
-  constexpr auto mpi_datatype = mpi::mpi_datatype<value_t>::value;
 
   auto nels = size_t(nr) * blocksize;
 
@@ -197,12 +192,12 @@ inline void bruck_mod(
     auto res = MPI_Sendrecv(
         send_buf,
         blocksize * count,
-        mpi_datatype,
+        mpi::mpi_datatype<value_t>::type(),
         dst,
         100,
         recv_buf,
         blocksize * count,
-        mpi_datatype,
+        mpi::mpi_datatype<value_t>::type(),
         src,
         100,
         comm,

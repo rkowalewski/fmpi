@@ -29,8 +29,8 @@ constexpr size_t minblocksize = KB;
 /* constexpr size_t maxblocksize = runtime argument */
 
 // This are approximately 25 GB
-constexpr size_t capacity_per_node = 32 * MB * 28 * 28;
-//constexpr size_t capacity_per_node = 2 * MB;
+// constexpr size_t capacity_per_node = 32 * MB * 28 * 28;
+constexpr size_t capacity_per_node = 64 * MB;
 
 // The container where we store our
 using value_t     = int;
@@ -44,11 +44,14 @@ std::array<std::pair<std::string, benchmark_t>, 7> algos = {
     // Classic MPI All to All
     std::make_pair("AlltoAll", alltoall::MpiAlltoAll<iterator_t, iterator_t>),
     // One Factorizations based on Graph Theory
-    std::make_pair("FactorParty", alltoall::factorParty<iterator_t, iterator_t>),
-    std::make_pair("FlatFactor", alltoall::flatFactor<iterator_t, iterator_t>),
+    std::make_pair(
+        "FactorParty", alltoall::factorParty<iterator_t, iterator_t>),
+    std::make_pair(
+        "FlatFactor", alltoall::flatFactor<iterator_t, iterator_t>),
     // A Simple Flat Handshake which sends and receives never to/from the same
     // rank
-    std::make_pair("FlatHandshake", alltoall::flatHandshake<iterator_t, iterator_t>),
+    std::make_pair(
+        "FlatHandshake", alltoall::flatHandshake<iterator_t, iterator_t>),
     // Hierarchical XOR Shift Hypercube, works only if #PEs is power of two
     std::make_pair("Hypercube", alltoall::hypercube<iterator_t, iterator_t>),
     // Bruck Algorithms, first the original one, then a modified version which
@@ -144,21 +147,8 @@ int main(int argc, char* argv[])
       // first we want to obtain the correct result which we can verify then
       // with our own algorithms
 #ifndef NDEBUG
-      constexpr auto mpi_datatype = mpi::mpi_datatype<
-          typename std::iterator_traits<iterator_t>::value_type>::value;
-      auto res = MPI_Alltoall(
-          &(data[0]),
-          sendcount,
-          mpi_datatype,
-          &(correct[0]),
-          sendcount,
-          mpi_datatype,
-          MPI_COMM_WORLD);
-#else
-      auto res = MPI_SUCCESS;
+      alltoall::MpiAlltoAll(&(data[0]), &(correct[0]), sendcount, comm);
 #endif
-
-      ASSERT(res == MPI_SUCCESS);
 
       for (auto const& algo : algos) {
         // We always want to guarantee that all processors start at the same
@@ -167,7 +157,7 @@ int main(int argc, char* argv[])
         ASSERT(barrier.Success(comm));
 
         auto t = run_algorithm(
-            algo.second, &(data[0]), &(out[0]), sendcount, MPI_COMM_WORLD);
+            algo.second, &(data[0]), &(out[0]), sendcount, comm);
 
         measurements[algo.first].emplace_back(t);
 
@@ -224,7 +214,6 @@ int main(int argc, char* argv[])
   return 0;
 }
 
-
 extern char** environ;
 
 void print_env()
@@ -259,4 +248,3 @@ std::ostream& operator<<(std::ostream& os, StringDoublePair const& p)
   os << "{" << p.first << ", " << p.second << "}";
   return os;
 }
-
