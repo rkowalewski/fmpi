@@ -5,20 +5,20 @@
 
 template <bool HighResIsSteady = std::chrono::high_resolution_clock::is_steady>
 struct ChooseSteadyClock {
-  typedef std::chrono::high_resolution_clock type;
+  using type = std::chrono::high_resolution_clock;
 };
 
 template <>
 struct ChooseSteadyClock<false> {
-  typedef std::chrono::steady_clock type;
+  using type = std::chrono::steady_clock;
 };
 
 struct ChooseClockType {
-  typedef ChooseSteadyClock<>::type type;
+  using type = ChooseSteadyClock<>::type;
 };
 
 inline double ChronoClockNow() {
-  typedef ChooseClockType::type ClockType;
+  using ClockType  = ChooseClockType::type;
   using duration_t = std::chrono::duration<double, std::chrono::seconds::period>;
   return duration_t(ClockType::now().time_since_epoch()).count();
 }

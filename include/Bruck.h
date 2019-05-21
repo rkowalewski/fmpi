@@ -208,7 +208,7 @@ inline void bruck_mod(
     count = 0;
 
     {
-      for (auto block = src; block < src + nr; ++block) {
+      for (unsigned block = src; block < src + nr; ++block) {
         // Map from block to their idx
         auto theirblock = block - src;
         if (theirblock & j) {
