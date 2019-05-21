@@ -5,14 +5,7 @@
 
 #include <algorithm>
 #include <cmath>
-#include <iterator>
 #include <memory>
-#include <numeric>
-#include <vector>
-
-#include <Math.h>
-#include <Timer.h>
-#include <Types.h>
 
 // Other AllToAll Algorithms
 #include <Bruck.h>
