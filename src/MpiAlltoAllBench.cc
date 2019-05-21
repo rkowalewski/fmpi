@@ -30,7 +30,7 @@ constexpr size_t minblocksize = KB;
 
 // This are approximately 25 GB
 // constexpr size_t capacity_per_node = 32 * MB * 28 * 28;
-constexpr size_t capacity_per_node = 64 * MB;
+constexpr size_t capacity_per_node = MB;
 
 // The container where we store our
 using value_t     = int;
@@ -112,8 +112,8 @@ int main(int argc, char* argv[])
   // to get the largest possible block size
   const size_t maxblocksize = maxprocsize / nr;
 
-  auto nsteps = static_cast<size_t>(std::log2(maxblocksize)) -
-                static_cast<size_t>(std::log2(minblocksize));
+  auto nsteps = std::ceil(std::log2(maxblocksize)) -
+                std::ceil(std::log2(minblocksize));
 
   nsteps = std::min<std::size_t>(nsteps, 15);
 
@@ -221,7 +221,7 @@ void print_env()
   int   i          = 1;
   char* env_var_kv = *environ;
 
-  for (; env_var_kv != 0; ++i) {
+  for (; env_var_kv != nullptr; ++i) {
     // Split into key and value:
     char*       flag_name_cstr  = env_var_kv;
     char*       flag_value_cstr = std::strstr(env_var_kv, "=");
@@ -229,8 +229,8 @@ void print_env()
     std::string flag_name(flag_name_cstr, flag_name_cstr + flag_name_len);
     std::string flag_value(flag_value_cstr + 1);
 
-    if (std::strstr(flag_name.c_str(), "OMPI_") ||
-        std::strstr(flag_name.c_str(), "I_MPI_")) {
+    if ((std::strstr(flag_name.c_str(), "OMPI_") != nullptr) ||
+        (std::strstr(flag_name.c_str(), "I_MPI_") != nullptr)) {
       std::cout << flag_name << " = " << flag_value << "\n";
     }
 

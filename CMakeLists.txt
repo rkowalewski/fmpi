@@ -53,6 +53,22 @@ if(CMAKE_VERSION VERSION_GREATER 3.6 AND ENABLE_CLANG_TIDY)
             set(CMAKE_CXX_CLANG_TIDY "${CLANG_TIDY_EXE}")
         endif()
     endif()
+
+    # if(RUN_CLANG_TIDY_BIN STREQUAL "RUN_CLANG_TIDY_BIN-NOTFOUND")
+    #    message(FATAL_ERROR "unable to locate run-clang-tidy-5.0.py")
+   # endif()
+
+    # list(APPEND RUN_CLANG_TIDY_BIN_ARGS
+    #     -clang-tidy-binary ${CLANG_TIDY_BIN}
+    #     "\"-header-filter=.*\\b(src|test|examples)\\b\\/(?!lib).*\""     #Only run clang tidy on src, test, examples and skip 3rd party libraries
+    #     -checks=clan*,cert*,misc*,perf*,cppc*,read*,mode*,-cert-err58-cpp,-misc-noexcept-move-constructor,-cppcoreguidelines-*
+    #     )
+
+    #add_custom_target(
+    #    tidy
+    #    COMMAND ${RUN_CLANG_TIDY_BIN} ${RUN_CLANG_TIDY_BIN_ARGS}
+    #    COMMENT "running clang tidy"
+    #    )
 endif()
 
 
