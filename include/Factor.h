@@ -19,10 +19,12 @@ inline void factorParty(
   MPI_Comm_rank(comm, &me);
   MPI_Comm_size(comm, &nr);
 
-  constexpr auto mpi_datatype = mpi::mpi_datatype<
-      typename std::iterator_traits<InputIt>::value_type>::value;
+  auto mpi_datatype = mpi::mpi_datatype<
+      typename std::iterator_traits<InputIt>::value_type>::type();
 
-  ASSERT(nr % 2 == 0);
+  if (nr % 2) {
+    return;
+  }
 
   std::unique_ptr<int[]> partner{new int[nr]};
 
@@ -77,8 +79,8 @@ inline void flatFactor(
   MPI_Comm_rank(comm, &me);
   MPI_Comm_size(comm, &nr);
 
-  constexpr auto mpi_datatype = mpi::mpi_datatype<
-      typename std::iterator_traits<InputIt>::value_type>::value;
+  auto mpi_datatype = mpi::mpi_datatype<
+      typename std::iterator_traits<InputIt>::value_type>::type();
 
   for (int i = 1; i <= nr; ++i) {
     auto partner = mod(i - me, nr);

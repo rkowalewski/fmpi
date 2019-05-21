@@ -12,17 +12,26 @@ struct mpi_datatype {
       !std::is_arithmetic<T>::value,
       "arithmetic types can be perfectly matched to MPI Types");
 
-  static constexpr const MPI_Datatype value = MPI_BYTE;
+  static MPI_Datatype type()
+  {
+    return MPI_BYTE;
+  }
 };
 template <>
 struct mpi_datatype<int> {
-  static constexpr const MPI_Datatype value = MPI_INT;
+  static MPI_Datatype type()
+  {
+    return MPI_INT;
+  }
 };
 }  // namespace detail
+
 template <class T>
 struct mpi_datatype {
-  static constexpr const MPI_Datatype value =
-      detail::mpi_datatype<std::remove_cv_t<T>>::value;
+  static MPI_Datatype type()
+  {
+    return detail::mpi_datatype<T>::type();
+  }
 };
 
 }  // namespace mpi

@@ -41,9 +41,8 @@ auto medianReduce(T myMedian, int root, MPI_Comm comm)
     std::nth_element(&meds[0], nth, &meds[0] + nr);
     return *nth;
   }
-  else {
-    return -1.0;
-  }
+
+  return T{};
 }
 
 void print_env();

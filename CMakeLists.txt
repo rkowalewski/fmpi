@@ -33,6 +33,28 @@ endif()
 message(STATUS "Run: ${MPIEXEC} ${MPIEXEC_NUMPROC_FLAG} ${MPIEXEC_MAX_NUMPROCS} ${MPIEXEC_PREFLAGS} EXECUTABLE ${MPIEXEC_POSTFLAGS} ARGS")
 
 
+set(CMAKE_CXX_STANDARD 14)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
+set(CMAKE_CXX_EXTENSIONS OFF)
+
+if(CMAKE_VERSION VERSION_GREATER 3.6 AND ENABLE_CLANG_TIDY)
+    # Add clang-tidy if available
+    option(CLANG_TIDY_FIX "Perform fixes for Clang-Tidy" OFF)
+    find_program(
+        CLANG_TIDY_EXE
+        NAMES "clang-tidy"
+        DOC "Path to clang-tidy executable"
+    )
+
+    if(CLANG_TIDY_EXE)
+        if(CLANG_TIDY_FIX)
+            set(CMAKE_CXX_CLANG_TIDY "${CLANG_TIDY_EXE}" "-fix")
+        else()
+            set(CMAKE_CXX_CLANG_TIDY "${CLANG_TIDY_EXE}")
+        endif()
+    endif()
+endif()
+
 
 # You should usually split this into folders, but this is a simple example
 
@@ -43,7 +65,6 @@ message(STATUS "Run: ${MPIEXEC} ${MPIEXEC_NUMPROC_FLAG} ${MPIEXEC_MAX_NUMPROCS} 
 
 add_library(MPISynchronizedBarrier external/MPISynchronizedBarrier/MPISynchronizedBarrier.cc)
 target_include_directories(MPISynchronizedBarrier PUBLIC external/MPISynchronizedBarrier)
-target_compile_features(MPISynchronizedBarrier PUBLIC cxx_std_14)
 target_link_libraries(MPISynchronizedBarrier PRIVATE MPI::MPI_CXX)
 
 # Link each target with other targets or add options, etc.
@@ -52,8 +73,6 @@ target_link_libraries(MPISynchronizedBarrier PRIVATE MPI::MPI_CXX)
 add_executable(MpiAlltoAllBench src/MpiAlltoAllBench.cc src/MpiAlltoAllBench.h)
 target_include_directories(MpiAlltoAllBench PUBLIC include)
 target_include_directories(MpiAlltoAllBench PUBLIC src)
-target_compile_features(MpiAlltoAllBench PUBLIC cxx_std_14)
-set_target_properties(MpiAlltoAllBench PROPERTIES CXX_EXTENSIONS OFF)
 
 # Make sure you link your targets with this command. It can also link libraries and
 # even flags, so linking a target that does not exist will not give a configure-time error.
@@ -61,8 +80,6 @@ target_link_libraries(MpiAlltoAllBench PUBLIC MPI::MPI_CXX MPISynchronizedBarrie
 
 
 add_executable(factor_serial src/factor_serial.cc)
-target_compile_features(factor_serial PUBLIC cxx_std_14)
-set_target_properties(factor_serial PROPERTIES CXX_EXTENSIONS OFF)
 
 
 

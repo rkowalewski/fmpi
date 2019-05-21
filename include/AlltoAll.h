@@ -21,8 +21,8 @@ inline void flatHandshake(
   MPI_Comm_rank(comm, &me);
   MPI_Comm_size(comm, &nr);
 
-  constexpr auto mpi_datatype = mpi::mpi_datatype<
-      typename std::iterator_traits<InputIt>::value_type>::value;
+  auto mpi_datatype = mpi::mpi_datatype<
+      typename std::iterator_traits<InputIt>::value_type>::type();
 
   for (int i = 1; i < nr; ++i) {
     auto pair = std::make_pair(mod(me + i, nr), mod(me - i, nr));
@@ -64,8 +64,8 @@ inline void hypercube(
     return;
   }
 
-  constexpr auto mpi_datatype = mpi::mpi_datatype<
-      typename std::iterator_traits<InputIt>::value_type>::value;
+  auto mpi_datatype = mpi::mpi_datatype<
+      typename std::iterator_traits<InputIt>::value_type>::type();
 
   for (int i = 1; i < nr; ++i) {
     auto partner = me ^ i;
@@ -95,8 +95,8 @@ template <class InputIt, class OutputIt>
 inline void MpiAlltoAll(
     InputIt begin, OutputIt out, int blocksize, MPI_Comm comm)
 {
-  constexpr auto mpi_datatype = mpi::mpi_datatype<
-      typename std::iterator_traits<InputIt>::value_type>::value;
+  auto mpi_datatype = mpi::mpi_datatype<
+      typename std::iterator_traits<InputIt>::value_type>::type();
 
   auto res = MPI_Alltoall(
       std::addressof(*begin),
@@ -105,7 +105,7 @@ inline void MpiAlltoAll(
       std::addressof(*out),
       blocksize,
       mpi_datatype,
-      MPI_COMM_WORLD);
+      comm);
 
   ASSERT(res == MPI_SUCCESS);
 }
