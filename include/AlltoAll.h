@@ -13,9 +13,9 @@
 
 namespace alltoall {
 
-template <class InputIt, class OutputIt>
+template <class InputIt, class OutputIt, class Op>
 inline void flatHandshake(
-    InputIt begin, OutputIt out, int blocksize, MPI_Comm comm)
+    InputIt begin, OutputIt out, int blocksize, MPI_Comm comm, Op&& /*op*/)
 {
   int me, nr;
   MPI_Comm_rank(comm, &me);
@@ -26,16 +26,18 @@ inline void flatHandshake(
 
   for (int i = 1; i < nr; ++i) {
     auto pair = std::make_pair(mod(me + i, nr), mod(me - i, nr));
+    auto dst  = pair.first;
+    auto src  = pair.second;
     auto res  = MPI_Sendrecv(
         std::addressof(*(begin + pair.first * blocksize)),
         blocksize,
         mpi_datatype,
-        pair.first,
+        dst,
         100,
         std::addressof(*(out + pair.second * blocksize)),
         blocksize,
         mpi_datatype,
-        pair.second,
+        src,
         100,
         comm,
         MPI_STATUS_IGNORE);
@@ -48,9 +50,9 @@ inline void flatHandshake(
       out + me * blocksize);
 }
 
-template <class InputIt, class OutputIt>
+template <class InputIt, class OutputIt, class Op>
 inline void hypercube(
-    InputIt begin, OutputIt out, int blocksize, MPI_Comm comm)
+    InputIt begin, OutputIt out, int blocksize, MPI_Comm comm, Op&& op)
 {
   int me, nr;
   MPI_Comm_rank(comm, &me);
@@ -64,39 +66,66 @@ inline void hypercube(
     return;
   }
 
-  auto mpi_datatype = mpi::mpi_datatype<
-      typename std::iterator_traits<InputIt>::value_type>::type();
+  using value_type = typename std::iterator_traits<InputIt>::value_type;
+
+  auto mpi_datatype = mpi::mpi_datatype<value_type>::type();
+
+  auto recv_buf = std::unique_ptr<value_type[]>(new value_type[blocksize]);
+  auto merge_buf =
+      std::unique_ptr<value_type[]>(new value_type[blocksize * nr]);
+
+  auto* it_out  = &(*out);
+  auto* it_mbuf = merge_buf.get();
+
+  std::copy(
+      begin + me * blocksize, begin + me * blocksize + blocksize, it_out);
+
+  auto recvcount = blocksize;
 
   for (int i = 1; i < nr; ++i) {
     auto partner = me ^ i;
-    auto res     = MPI_Sendrecv(
+
+    auto res = MPI_Sendrecv(
         std::addressof(*(begin + partner * blocksize)),
         blocksize,
         mpi_datatype,
         partner,
         100,
-        std::addressof(*(out + partner * blocksize)),
+        recv_buf.get(),
         blocksize,
         mpi_datatype,
         partner,
         100,
         comm,
         MPI_STATUS_IGNORE);
-    ASSERT(res == MPI_SUCCESS);
-  }
 
-  std::copy(
-      begin + me * blocksize,
-      begin + me * blocksize + blocksize,
-      out + me * blocksize);
+    ASSERT(res == MPI_SUCCESS);
+
+    op(it_out,
+       it_out + recvcount,
+       recv_buf.get(),
+       recv_buf.get() + blocksize,
+       it_mbuf);
+
+    std::swap(it_out, it_mbuf);
+    recvcount += blocksize;
+  }
+  if (&(*it_out) != &(*out)) {
+    std::copy(it_out, it_out + recvcount, out);
+  }
+  ASSERT(recvcount == blocksize * nr);
+  ASSERT(std::is_sorted(it_out, it_out + nr * blocksize));
 }
 
-template <class InputIt, class OutputIt>
+template <class InputIt, class OutputIt, class Op>
 inline void MpiAlltoAll(
-    InputIt begin, OutputIt out, int blocksize, MPI_Comm comm)
+    InputIt begin, OutputIt out, int blocksize, MPI_Comm comm, Op&& /*op*/)
 {
   auto mpi_datatype = mpi::mpi_datatype<
       typename std::iterator_traits<InputIt>::value_type>::type();
+
+  int nr;
+  MPI_Comm_size(comm, &nr);
 
   auto res = MPI_Alltoall(
       std::addressof(*begin),
@@ -108,6 +137,7 @@ inline void MpiAlltoAll(
       comm);
 
   ASSERT(res == MPI_SUCCESS);
+  std::sort(out, out + blocksize * nr);
 }
 }  // namespace alltoall
 #endif

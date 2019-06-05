@@ -3,6 +3,7 @@
 
 #include <mpi.h>
 
+#include <cassert>
 #include <memory>
 
 #include <Debug.h>
@@ -11,73 +12,17 @@
 
 namespace alltoall {
 
-template <class InputIt, class OutputIt>
-inline void factorParty(
-    InputIt begin, OutputIt out, int blocksize, MPI_Comm comm)
+namespace detail {
+
+template <class InputIt, class OutputIt, class Op>
+inline void oneFactor_odd(
+    InputIt begin, OutputIt out, int blocksize, MPI_Comm comm, Op&& /*op*/)
 {
   int me, nr;
   MPI_Comm_rank(comm, &me);
   MPI_Comm_size(comm, &nr);
 
-  auto mpi_datatype = mpi::mpi_datatype<
-      typename std::iterator_traits<InputIt>::value_type>::type();
-
-  if (nr % 2) {
-    return;
-  }
-
-  std::unique_ptr<int[]> partner{new int[nr]};
-
-  // We have 2n ranks
-  auto n = nr / 2;
-
-  auto factorPair = [n](int me, int r) {
-    auto k_bottom = 2 * n - 1;
-    return std::make_pair(
-        mod(r + me, k_bottom) + 1, mod(r - me, k_bottom) + 1);
-  };
-
-  // Rounds
-  for (int r = 1; r < nr; ++r) {
-    partner[0] = r;
-    partner[r] = 0;
-
-    // generate remaining pairs
-    for (int p = 1; p < n; ++p) {
-      auto pair            = factorPair(p, r - 1);
-      partner[pair.first]  = pair.second;
-      partner[pair.second] = pair.first;
-    }
-
-    auto res = MPI_Sendrecv(
-        std::addressof(*(begin + partner[me] * blocksize)),
-        blocksize,
-        mpi_datatype,
-        partner[me],
-        100,
-        std::addressof(*(out + partner[me] * blocksize)),
-        blocksize,
-        mpi_datatype,
-        partner[me],
-        100,
-        comm,
-        MPI_STATUS_IGNORE);
-    ASSERT(res == MPI_SUCCESS);
-  }
-
-  std::copy(
-      begin + me * blocksize,
-      begin + me * blocksize + blocksize,
-      out + me * blocksize);
-}
-
-template <class InputIt, class OutputIt>
-inline void flatFactor(
-    InputIt begin, OutputIt out, int blocksize, MPI_Comm comm)
-{
-  int me, nr;
-  MPI_Comm_rank(comm, &me);
-  MPI_Comm_size(comm, &nr);
+  assert(nr % 2);
 
   auto mpi_datatype = mpi::mpi_datatype<
       typename std::iterator_traits<InputIt>::value_type>::type();
@@ -109,6 +54,71 @@ inline void flatFactor(
     }
   }
 }
+
+template <class InputIt, class OutputIt, class Op>
+inline void oneFactor_even(
+    InputIt begin, OutputIt out, int blocksize, MPI_Comm comm, Op&&)
+{
+  int me, nr;
+  MPI_Comm_rank(comm, &me);
+  MPI_Comm_size(comm, &nr);
+
+  assert((nr % 2) == 0);
+
+  auto mpi_datatype = mpi::mpi_datatype<
+      typename std::iterator_traits<InputIt>::value_type>::type();
+
+  for (int r = 0; r < nr - 1; ++r) {
+    auto idle = mod(nr * r / 2, nr - 1);
+    int  partner;
+
+    if (me == nr - 1) {
+      partner = idle;
+    }
+    else if (me == idle) {
+      partner = nr - 1;
+    }
+    else {
+      partner = mod(r - me, nr - 1);
+    }
+
+    auto res = MPI_Sendrecv(
+        std::addressof(*(begin + partner * blocksize)),
+        blocksize,
+        mpi_datatype,
+        partner,
+        100,
+        std::addressof(*(out + partner * blocksize)),
+        blocksize,
+        mpi_datatype,
+        partner,
+        100,
+        comm,
+        MPI_STATUS_IGNORE);
+    ASSERT(res == MPI_SUCCESS);
+  }
+
+  std::copy(
+      begin + me * blocksize,
+      begin + me * blocksize + blocksize,
+      out + me * blocksize);
+}
+}  // namespace detail
+
+template <class InputIt, class OutputIt, class Op>
+inline void oneFactor(
+    InputIt begin, OutputIt out, int blocksize, MPI_Comm comm, Op&& op)
+{
+  int nr;
+  MPI_Comm_size(comm, &nr);
+  if (nr % 2) {
+    detail::oneFactor_odd(begin, out, blocksize, comm, std::forward<Op>(op));
+  }
+  else {
+    detail::oneFactor_even(begin, out, blocksize, comm, std::forward<Op>(op));
+  }
+}
+
 }  // namespace alltoall
 
 #endif
