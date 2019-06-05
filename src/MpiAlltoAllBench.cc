@@ -10,6 +10,7 @@
 #include <vector>
 
 #include <mpi.h>
+#include <omp.h>
 
 #include <AlltoAll.h>
 #include <Debug.h>
@@ -20,17 +21,19 @@
 #include <MPISynchronizedBarrier.h>
 #include <MpiAlltoAllBench.h>
 
+#define W(X) #X << "=" << X << ", "
+
 constexpr size_t KB = 1 << 10;
 constexpr size_t MB = 1 << 20;
 
 constexpr size_t niters = 10;
 
-constexpr size_t minblocksize = KB;
+constexpr size_t minblocksize = 4;
 /* constexpr size_t maxblocksize = runtime argument */
 
 // This are approximately 25 GB
 // constexpr size_t capacity_per_node = 32 * MB * 28 * 28;
-constexpr size_t capacity_per_node = MB;
+constexpr size_t capacity_per_node = 64;
 
 // The container where we store our
 using value_t     = int;
@@ -38,26 +41,33 @@ using container_t = std::unique_ptr<value_t[]>;
 using iterator_t  = typename container_t::pointer;
 
 using benchmark_t =
-    std::function<void(iterator_t, iterator_t, int, MPI_Comm)>;
+    std::function<void(iterator_t, iterator_t, int, MPI_Comm, merge_t)>;
 
-std::array<std::pair<std::string, benchmark_t>, 7> algos = {
+std::array<std::pair<std::string, benchmark_t>, 2> algos = {
     // Classic MPI All to All
-    std::make_pair("AlltoAll", alltoall::MpiAlltoAll<iterator_t, iterator_t>),
+    std::make_pair(
+        "AlltoAll", alltoall::MpiAlltoAll<iterator_t, iterator_t, merge_t>),
+#if 0
     // One Factorizations based on Graph Theory
     std::make_pair(
-        "FactorParty", alltoall::factorParty<iterator_t, iterator_t>),
-    std::make_pair(
-        "FlatFactor", alltoall::flatFactor<iterator_t, iterator_t>),
+        "OneFactor", alltoall::oneFactor<iterator_t, iterator_t, merge_t>),
     // A Simple Flat Handshake which sends and receives never to/from the same
     // rank
     std::make_pair(
-        "FlatHandshake", alltoall::flatHandshake<iterator_t, iterator_t>),
+        "FlatHandshake",
+        alltoall::flatHandshake<iterator_t, iterator_t, merge_t>),
     // Hierarchical XOR Shift Hypercube, works only if #PEs is power of two
-    std::make_pair("Hypercube", alltoall::hypercube<iterator_t, iterator_t>),
+#endif
+    std::make_pair(
+        "Hypercube", alltoall::hypercube<iterator_t, iterator_t, merge_t>),
+#if 0
     // Bruck Algorithms, first the original one, then a modified version which
     // omits the last local rotation step
-    std::make_pair("Bruck", alltoall::bruck<iterator_t, iterator_t>),
-    std::make_pair("Bruck_Mod", alltoall::bruck_mod<iterator_t, iterator_t>)};
+    std::make_pair("Bruck", alltoall::bruck<iterator_t, iterator_t, merge_t>),
+    std::make_pair(
+        "Bruck_Mod", alltoall::bruck_mod<iterator_t, iterator_t, merge_t>)
+#endif
+};
 
 int main(int argc, char* argv[])
 {
@@ -89,8 +99,6 @@ int main(int argc, char* argv[])
     print_env();
   }
 
-  std::mt19937_64 generator(random_seed_seq::get_instance());
-
   // We have to half the capacity because we do not in-place all to all
   // We again half by the number of processors
   // const size_t number_nodes = nr / 28;
@@ -112,10 +120,15 @@ int main(int argc, char* argv[])
   // to get the largest possible block size
   const size_t maxblocksize = maxprocsize / nr;
 
-  auto nsteps = std::ceil(std::log2(maxblocksize)) -
-                std::ceil(std::log2(minblocksize));
+  auto nsteps = std::abs(
+      std::ceil(std::log2(maxblocksize)) -
+      std::ceil(std::log2(minblocksize)));
 
   nsteps = std::min<std::size_t>(nsteps, 15);
+
+  if (me == 0) {
+    std::cout << W(maxblocksize) << W(minblocksize) << W(nsteps) << "\n";
+  }
 
   ASSERT(minblocksize >= sizeof(value_t));
 
@@ -137,17 +150,54 @@ int main(int argc, char* argv[])
     correct.reset(new value_t[nels]);
 #endif
 
-    std::iota(&(data[0]), &(data[nels]), me * nr);
-
     for (size_t it = 0; it < niters; ++it) {
+#pragma omp parallel
+      {
+        std::mt19937_64 generator(random_seed_seq::get_instance());
+        std::uniform_int_distribution<value_t> distribution(-1E6, 1E6);
+#pragma omp for
+        for (std::size_t block = 0; block < std::size_t(nr); ++block) {
 #ifdef NDEBUG
-      std::shuffle(&(data[0]), &(data[nels]), generator);
+          // generate some randome values
+          std::generate(
+              &data[block * sendcount],
+              &data[(block + 1) * sendcount],
+              [&]() { return distribution(generator); });
+          // sort it
+          std::sort(&data[block * sendcount], &data[(block + 1) * sendcount]);
+#else
+          std::iota(
+              &data[block * sendcount],
+              &data[(block + 1) * sendcount],
+              block + (me * nels));
 #endif
+        }
+      }
+
+      for (std::size_t block = 0; block < std::size_t(nr); ++block) {
+        ASSERT(std::is_sorted(
+            &data[block * sendcount], &data[(block + 1) * sendcount]));
+      }
+
+      auto merger =
+          [&](void* begin1, void* end1, void* begin2, void* end2, void* res) {
+            std::merge(
+                static_cast<value_t*>(begin1),
+                static_cast<value_t*>(end1),
+                static_cast<value_t*>(begin2),
+                static_cast<value_t*>(end2),
+                static_cast<value_t*>(res));
+          };
+
+      auto barrier = clock.Barrier(comm);
+      ASSERT(barrier.Success(comm));
 
       // first we want to obtain the correct result which we can verify then
       // with our own algorithms
 #ifndef NDEBUG
-      alltoall::MpiAlltoAll(&(data[0]), &(correct[0]), sendcount, comm);
+      alltoall::MpiAlltoAll(
+          &(data[0]), &(correct[0]), sendcount, comm, merger);
+      ASSERT(std::is_sorted(&correct[0], &(correct[nels])));
 #endif
 
       for (auto const& algo : algos) {
@@ -157,7 +207,7 @@ int main(int argc, char* argv[])
         ASSERT(barrier.Success(comm));
 
         auto t = run_algorithm(
-            algo.second, &(data[0]), &(out[0]), sendcount, comm);
+            algo.second, &(data[0]), &(out[0]), sendcount, comm, merger);
 
         measurements[algo.first].emplace_back(t);
 

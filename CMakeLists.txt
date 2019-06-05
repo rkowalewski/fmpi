@@ -10,12 +10,13 @@ project(AlltoAllAlgos VERSION 1.0 LANGUAGES CXX)
 
 # If you set any CMAKE_ variables, that can go here.
 # (But usually don't do this, except maybe for C++ standard)
+set(CMAKE_CXX_STANDARD 14)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
+set(CMAKE_CXX_EXTENSIONS OFF)
+
 
 # Find packages go here.
-
-
 option(MPI_CXX_SKIP_MPICXX "" ON)
-
 find_package(MPI REQUIRED)
 
 # For supporting CMake < 3.9:
@@ -30,12 +31,54 @@ if(NOT TARGET MPI::MPI_CXX)
                  PROPERTY INTERFACE_LINK_LIBRARIES ${MPI_CXX_LINK_FLAGS} ${MPI_CXX_LIBRARIES})
 endif()
 
+find_package(OpenMP)
+
+if(NOT TARGET OpenMP::OpenMP_CXX)
+    find_package(Threads REQUIRED)
+    add_library(OpenMP::OpenMP_CXX IMPORTED INTERFACE)
+    set_property(TARGET OpenMP::OpenMP_CXX
+                 PROPERTY INTERFACE_COMPILE_OPTIONS ${OpenMP_CXX_FLAGS})
+    # Only works if the same flag is passed to the linker; use CMake 3.9+ otherwise (Intel, AppleClang)
+    set_property(TARGET OpenMP::OpenMP_CXX
+                 PROPERTY INTERFACE_LINK_LIBRARIES ${OpenMP_CXX_FLAGS} Threads::Threads)
+
+endif()
+
+if (NOT MSVC)
+	add_compile_options(-Wall -Wextra -Wpedantic -Werror)
+endif()
+
 message(STATUS "Run: ${MPIEXEC} ${MPIEXEC_NUMPROC_FLAG} ${MPIEXEC_MAX_NUMPROCS} ${MPIEXEC_PREFLAGS} EXECUTABLE ${MPIEXEC_POSTFLAGS} ARGS")
 
+# You should usually split this into folders, but this is a simple example
 
-set(CMAKE_CXX_STANDARD 14)
-set(CMAKE_CXX_STANDARD_REQUIRED ON)
-set(CMAKE_CXX_EXTENSIONS OFF)
+add_subdirectory(external/tlx)
+
+# This is a "default" library, and will match the *** variable setting.
+# Other common choices are STATIC, SHARED, and MODULE
+# Including header files here helps IDEs but is not required.
+# Output libname matches target name, with the usual extensions on your system
+
+add_library(MPISynchronizedBarrier external/MPISynchronizedBarrier/MPISynchronizedBarrier.cc)
+target_include_directories(MPISynchronizedBarrier PUBLIC external/MPISynchronizedBarrier)
+target_link_libraries(MPISynchronizedBarrier PRIVATE MPI::MPI_CXX)
+
+# Link each target with other targets or add options, etc.
+
+# Adding something we can run - Output name matches target name
+add_executable(MpiAlltoAllBench src/MpiAlltoAllBench.cc src/MpiAlltoAllBench.h)
+target_include_directories(MpiAlltoAllBench PUBLIC include)
+target_include_directories(MpiAlltoAllBench PUBLIC src)
+
+# Make sure you link your targets with this command. It can also link libraries and
+# even flags, so linking a target that does not exist will not give a configure-time error.
+target_link_libraries(MpiAlltoAllBench PUBLIC OpenMP::OpenMP_CXX MPI::MPI_CXX MPISynchronizedBarrier)
+# link tlx
+target_compile_options(MpiAlltoAllBench PRIVATE ${OpenMP_CXX_FLAGS})
+target_link_libraries(MpiAlltoAllBench PUBLIC tlx)
+
+
+add_executable(factor_serial src/factor_serial.cc)
 
 if(CMAKE_VERSION VERSION_GREATER 3.6 AND ENABLE_CLANG_TIDY)
     # Add clang-tidy if available
@@ -70,32 +113,5 @@ if(CMAKE_VERSION VERSION_GREATER 3.6 AND ENABLE_CLANG_TIDY)
     #    COMMENT "running clang tidy"
     #    )
 endif()
-
-
-# You should usually split this into folders, but this is a simple example
-
-# This is a "default" library, and will match the *** variable setting.
-# Other common choices are STATIC, SHARED, and MODULE
-# Including header files here helps IDEs but is not required.
-# Output libname matches target name, with the usual extensions on your system
-
-add_library(MPISynchronizedBarrier external/MPISynchronizedBarrier/MPISynchronizedBarrier.cc)
-target_include_directories(MPISynchronizedBarrier PUBLIC external/MPISynchronizedBarrier)
-target_link_libraries(MPISynchronizedBarrier PRIVATE MPI::MPI_CXX)
-
-# Link each target with other targets or add options, etc.
-
-# Adding something we can run - Output name matches target name
-add_executable(MpiAlltoAllBench src/MpiAlltoAllBench.cc src/MpiAlltoAllBench.h)
-target_include_directories(MpiAlltoAllBench PUBLIC include)
-target_include_directories(MpiAlltoAllBench PUBLIC src)
-
-# Make sure you link your targets with this command. It can also link libraries and
-# even flags, so linking a target that does not exist will not give a configure-time error.
-target_link_libraries(MpiAlltoAllBench PUBLIC MPI::MPI_CXX MPISynchronizedBarrier)
-
-
-add_executable(factor_serial src/factor_serial.cc)
-
 
 

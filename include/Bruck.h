@@ -12,8 +12,8 @@
 
 namespace alltoall {
 
-template <class InputIt, class OutputIt>
-inline void bruck(InputIt begin, OutputIt out, int blocksize, MPI_Comm comm)
+template <class InputIt, class OutputIt, class Op>
+inline void bruck(InputIt begin, OutputIt out, int blocksize, MPI_Comm comm, Op&&)
 {
   using rank_t = int;
   rank_t me, nr;
@@ -121,9 +121,9 @@ inline void bruck(InputIt begin, OutputIt out, int blocksize, MPI_Comm comm)
   }
 }
 
-template <class InputIt, class OutputIt>
+template <class InputIt, class OutputIt, class Op>
 inline void bruck_mod(
-    InputIt begin, OutputIt out, int blocksize, MPI_Comm comm)
+    InputIt begin, OutputIt out, int blocksize, MPI_Comm comm, Op&&)
 {
   using rank_t = int;
   rank_t me, nr;
@@ -208,7 +208,7 @@ inline void bruck_mod(
     count = 0;
 
     {
-      for (unsigned block = src; block < src + nr; ++block) {
+      for (int block = src; block < src + nr; ++block) {
         // Map from block to their idx
         auto theirblock = block - src;
         if (theirblock & j) {

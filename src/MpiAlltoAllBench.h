@@ -3,7 +3,9 @@
 #include <mpi.h>
 
 #include <algorithm>
+#include <functional>
 #include <string>
+#include <utility>
 #include <vector>
 
 #include <Timer.h>
@@ -15,12 +17,19 @@ struct StringDoublePair : std::pair<std::string, double> {
 bool operator<(StringDoublePair const& lhs, StringDoublePair const& rhs);
 std::ostream& operator<<(std::ostream& os, StringDoublePair const& p);
 
-template <class InputIt, class OutputIt, class F>
+using merge_t = std::function<void(void*, void*, void*, void*, void*)>;
+
+template <class InputIt, class OutputIt, class CommAlgo, class Merger>
 auto run_algorithm(
-    F&& f, InputIt begin, OutputIt out, int blocksize, MPI_Comm comm)
+    CommAlgo&& f,
+    InputIt    begin,
+    OutputIt   out,
+    int        blocksize,
+    MPI_Comm   comm,
+    Merger&&   op)
 {
   auto start = ChronoClockNow();
-  f(begin, out, blocksize, comm);
+  f(begin, out, blocksize, comm, std::forward<Merger>(op));
   return ChronoClockNow() - start;
 }
 
