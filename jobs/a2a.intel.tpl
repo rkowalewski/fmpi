@@ -19,7 +19,7 @@
 #@ wall_clock_limit=<<WCLIMIT>>
 #@ job_name=<<JOB_NAME>>
 #@ network.MPI=sn_all,not_shared,us
-#@ initialdir=/home/hpc/pr92fo/di25qoy/workspaces/factor_algo
+#@ initialdir=/home/hpc/pr92fo/di25qoy/workspaces/alltoall
 #@ output=/home/hpc/pr92fo/di25qoy/logs/$(job_name)/job.n<<NUM_NODES>>p<<NUM_PROCS>>t<<NUM_THREADS>>.$(schedd_host).$(jobid).out
 #@ error=/home/hpc/pr92fo/di25qoy/logs/$(job_name)/job.n<<NUM_NODES>>p<<NUM_PROCS>>t<<NUM_THREADS>>.$(schedd_host).$(jobid).err
 #@ notification=error
@@ -63,7 +63,5 @@ export DASH_MAX_UNIT_THREADS=<<NUM_THREADS>>
 #-genv  I_MPI_PIN "on" -genv I_MPI_PIN_DOMAIN "numa"
 
 mpiexec \
-    -n $((<<NUM_PROCS>> * <<NUM_NODES>>)) ./build/factor_mpi.x "<<ARGS>>"
-
-
+    -n $((<<NUM_PROCS>> * <<NUM_NODES>>)) ./build/MpiAlltoAllBench "<<NUM_NODES>>"
 

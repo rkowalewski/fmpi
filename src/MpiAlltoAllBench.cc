@@ -28,12 +28,12 @@ constexpr size_t MB = 1 << 20;
 
 constexpr size_t niters = 10;
 
-constexpr size_t minblocksize = 4;
+constexpr size_t minblocksize = KB;
 /* constexpr size_t maxblocksize = runtime argument */
 
 // This are approximately 25 GB
-// constexpr size_t capacity_per_node = 32 * MB * 28 * 28;
-constexpr size_t capacity_per_node = 64;
+constexpr size_t capacity_per_node = 32 * MB * 28 * 28;
+//constexpr size_t capacity_per_node = 64;
 
 // The container where we store our
 using value_t     = int;

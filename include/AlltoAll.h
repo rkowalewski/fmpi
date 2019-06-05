@@ -7,6 +7,8 @@
 #include <cmath>
 #include <memory>
 
+#include <parallel/algorithm>
+
 // Other AllToAll Algorithms
 #include <Bruck.h>
 #include <Factor.h>
@@ -121,8 +123,8 @@ template <class InputIt, class OutputIt, class Op>
 inline void MpiAlltoAll(
     InputIt begin, OutputIt out, int blocksize, MPI_Comm comm, Op&& /*op*/)
 {
-  auto mpi_datatype = mpi::mpi_datatype<
-      typename std::iterator_traits<InputIt>::value_type>::type();
+  using value_type = typename std::iterator_traits<InputIt>::value_type;
+  auto mpi_datatype = mpi::mpi_datatype<value_type>::type();
 
   int nr;
   MPI_Comm_size(comm, &nr);
@@ -137,7 +139,26 @@ inline void MpiAlltoAll(
       comm);
 
   ASSERT(res == MPI_SUCCESS);
-  std::sort(out, out + blocksize * nr);
+
+  std::vector<std::pair<OutputIt, OutputIt>> seqs;
+  seqs.reserve(nr);
+
+  for (size_t i = 0; i < std::size_t(nr); ++i) {
+    seqs.push_back(std::make_pair(out, out + blocksize));
+  }
+
+  auto merge_buf =
+      std::unique_ptr<value_type[]>(new value_type[blocksize * nr]);
+
+  __gnu_parallel::multiway_merge(seqs.begin(),
+       seqs.end(),
+       merge_buf.get(),
+       blocksize, std::less<value_type>{},
+       __gnu_parallel::sequential_tag{});
+
+    std::copy(merge_buf.get(), merge_buf.get() + blocksize * nr, out);
+
+  //std::sort(out, out + blocksize * nr);
 }
 }  // namespace alltoall
 #endif
