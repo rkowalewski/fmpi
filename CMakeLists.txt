@@ -44,9 +44,17 @@ if(NOT TARGET OpenMP::OpenMP_CXX)
 
 endif()
 
+include(CheckCXXCompilerFlag)
+check_cxx_compiler_flag(-pedantic PEDANTIC_SUPPORTED)
+
 if (NOT MSVC)
-	add_compile_options(-Wall -Wextra -Wpedantic -Werror)
+	add_compile_options(-Wall -Wextra -Werror)
+
+    if (PEDANTIC_SUPPORTED)
+	    add_compile_options(-Werror)
+    endif()
 endif()
+
 
 message(STATUS "Run: ${MPIEXEC} ${MPIEXEC_NUMPROC_FLAG} ${MPIEXEC_MAX_NUMPROCS} ${MPIEXEC_PREFLAGS} EXECUTABLE ${MPIEXEC_POSTFLAGS} ARGS")
 
