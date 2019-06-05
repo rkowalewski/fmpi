@@ -32,8 +32,8 @@ constexpr size_t minblocksize = KB;
 /* constexpr size_t maxblocksize = runtime argument */
 
 // This are approximately 25 GB
-constexpr size_t capacity_per_node = 32 * MB * 28 * 28;
-//constexpr size_t capacity_per_node = 64;
+// constexpr size_t capacity_per_node = 32 * MB * 28 * 28;
+constexpr size_t capacity_per_node = MB;
 
 // The container where we store our
 using value_t     = int;
@@ -120,15 +120,14 @@ int main(int argc, char* argv[])
   // to get the largest possible block size
   const size_t maxblocksize = maxprocsize / nr;
 
-  auto nsteps = std::abs(
-      std::ceil(std::log2(maxblocksize)) -
-      std::ceil(std::log2(minblocksize)));
+  auto nsteps =
+      std::ceil(std::log2(maxblocksize)) - std::ceil(std::log2(minblocksize));
+
+  if (nsteps < 0) {
+    nsteps = 1;
+  }
 
   nsteps = std::min<std::size_t>(nsteps, 15);
-
-  if (me == 0) {
-    std::cout << W(maxblocksize) << W(minblocksize) << W(nsteps) << "\n";
-  }
 
   ASSERT(minblocksize >= sizeof(value_t));
 
@@ -169,7 +168,7 @@ int main(int argc, char* argv[])
           std::iota(
               &data[block * sendcount],
               &data[(block + 1) * sendcount],
-              block + (me * nels));
+              block * sendcount + (me * nels));
 #endif
         }
       }
