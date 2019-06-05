@@ -20,6 +20,7 @@
 
 #include <MPISynchronizedBarrier.h>
 #include <MpiAlltoAllBench.h>
+#include <parallel/algorithm>
 
 #define W(X) #X << "=" << X << ", "
 
@@ -180,12 +181,31 @@ int main(int argc, char* argv[])
 
       auto merger =
           [&](void* begin1, void* end1, void* begin2, void* end2, void* res) {
+#if 0
             std::merge(
                 static_cast<value_t*>(begin1),
                 static_cast<value_t*>(end1),
                 static_cast<value_t*>(begin2),
                 static_cast<value_t*>(end2),
                 static_cast<value_t*>(res));
+#else
+            std::array<std::pair<value_t*, value_t*>, 2> seqs{
+                std::make_pair(
+                    static_cast<value_t*>(begin1),
+                    static_cast<value_t*>(end1)),
+                std::make_pair(
+                    static_cast<value_t*>(begin2),
+                    static_cast<value_t*>(end2)),
+            };
+
+            __gnu_parallel::multiway_merge(
+                std::begin(seqs),
+                std::end(seqs),
+                static_cast<value_t*>(res),
+                nels,
+                std::less<value_t>{},
+                __gnu_parallel::sequential_tag{});
+#endif
           };
 
       auto barrier = clock.Barrier(comm);
