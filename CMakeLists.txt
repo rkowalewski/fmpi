@@ -75,7 +75,7 @@ target_link_libraries(MPISynchronizedBarrier PRIVATE MPI::MPI_CXX)
 
 # Adding something we can run - Output name matches target name
 add_executable(MpiAlltoAllBench src/MpiAlltoAllBench.cc src/MpiAlltoAllBench.h)
-target_include_directories(MpiAlltoAllBench PUBLIC include)
+target_include_directories(MpiAlltoAllBench PUBLIC include external/tlx)
 target_include_directories(MpiAlltoAllBench PUBLIC src)
 
 # Make sure you link your targets with this command. It can also link libraries and
