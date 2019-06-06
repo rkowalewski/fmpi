@@ -260,7 +260,7 @@ std::ostream& operator<<(std::ostream& os, StringDoublePair const& p)
 
 void printMeasurementHeader(std::ostream& os)
 {
-  os << "Nodes, Procs, Round, NBytes.KB, Blocksize, Algo, Rank, Time\n";
+  os << "Nodes, Procs, Round, NBytes, Blocksize, Algo, Rank, Time\n";
 }
 
 void printTraceHeader(std::ostream& os)
