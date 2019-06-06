@@ -13,6 +13,7 @@
 #include <Bruck.h>
 #include <Debug.h>
 #include <Factor.h>
+#include <Trace.h>
 
 namespace alltoall {
 
@@ -86,6 +87,10 @@ inline void hypercube(
   auto partner = me ^ 1;
   auto half    = 0;
 
+  auto trace = TimeTrace{me, "Hypercube"};
+
+  trace.tick("communication");
+
   MPI_Irecv(
       recv_buf.get() + half * blocksize,
       blocksize,
@@ -102,6 +107,8 @@ inline void hypercube(
       partner,
       100,
       comm);
+
+  trace.tock("communication");
 
   std::copy(
       begin + me * blocksize, begin + me * blocksize + blocksize, it_out);
@@ -125,7 +132,10 @@ inline void hypercube(
         MPI_STATUS_IGNORE);
 #endif
 
+    trace.tick("communication");
     auto res = MPI_Wait(&reqs[0], MPI_STATUS_IGNORE);
+    trace.tock("communication");
+
     ASSERT(res == MPI_SUCCESS);
 
     // next round
@@ -133,6 +143,7 @@ inline void hypercube(
     auto prevHalf = half;
     half          = 1 - prevHalf;
 
+    trace.tick("communication");
     MPI_Irecv(
         recv_buf.get() + half * blocksize,
         blocksize,
@@ -150,20 +161,27 @@ inline void hypercube(
         100,
         comm);
 
+    trace.tock("communication");
+
+    trace.tick("merge");
     op(it_out,
        it_out + recvcount,
        recv_buf.get() + prevHalf * blocksize,
        recv_buf.get() + (prevHalf + 1) * blocksize,
        it_mbuf);
+    trace.tock("merge");
 
     recvcount += blocksize;
 
     std::swap(it_out, it_mbuf);
   }
 
+  trace.tick("communication");
   auto res = MPI_Wait(&reqs[0], MPI_STATUS_IGNORE);
+  trace.tock("communication");
   ASSERT(res == MPI_SUCCESS);
 
+  trace.tick("merge");
   op(it_out,
      it_out + recvcount,
      recv_buf.get() + half * blocksize,
@@ -175,6 +193,7 @@ inline void hypercube(
   if (&(*it_mbuf) != &(*out)) {
     std::copy(it_mbuf, it_mbuf + recvcount, out);
   }
+  trace.tock("merge");
   ASSERT(recvcount == blocksize * nr);
   ASSERT(std::is_sorted(it_out, it_out + nr * blocksize));
 }

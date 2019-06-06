@@ -9,6 +9,7 @@
 #include <vector>
 
 #include <Timer.h>
+#include <Trace.h>
 
 struct StringDoublePair : std::pair<std::string, double> {
   using std::pair<std::string, double>::pair;
@@ -18,6 +19,23 @@ bool operator<(StringDoublePair const& lhs, StringDoublePair const& rhs);
 std::ostream& operator<<(std::ostream& os, StringDoublePair const& p);
 
 using merge_t = std::function<void(void*, void*, void*, void*, void*)>;
+
+struct Params {
+  size_t nhosts;
+  size_t nprocs;
+  int    me;
+  size_t step;
+  size_t nbytes;
+  size_t blocksize;
+};
+
+void printMeasurementHeader(std::ostream& os);
+void printTraceHeader(std::ostream& os);
+
+void printMeasurementCsvLine(
+    std::ostream& os, Params params, std::string algorithm, double time);
+
+void printTraceCsvLine(std::ostream& os, TimeTrace const& trace);
 
 template <class InputIt, class OutputIt, class CommAlgo, class Merger>
 auto run_algorithm(
