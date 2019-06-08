@@ -31,6 +31,8 @@ summarySE <- function(data=NULL, measurevar, groupvars=NULL, na.rm=FALSE,
                          measurevar
                          )
 
+    #data %>% group_by_(.dots = groupvars) %>% filter(Time == datac$)
+
     # Rename the "mean" column
     #datac <- plyr::rename(datac, c("mean" = measurevar))
 

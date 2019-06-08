@@ -1,7 +1,7 @@
 #!/usr/bin/env Rscript
 
 suppressMessages(library(readr))
-suppressMessages(library(dplyr))
+#suppressMessages(library(dplyr))
 library(ggplot2)
 library(RColorBrewer)
 library(tikzDevice)
@@ -34,5 +34,17 @@ df.summary <- summarySE(df.in,
                           groupvars=c("Nodes", "Procs", "Round", "Algo"),
                           na.rm=TRUE)
 
+df.minValues <- df.in %>%
+    group_by(Nodes, Procs, Round, Algo) %>%
+    slice(which.min(Time))
+
+df.maxValues <- df.in %>%
+    group_by(Nodes, Procs, Round, Algo) %>%
+    slice(which.max(Time))
+
+df.summary$minRank <- df.minValues$Rank
+df.summary$maxRank <- df.maxValues$Rank
+
+#df.summary$minRank <- df.in$Rank[[df.summary$minRow]]
 cat(format_csv(df.summary))
 

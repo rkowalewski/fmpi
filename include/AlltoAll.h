@@ -15,6 +15,9 @@
 #include <Factor.h>
 #include <Trace.h>
 
+static constexpr char MERGE[] = "merge";
+static constexpr char COMMUNICATION[] = "communication";
+
 namespace alltoall {
 
 template <class InputIt, class OutputIt, class Op>
@@ -89,7 +92,7 @@ inline void hypercube(
 
   auto trace = TimeTrace{me, "Hypercube"};
 
-  trace.tick("communication");
+  trace.tick(COMMUNICATION);
 
   MPI_Irecv(
       recv_buf.get() + half * blocksize,
@@ -108,7 +111,7 @@ inline void hypercube(
       100,
       comm);
 
-  trace.tock("communication");
+  trace.tock(COMMUNICATION);
 
   std::copy(
       begin + me * blocksize, begin + me * blocksize + blocksize, it_out);
@@ -132,9 +135,9 @@ inline void hypercube(
         MPI_STATUS_IGNORE);
 #endif
 
-    trace.tick("communication");
+    trace.tick(COMMUNICATION);
     auto res = MPI_Wait(&reqs[0], MPI_STATUS_IGNORE);
-    trace.tock("communication");
+    trace.tock(COMMUNICATION);
 
     ASSERT(res == MPI_SUCCESS);
 
@@ -143,7 +146,7 @@ inline void hypercube(
     auto prevHalf = half;
     half          = 1 - prevHalf;
 
-    trace.tick("communication");
+    trace.tick(COMMUNICATION);
     MPI_Irecv(
         recv_buf.get() + half * blocksize,
         blocksize,
@@ -161,27 +164,27 @@ inline void hypercube(
         100,
         comm);
 
-    trace.tock("communication");
+    trace.tock(COMMUNICATION);
 
-    trace.tick("merge");
+    trace.tick(MERGE);
     op(it_out,
        it_out + recvcount,
        recv_buf.get() + prevHalf * blocksize,
        recv_buf.get() + (prevHalf + 1) * blocksize,
        it_mbuf);
-    trace.tock("merge");
+    trace.tock(MERGE);
 
     recvcount += blocksize;
 
     std::swap(it_out, it_mbuf);
   }
 
-  trace.tick("communication");
+  trace.tick(COMMUNICATION);
   auto res = MPI_Wait(&reqs[0], MPI_STATUS_IGNORE);
-  trace.tock("communication");
+  trace.tock(COMMUNICATION);
   ASSERT(res == MPI_SUCCESS);
 
-  trace.tick("merge");
+  trace.tick(MERGE);
   op(it_out,
      it_out + recvcount,
      recv_buf.get() + half * blocksize,
@@ -193,7 +196,7 @@ inline void hypercube(
   if (&(*it_mbuf) != &(*out)) {
     std::copy(it_mbuf, it_mbuf + recvcount, out);
   }
-  trace.tock("merge");
+  trace.tock(MERGE);
   ASSERT(recvcount == blocksize * nr);
   ASSERT(std::is_sorted(it_out, it_out + nr * blocksize));
 }
@@ -205,9 +208,13 @@ inline void MpiAlltoAll(
   using value_type  = typename std::iterator_traits<InputIt>::value_type;
   auto mpi_datatype = mpi::mpi_datatype<value_type>::type();
 
-  int nr;
+  int nr, me;
   MPI_Comm_size(comm, &nr);
+  MPI_Comm_rank(comm, &me);
 
+  auto trace = TimeTrace{me, "AlltoAll"};
+
+  trace.tick(COMMUNICATION);
   auto res = MPI_Alltoall(
       std::addressof(*begin),
       blocksize,
@@ -216,8 +223,11 @@ inline void MpiAlltoAll(
       blocksize,
       mpi_datatype,
       comm);
+  trace.tock(COMMUNICATION);
 
   ASSERT(res == MPI_SUCCESS);
+
+  trace.tick(MERGE);
 
 #if 1
   std::vector<std::pair<OutputIt, OutputIt>> seqs;
@@ -240,9 +250,12 @@ inline void MpiAlltoAll(
       __gnu_parallel::sequential_tag{});
 
   std::copy(merge_buf.get(), merge_buf.get() + blocksize * nr, out);
+
 #else
   std::sort(out, out + blocksize * nr);
 #endif
+
+  trace.tock(MERGE);
 }
 }  // namespace alltoall
 #endif

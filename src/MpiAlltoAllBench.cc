@@ -292,12 +292,10 @@ void printTraceCsvLine(std::ostream& os, TimeTrace const& trace)
     return;
   }
   std::ostringstream myos;
-  myos << "--[TRACE " << trace.pid() << "] {" << trace.context() << ": [";
-
-  for (auto const& t : trace.measurements()) {
-    myos << "{" << t.first << ": " << t.second << "}, ";
-  }
-  myos << "]}\n";
+  myos << "--[TRACE " << trace.pid() << "] " << trace.context() << ", ";
+  myos << trace.measurements().at(MERGE) << ", ";
+  myos << trace.measurements().at(COMMUNICATION) << ", ";
+  myos << "\n";
   os << myos.str();
 }
 
