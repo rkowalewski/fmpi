@@ -44,7 +44,7 @@ using iterator_t  = typename container_t::pointer;
 using benchmark_t =
     std::function<void(iterator_t, iterator_t, int, MPI_Comm, merge_t)>;
 
-std::array<std::pair<std::string, benchmark_t>, 2> algos = {
+std::array<std::pair<std::string, benchmark_t>, 3> algos = {
     // Classic MPI All to All
     std::make_pair(
         "AlltoAll", alltoall::MpiAlltoAll<iterator_t, iterator_t, merge_t>),
@@ -52,13 +52,13 @@ std::array<std::pair<std::string, benchmark_t>, 2> algos = {
     // One Factorizations based on Graph Theory
     std::make_pair(
         "OneFactor", alltoall::oneFactor<iterator_t, iterator_t, merge_t>),
+#endif
     // A Simple Flat Handshake which sends and receives never to/from the same
     // rank
     std::make_pair(
         "FlatHandshake",
         alltoall::flatHandshake<iterator_t, iterator_t, merge_t>),
     // Hierarchical XOR Shift Hypercube, works only if #PEs is power of two
-#endif
     std::make_pair(
         "Hypercube", alltoall::hypercube<iterator_t, iterator_t, merge_t>),
 #if 0
@@ -72,12 +72,8 @@ std::array<std::pair<std::string, benchmark_t>, 2> algos = {
 
 int main(int argc, char* argv[])
 {
-  using measurements_t = std::unordered_map<std::string, std::vector<double>>;
-
   int         me, nr;
   container_t data, out, correct;
-
-  measurements_t measurements;
 
   MPI_Init(&argc, &argv);
   MPI_Comm comm = MPI_COMM_WORLD;
@@ -132,6 +128,11 @@ int main(int argc, char* argv[])
 
   ASSERT(minblocksize >= sizeof(value_t));
 
+  if (me == 0) {
+    printMeasurementHeader(std::cout);
+    printTraceHeader(std::cerr);
+  }
+
   for (size_t blocksize = minblocksize, step = 1; step <= nsteps;
        blocksize *= 2, ++step) {
     // each process sends sencount to all other PEs
@@ -150,7 +151,7 @@ int main(int argc, char* argv[])
     correct.reset(new value_t[nels]);
 #endif
 
-    for (size_t it = 0; it < niters; ++it) {
+    for (size_t it = 0; it < niters + 1; ++it) {
 #pragma omp parallel
       {
         std::mt19937_64 generator(random_seed_seq::get_instance());
@@ -179,34 +180,26 @@ int main(int argc, char* argv[])
             &data[block * sendcount], &data[(block + 1) * sendcount]));
       }
 
-      auto merger =
-          [&](void* begin1, void* end1, void* begin2, void* end2, void* res) {
-#if 0
-            std::merge(
-                static_cast<value_t*>(begin1),
-                static_cast<value_t*>(end1),
-                static_cast<value_t*>(begin2),
-                static_cast<value_t*>(end2),
-                static_cast<value_t*>(res));
-#else
-            std::array<std::pair<value_t*, value_t*>, 2> seqs{
-                std::make_pair(
-                    static_cast<value_t*>(begin1),
-                    static_cast<value_t*>(end1)),
-                std::make_pair(
-                    static_cast<value_t*>(begin2),
-                    static_cast<value_t*>(end2)),
-            };
+      auto merger = [&](void* begin1,
+                        void* end1,
+                        void* begin2,
+                        void* end2,
+                        void* res) {
+        std::array<std::pair<value_t*, value_t*>, 2> seqs{
+            std::make_pair(
+                static_cast<value_t*>(begin1), static_cast<value_t*>(end1)),
+            std::make_pair(
+                static_cast<value_t*>(begin2), static_cast<value_t*>(end2)),
+        };
 
-            __gnu_parallel::multiway_merge(
-                std::begin(seqs),
-                std::end(seqs),
-                static_cast<value_t*>(res),
-                nels,
-                std::less<value_t>{},
-                __gnu_parallel::sequential_tag{});
-#endif
-          };
+        __gnu_parallel::multiway_merge(
+            std::begin(seqs),
+            std::end(seqs),
+            static_cast<value_t*>(res),
+            nels,
+            std::less<value_t>{},
+            __gnu_parallel::sequential_tag{});
+      };
 
       auto barrier = clock.Barrier(comm);
       ASSERT(barrier.Success(comm));
@@ -219,6 +212,14 @@ int main(int argc, char* argv[])
       ASSERT(std::is_sorted(&correct[0], &(correct[nels])));
 #endif
 
+      Params p;
+      p.nhosts    = nhosts;
+      p.nprocs    = nr;
+      p.me        = me;
+      p.step      = step;
+      p.nbytes    = nels * nr * sizeof(value_t);
+      p.blocksize = blocksize;
+
       for (auto const& algo : algos) {
         // We always want to guarantee that all processors start at the same
         // time, so this is a real barrier
@@ -228,59 +229,74 @@ int main(int argc, char* argv[])
         auto t = run_algorithm(
             algo.second, &(data[0]), &(out[0]), sendcount, comm, merger);
 
-        measurements[algo.first].emplace_back(t);
+        // measurements[algo.first].emplace_back(t);
+        if (it > 0) {
+          printMeasurementCsvLine(std::cout, p, algo.first, t);
+          auto trace = TimeTrace{me, algo.first};
+          printTraceCsvLine(std::cerr, trace);
+          trace.clear();
+        }
 
         ASSERT(std::equal(&(correct[0]), &(correct[nels]), &(out[0])));
       }
     }
-
-    std::vector<StringDoublePair> ranking;
-
-    constexpr int root = 0;
-
-    for (auto const& algo : algos) {
-      auto mid = (niters / 2);
-
-      auto& results = measurements[algo.first];
-
-      // local median
-      std::nth_element(results.begin(), results.begin() + mid, results.end());
-
-      // global median
-      auto med = medianReduce(results[mid], root, comm);
-
-      // collect the global median into a vector
-      if (me == root) {
-        ranking.emplace_back(StringDoublePair{algo.first, med});
-      }
-    }
-
-    if (me == root) {
-      ASSERT(ranking.size() == algos.size());
-
-      if (step == 1) {
-        // print header
-        std::cout
-            << "Nodes, Procs, Round, NBytes.KB, Blocksize, Algo, Time\n";
-      }
-
-      // sort the median vector
-      std::sort(ranking.begin(), ranking.end());
-
-      for (auto const& m : ranking) {
-        std::cout << nhosts << ", " << nr << ", " << step << ", "
-                  << nels * nr * sizeof(value_t) / KB << ", " << blocksize
-                  << ", " << m.first << ", " << m.second << std::endl;
-      }
-    }
-
-    // reset measurements for next iteration
-    measurements.clear();
   }
 
   MPI_Finalize();
 
   return 0;
+}
+
+bool operator<(StringDoublePair const& lhs, StringDoublePair const& rhs)
+{
+  return lhs.second < rhs.second;
+}
+
+std::ostream& operator<<(std::ostream& os, StringDoublePair const& p)
+{
+  os << "{" << p.first << ", " << p.second << "}";
+  return os;
+}
+
+void printMeasurementHeader(std::ostream& os)
+{
+  os << "Nodes, Procs, Round, NBytes, Blocksize, Algo, Rank, Time\n";
+}
+
+void printTraceHeader(std::ostream& os)
+{
+  auto& store = TraceStore::GetInstance();
+  if (store.enabled()) {
+    os << "--[TRACE] Algorithm, Merge, Communication\n";
+  }
+}
+
+void printMeasurementCsvLine(
+    std::ostream& os, Params m, std::string algorithm, double time)
+{
+  std::ostringstream myos;
+  myos << m.nhosts << ", ";
+  myos << m.nprocs << ", ";
+  myos << m.step << ", ";
+  myos << m.nbytes << ", ";
+  myos << m.blocksize << ", ";
+  myos << algorithm << ", ";
+  myos << m.me << ", ";
+  myos << time << "\n";
+  os << myos.str();
+}
+
+void printTraceCsvLine(std::ostream& os, TimeTrace const& trace)
+{
+  if (!trace.enabled()) {
+    return;
+  }
+  std::ostringstream myos;
+  myos << "--[TRACE " << trace.pid() << "] " << trace.context() << ", ";
+  myos << trace.measurements().at(MERGE) << ", ";
+  myos << trace.measurements().at(COMMUNICATION) << ", ";
+  myos << "\n";
+  os << myos.str();
 }
 
 extern char** environ;
@@ -305,15 +321,4 @@ void print_env()
 
     env_var_kv = *(environ + i);
   }
-}
-
-bool operator<(StringDoublePair const& lhs, StringDoublePair const& rhs)
-{
-  return lhs.second < rhs.second;
-}
-
-std::ostream& operator<<(std::ostream& os, StringDoublePair const& p)
-{
-  os << "{" << p.first << ", " << p.second << "}";
-  return os;
 }
