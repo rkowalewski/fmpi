@@ -44,7 +44,7 @@ using iterator_t  = typename container_t::pointer;
 using benchmark_t =
     std::function<void(iterator_t, iterator_t, int, MPI_Comm, merge_t)>;
 
-std::array<std::pair<std::string, benchmark_t>, 2> algos = {
+std::array<std::pair<std::string, benchmark_t>, 3> algos = {
     // Classic MPI All to All
     std::make_pair(
         "AlltoAll", alltoall::MpiAlltoAll<iterator_t, iterator_t, merge_t>),
@@ -52,13 +52,13 @@ std::array<std::pair<std::string, benchmark_t>, 2> algos = {
     // One Factorizations based on Graph Theory
     std::make_pair(
         "OneFactor", alltoall::oneFactor<iterator_t, iterator_t, merge_t>),
+#endif
     // A Simple Flat Handshake which sends and receives never to/from the same
     // rank
     std::make_pair(
         "FlatHandshake",
         alltoall::flatHandshake<iterator_t, iterator_t, merge_t>),
     // Hierarchical XOR Shift Hypercube, works only if #PEs is power of two
-#endif
     std::make_pair(
         "Hypercube", alltoall::hypercube<iterator_t, iterator_t, merge_t>),
 #if 0

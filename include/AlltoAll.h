@@ -15,7 +15,7 @@
 #include <Factor.h>
 #include <Trace.h>
 
-static constexpr char MERGE[] = "merge";
+static constexpr char MERGE[]         = "merge";
 static constexpr char COMMUNICATION[] = "communication";
 
 namespace alltoall {
@@ -28,8 +28,12 @@ inline void flatHandshake(
   MPI_Comm_rank(comm, &me);
   MPI_Comm_size(comm, &nr);
 
-  auto mpi_datatype = mpi::mpi_datatype<
-      typename std::iterator_traits<InputIt>::value_type>::type();
+  using value_type  = typename std::iterator_traits<InputIt>::value_type;
+  auto mpi_datatype = mpi::mpi_datatype<value_type>::type();
+
+  auto trace = TimeTrace{me, "FlatHandshake"};
+
+  trace.tick(COMMUNICATION);
 
   for (int i = 1; i < nr; ++i) {
     auto pair = std::make_pair(mod(me + i, nr), mod(me - i, nr));
@@ -55,6 +59,36 @@ inline void flatHandshake(
       begin + me * blocksize,
       begin + me * blocksize + blocksize,
       out + me * blocksize);
+
+  trace.tock(COMMUNICATION);
+
+  trace.tick(MERGE);
+#if 1
+  std::vector<std::pair<OutputIt, OutputIt>> seqs;
+  seqs.reserve(nr);
+
+  for (size_t i = 0; i < std::size_t(nr); ++i) {
+    seqs.push_back(
+        std::make_pair(out + i * blocksize, out + (i + 1) * blocksize));
+  }
+
+  auto merge_buf =
+      std::unique_ptr<value_type[]>(new value_type[blocksize * nr]);
+
+  __gnu_parallel::multiway_merge(
+      seqs.begin(),
+      seqs.end(),
+      merge_buf.get(),
+      blocksize * nr,
+      std::less<value_type>{},
+      __gnu_parallel::sequential_tag{});
+
+  std::copy(merge_buf.get(), merge_buf.get() + blocksize * nr, out);
+
+#else
+  std::sort(out, out + blocksize * nr);
+#endif
+  trace.tock(MERGE);
 }
 
 template <class InputIt, class OutputIt, class Op>
