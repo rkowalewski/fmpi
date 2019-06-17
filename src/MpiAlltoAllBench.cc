@@ -180,11 +180,9 @@ int main(int argc, char* argv[])
             &data[block * sendcount], &data[(block + 1) * sendcount]));
       }
 
-      auto merger = [&](void* begin1,
-                        void* end1,
-                        void* begin2,
-                        void* end2,
-                        void* res) {
+      auto merger =
+          [&](void* begin1, void* end1, void* begin2, void* end2, void* res) {
+#if 0
         std::array<std::pair<value_t*, value_t*>, 2> seqs{
             std::make_pair(
                 static_cast<value_t*>(begin1), static_cast<value_t*>(end1)),
@@ -199,7 +197,21 @@ int main(int argc, char* argv[])
             nels,
             std::less<value_t>{},
             __gnu_parallel::sequential_tag{});
-      };
+#else
+            std::copy(
+                static_cast<value_t*>(begin1),
+                static_cast<value_t*>(end1),
+                static_cast<value_t*>(res));
+            std::copy(
+                static_cast<value_t*>(begin2),
+                static_cast<value_t*>(end2),
+                static_cast<value_t*>(res) +
+                    std::distance(
+                        static_cast<value_t*>(begin1),
+                        static_cast<value_t*>(end1)));
+
+#endif
+          };
 
       auto barrier = clock.Barrier(comm);
       ASSERT(barrier.Success(comm));
@@ -229,6 +241,10 @@ int main(int argc, char* argv[])
         auto t = run_algorithm(
             algo.second, &(data[0]), &(out[0]), sendcount, comm, merger);
 
+#ifndef NDBUG
+        std::sort(&(out[0]), &(out[nels]));
+#endif
+        ASSERT(std::equal(&(correct[0]), &(correct[nels]), &(out[0])));
         // measurements[algo.first].emplace_back(t);
         if (it > 0) {
           printMeasurementCsvLine(std::cout, p, algo.first, t);
@@ -236,8 +252,6 @@ int main(int argc, char* argv[])
           printTraceCsvLine(std::cerr, trace);
           trace.clear();
         }
-
-        ASSERT(std::equal(&(correct[0]), &(correct[nels]), &(out[0])));
       }
     }
   }

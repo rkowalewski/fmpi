@@ -279,12 +279,24 @@ static std::array<
     3>
     algos = {std::make_pair("oneFactor", oneFactor),
              std::make_pair("hypercube", hypercube),
-             std::make_pair("flatHandshake", flatHandshake)};
+             std::make_pair("personalized_exchange", flatHandshake)};
 
+void print_usage(std::string prog)
+{
+  std::cout << "usage: " << prog << "<algorithm> <nprocs>\n\n";
+
+  std::cout << "supported algorithms: ";
+  for (auto& algo : algos) {
+    std::cout << algo.first << ", ";
+  }
+  std::cout << "\n";
+}
 int main(int argc, char* argv[])
 {
-  assert(argc == 3);
-  (void)argc;
+  if (argc < 3) {
+    print_usage(std::string(argv[0]));
+    return 1;
+  }
 
   std::string algo    = argv[1];
   auto        n_ranks = std::atoi(argv[2]);
@@ -318,7 +330,7 @@ int main(int argc, char* argv[])
 #else
 
   auto& name = (*it).first;
-  if (name == "flatHandshake") {
+  if (name == "personalized_exchange") {
     print_dot_directed(rounds, name);
   }
   else {
@@ -327,6 +339,7 @@ int main(int argc, char* argv[])
 
   std::cout << "\n";
 
+#if 0
   auto size = n_ranks;
   for (int rank = 0; rank < size; ++rank) {
     const int target = (rank + 1) % size;
@@ -401,6 +414,7 @@ int main(int argc, char* argv[])
     }
   }
 
+#endif
 #endif
 
   return 0;

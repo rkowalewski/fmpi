@@ -63,7 +63,7 @@ inline void flatHandshake(
   trace.tock(COMMUNICATION);
 
   trace.tick(MERGE);
-#if 1
+#if 0
   std::vector<std::pair<OutputIt, OutputIt>> seqs;
   seqs.reserve(nr);
 
@@ -85,8 +85,6 @@ inline void flatHandshake(
 
   std::copy(merge_buf.get(), merge_buf.get() + blocksize * nr, out);
 
-#else
-  std::sort(out, out + blocksize * nr);
 #endif
   trace.tock(MERGE);
 }
@@ -232,7 +230,6 @@ inline void hypercube(
   }
   trace.tock(MERGE);
   ASSERT(recvcount == blocksize * nr);
-  ASSERT(std::is_sorted(it_out, it_out + nr * blocksize));
 }
 
 template <class InputIt, class OutputIt, class Op>
@@ -263,7 +260,7 @@ inline void MpiAlltoAll(
 
   trace.tick(MERGE);
 
-#if 1
+#if 0
   std::vector<std::pair<OutputIt, OutputIt>> seqs;
   seqs.reserve(nr);
 
@@ -285,8 +282,6 @@ inline void MpiAlltoAll(
 
   std::copy(merge_buf.get(), merge_buf.get() + blocksize * nr, out);
 
-#else
-  std::sort(out, out + blocksize * nr);
 #endif
 
   trace.tock(MERGE);

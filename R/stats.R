@@ -26,12 +26,13 @@ if(!exists("summarySE", mode="function")) {
 
 #csv.data <- read.csv(f, header=TRUE, strip.white=TRUE)
 f <- file("stdin")
-df.in <- read_csv(paste(collapse = "\n", readLines(f)), col_names=TRUE, col_types="iiiiicid")
+df.in <- read_csv(paste(collapse = "\n", readLines(f)), col_names=TRUE, col_types="iii?icid")
+#df.in <- read_csv(paste(collapse = "\n", readLines(f)), col_names=TRUE, col_types="iiilicid")
 close(f)
 
 df.summary <- summarySE(df.in,
                           measurevar="Time",
-                          groupvars=c("Nodes", "Procs", "Round", "Algo"),
+                          groupvars=c("Nodes", "Procs", "Round", "Blocksize", "Algo"),
                           na.rm=TRUE)
 
 df.minValues <- df.in %>%
