@@ -37,6 +37,8 @@ class TraceStore {
 };
 
 class TimeTrace {
+  using key_t = TraceStore::key_t;
+  using value_t = TraceStore::value_t;
  public:
   TimeTrace(int pid, TraceStore::context_t ctx);
 
@@ -47,6 +49,8 @@ class TimeTrace {
 
   std::unordered_map<TraceStore::key_t, TraceStore::value_t> const &measurements()
       const;
+
+  TraceStore::value_t lookup(TraceStore::key_t const& key) const;
 
   int                pid() const noexcept;
   std::string const &context() const noexcept;

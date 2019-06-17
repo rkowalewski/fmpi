@@ -130,7 +130,6 @@ int main(int argc, char* argv[])
 
   if (me == 0) {
     printMeasurementHeader(std::cout);
-    printTraceHeader(std::cerr);
   }
 
   for (size_t blocksize = minblocksize, step = 1; step <= nsteps;
@@ -247,9 +246,13 @@ int main(int argc, char* argv[])
         ASSERT(std::equal(&(correct[0]), &(correct[nels]), &(out[0])));
         // measurements[algo.first].emplace_back(t);
         if (it > 0) {
-          printMeasurementCsvLine(std::cout, p, algo.first, t);
           auto trace = TimeTrace{me, algo.first};
-          printTraceCsvLine(std::cerr, trace);
+          printMeasurementCsvLine(
+              std::cout,
+              p,
+              algo.first,
+              std::make_tuple(
+                  t, trace.lookup(MERGE), trace.lookup(COMMUNICATION)));
           trace.clear();
         }
       }
@@ -274,20 +277,18 @@ std::ostream& operator<<(std::ostream& os, StringDoublePair const& p)
 
 void printMeasurementHeader(std::ostream& os)
 {
-  os << "Nodes, Procs, Round, NBytes, Blocksize, Algo, Rank, Time\n";
-}
-
-void printTraceHeader(std::ostream& os)
-{
-  auto& store = TraceStore::GetInstance();
-  if (store.enabled()) {
-    os << "--[TRACE] Algorithm, Merge, Communication\n";
-  }
+  os << "Nodes, Procs, Round, NBytes, Blocksize, Algo, Rank, Ttotal, Tmerge, "
+        "Tcomm\n";
 }
 
 void printMeasurementCsvLine(
-    std::ostream& os, Params m, std::string algorithm, double time)
+    std::ostream&                      os,
+    Params                             m,
+    std::string                        algorithm,
+    std::tuple<double, double, double> times)
 {
+  double total, tmerge, tcomm;
+  std::tie(total, tmerge, tcomm) = times;
   std::ostringstream myos;
   myos << m.nhosts << ", ";
   myos << m.nprocs << ", ";
@@ -296,20 +297,9 @@ void printMeasurementCsvLine(
   myos << m.blocksize << ", ";
   myos << algorithm << ", ";
   myos << m.me << ", ";
-  myos << time << "\n";
-  os << myos.str();
-}
-
-void printTraceCsvLine(std::ostream& os, TimeTrace const& trace)
-{
-  if (!trace.enabled()) {
-    return;
-  }
-  std::ostringstream myos;
-  myos << "--[TRACE " << trace.pid() << "] " << trace.context() << ", ";
-  myos << trace.measurements().at(MERGE) << ", ";
-  myos << trace.measurements().at(COMMUNICATION) << ", ";
-  myos << "\n";
+  myos << total << ", ";
+  myos << tmerge << ", ";
+  myos << tcomm << "\n";
   os << myos.str();
 }
 

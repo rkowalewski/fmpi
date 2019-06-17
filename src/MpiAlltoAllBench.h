@@ -30,12 +30,12 @@ struct Params {
 };
 
 void printMeasurementHeader(std::ostream& os);
-void printTraceHeader(std::ostream& os);
 
 void printMeasurementCsvLine(
-    std::ostream& os, Params params, std::string algorithm, double time);
-
-void printTraceCsvLine(std::ostream& os, TimeTrace const& trace);
+    std::ostream&                      os,
+    Params                             m,
+    std::string                        algorithm,
+    std::tuple<double, double, double> times);
 
 template <class InputIt, class OutputIt, class CommAlgo, class Merger>
 auto run_algorithm(

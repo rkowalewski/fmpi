@@ -62,6 +62,20 @@ TimeTrace::measurements() const
   return m;
 }
 
+TraceStore::value_t TimeTrace::lookup(TraceStore::key_t const & key) const
+{
+  if (!enabled()) {
+    return TraceStore::value_t{};
+  }
+  auto const & m = measurements();
+  auto it = m.find(key);
+  if (it == m.end()) {
+    return TraceStore::value_t{};
+  }
+  return it->second;
+}
+
+
 std::unordered_map<TraceStore::key_t, TraceStore::value_t> &TraceStore::get(
     context_t const &ctx)
 {
