@@ -172,7 +172,7 @@ void print_dot(
       std::cout << std::setfill('0') << std::setw(nd) << r + 1;
       std::cout << std::setfill('0') << std::setw(nd) << pair.second;
       if (p > 3) {
-        std::cout << "[style=invis]";
+        //std::cout << "[style=invis]";
       }
       std::cout << "\n";
     }
@@ -247,12 +247,12 @@ void print_dot_directed(
         std::cout << std::setfill('0') << std::setw(nd) << partners.first;
         std::cout << "[color=cornflowerblue";
 
-        if (p > 3) {
+       // if (p > 3) {
           std::cout << ",style=invis]";
-        }
-        else {
+       // }
+       // else {
           std::cout << "]";
-        }
+       // }
         std::cout << "\n";
 
         std::cout << "r";
@@ -262,7 +262,7 @@ void print_dot_directed(
         std::cout << std::setfill('0') << std::setw(nd) << r;
         std::cout << std::setfill('0') << std::setw(nd) << p;
         if (p > 3) {
-          std::cout << "[style=invis]";
+          //std::cout << "[style=invis]";
         }
         std::cout << "\n";
       }

@@ -44,30 +44,25 @@ using iterator_t  = typename container_t::pointer;
 using benchmark_t =
     std::function<void(iterator_t, iterator_t, int, MPI_Comm, merge_t)>;
 
-std::array<std::pair<std::string, benchmark_t>, 3> algos = {
+std::array<std::pair<std::string, benchmark_t>, 6> algos = {
     // Classic MPI All to All
     std::make_pair(
         "AlltoAll", a2a::MpiAlltoAll<iterator_t, iterator_t, merge_t>),
-#if 0
     // One Factorizations based on Graph Theory
     std::make_pair(
         "OneFactor", a2a::oneFactor<iterator_t, iterator_t, merge_t>),
-#endif
     // A Simple Flat Handshake which sends and receives never to/from the same
     // rank
     std::make_pair(
-        "FlatHandshake",
-        a2a::flatHandshake<iterator_t, iterator_t, merge_t>),
+        "FlatHandshake", a2a::flatHandshake<iterator_t, iterator_t, merge_t>),
     // Hierarchical XOR Shift Hypercube, works only if #PEs is power of two
     std::make_pair(
         "Hypercube", a2a::hypercube<iterator_t, iterator_t, merge_t>),
-#if 0
     // Bruck Algorithms, first the original one, then a modified version which
     // omits the last local rotation step
     std::make_pair("Bruck", a2a::bruck<iterator_t, iterator_t, merge_t>),
     std::make_pair(
         "Bruck_Mod", a2a::bruck_mod<iterator_t, iterator_t, merge_t>)
-#endif
 };
 
 int main(int argc, char* argv[])
@@ -218,8 +213,7 @@ int main(int argc, char* argv[])
       // first we want to obtain the correct result which we can verify then
       // with our own algorithms
 #ifndef NDEBUG
-      a2a::MpiAlltoAll(
-          &(data[0]), &(correct[0]), sendcount, comm, merger);
+      a2a::MpiAlltoAll(&(data[0]), &(correct[0]), sendcount, comm, merger);
       A2A_ASSERT(std::is_sorted(&correct[0], &(correct[nels])));
 #endif
 
@@ -252,7 +246,9 @@ int main(int argc, char* argv[])
               p,
               algo.first,
               std::make_tuple(
-                  t, trace.lookup(MERGE), trace.lookup(COMMUNICATION)));
+                  t,
+                  trace.lookup(a2a::MERGE),
+                  trace.lookup(a2a::COMMUNICATION)));
           trace.clear();
         }
       }

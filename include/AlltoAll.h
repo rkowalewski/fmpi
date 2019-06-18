@@ -11,13 +11,11 @@
 
 // Other AllToAll Algorithms
 #include <Bruck.h>
+#include <Constants.h>
 #include <Debug.h>
 #include <Factor.h>
 #include <Mpi.h>
 #include <Trace.h>
-
-static constexpr char MERGE[]         = "merge";
-static constexpr char COMMUNICATION[] = "communication";
 
 namespace a2a {
 
@@ -62,7 +60,8 @@ inline void flatHandshake(
 
     // Wait for previous round
     A2A_ASSERT_RETURNS(
-        MPI_Waitall(2, &(reqs[0]), MPI_STATUSES_IGNORE), MPI_SUCCESS);
+        MPI_Waitall(reqs.size(), &(reqs[0]), MPI_STATUSES_IGNORE),
+        MPI_SUCCESS);
 
     reqs = a2a::sendrecv(
         std::next(begin, sendto * blocksize),
@@ -78,7 +77,7 @@ inline void flatHandshake(
 
   // Wait for previous round
   A2A_ASSERT_RETURNS(
-      MPI_Waitall(2, &(reqs[0]), MPI_STATUSES_IGNORE), MPI_SUCCESS);
+      MPI_Waitall(reqs.size(), &(reqs[0]), MPI_STATUSES_IGNORE), MPI_SUCCESS);
 
   trace.tock(COMMUNICATION);
 
@@ -151,7 +150,8 @@ inline void hypercube(
 
     // Wait for previous round
     A2A_ASSERT_RETURNS(
-        MPI_Waitall(2, &(reqs[0]), MPI_STATUSES_IGNORE), MPI_SUCCESS);
+        MPI_Waitall(reqs.size(), &(reqs[0]), MPI_STATUSES_IGNORE),
+        MPI_SUCCESS);
 
     reqs = a2a::sendrecv(
         std::next(begin, partner * blocksize),
@@ -167,7 +167,7 @@ inline void hypercube(
 
   // Wait for final round
   A2A_ASSERT_RETURNS(
-      MPI_Waitall(2, &(reqs[0]), MPI_STATUSES_IGNORE), MPI_SUCCESS);
+      MPI_Waitall(reqs.size(), &(reqs[0]), MPI_STATUSES_IGNORE), MPI_SUCCESS);
 
   trace.tock(COMMUNICATION);
 

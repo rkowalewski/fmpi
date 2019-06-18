@@ -6,8 +6,11 @@
 #include <cmath>
 #include <memory>
 
+#include <Constants.h>
 #include <Debug.h>
 #include <Math.h>
+#include <Mpi.h>
+#include <Trace.h>
 #include <Types.h>
 
 namespace a2a {
@@ -22,6 +25,9 @@ inline void bruck(
   A2A_ASSERT_RETURNS(MPI_Comm_size(comm, &nr), MPI_SUCCESS);
 
   using value_t = typename std::iterator_traits<InputIt>::value_type;
+
+  auto trace = TimeTrace{me, "Bruck"};
+  trace.tick(COMMUNICATION);
 
   // Phase 1: Process i rotates local elements by i blocks to the left in a
   // cyclic manner.
@@ -42,18 +48,19 @@ inline void bruck(
   // We never exchange more than (N/2) elements per round, so this buffer
   // suffices
   auto                       nels = size_t(nr) * blocksize;
-  std::unique_ptr<value_t[]> send_recv_buf{new value_t[nels]};
+  std::unique_ptr<value_t[]> tmpbuf{new value_t[nels]};
 
-  auto* send_buf = &send_recv_buf[0];
-  auto* recv_buf = &send_recv_buf[nels / 2];
+  auto* sendbuf = &tmpbuf[0];
+  auto* recvbuf = &tmpbuf[nels / 2];
 
   auto n_rounds = std::ceil(std::log2(nr));
   for (std::size_t idx = 0; idx < n_rounds; ++idx) {
     auto j = (1 << idx);
-    int  src, dst;
+    int  recvfrom, sendto;
 
     // We send to (r + j)
-    std::tie(src, dst) = std::make_pair(mod(me - j, nr), mod(me + j, nr));
+    std::tie(recvfrom, sendto) =
+        std::make_pair(mod(me - j, nr), mod(me + j, nr));
 
     // We exchange all blocks where the j-th bit is set
 
@@ -68,26 +75,25 @@ inline void bruck(
             // end
             out + block * blocksize + blocksize,
             // tmp buf
-            send_buf + count * blocksize);
+            sendbuf + count * blocksize);
         ++count;
       }
     }
 
-    // b) exchange
+    auto reqs = a2a::sendrecv(
+        sendbuf,
+        blocksize * count,
+        sendto,
+        100,
+        recvbuf,
+        blocksize * count,
+        recvfrom,
+        100,
+        comm);
+
+    // Wait for final round
     A2A_ASSERT_RETURNS(
-        MPI_Sendrecv(
-            send_buf,
-            blocksize * count,
-            mpi::mpi_datatype<value_t>::type(),
-            dst,
-            100,
-            recv_buf,
-            blocksize * count,
-            mpi::mpi_datatype<value_t>::type(),
-            src,
-            100,
-            comm,
-            MPI_STATUS_IGNORE),
+        MPI_Waitall(reqs.size(), &(reqs[0]), MPI_STATUSES_IGNORE),
         MPI_SUCCESS);
 
     // c) unpack blocks into recv buffer
@@ -95,8 +101,8 @@ inline void bruck(
     for (rank_t block = 1; block < nr; ++block) {
       if (block & j) {
         std::copy(
-            recv_buf + count * blocksize,
-            recv_buf + count * blocksize + blocksize,
+            recvbuf + count * blocksize,
+            recvbuf + count * blocksize + blocksize,
             out + block * blocksize);
         ++count;
       }
@@ -112,15 +118,16 @@ inline void bruck(
       // last
       out + blocksize * nr,
       // out
-      send_buf);
+      sendbuf);
 
   // Reverse these blocks
   for (rank_t block = 0; block < nr; ++block) {
     std::copy(
-        send_buf + (nr - block - 1) * blocksize,
-        send_buf + (nr - block) * blocksize,
+        sendbuf + (nr - block - 1) * blocksize,
+        sendbuf + (nr - block) * blocksize,
         out + block * blocksize);
   }
+  trace.tock(COMMUNICATION);
 }
 
 template <class InputIt, class OutputIt, class Op>
@@ -134,9 +141,12 @@ inline void bruck_mod(
 
   using value_t = typename std::iterator_traits<InputIt>::value_type;
 
+  auto trace = TimeTrace{me, "Bruck_Mod"};
+  trace.tick(COMMUNICATION);
+
   auto nels = size_t(nr) * blocksize;
 
-  std::unique_ptr<value_t[]> send_recv_buf;
+  std::unique_ptr<value_t[]> tmpbuf;
 
   {
     // Phase 1: Local Rotate, out[(me + block) % nr] = begin[(me - block) %
@@ -155,19 +165,20 @@ inline void bruck_mod(
     std::rotate(out, out + shift * blocksize, out + nels);
 
     // Phase 2: Communication Rounds
-    send_recv_buf.reset(new value_t[nels]);
+    tmpbuf.reset(new value_t[nels]);
   }
 
-  auto send_buf = &send_recv_buf[0];
-  auto recv_buf = &send_recv_buf[nels / 2];
+  auto sendbuf = &tmpbuf[0];
+  auto recvbuf = &tmpbuf[nels / 2];
 
   // range = [0..log2(nr)]
   for (auto r = 0; r < std::ceil(std::log2(nr)); ++r) {
     auto j = (1 << r);
-    int  src, dst;
+    int  recvfrom, sendto;
 
     // In contrast to classic Bruck, sender and receiver are swapped
-    std::tie(src, dst) = std::make_pair(mod(me + j, nr), mod(me - j, nr));
+    std::tie(recvfrom, sendto) =
+        std::make_pair(mod(me + j, nr), mod(me - j, nr));
 
     // a) pack blocks into a contigous send buffer
     size_t count = 0;
@@ -184,47 +195,48 @@ inline void bruck_mod(
               // end
               out + myidx * blocksize + blocksize,
               // tmp buf
-              send_buf + count * blocksize);
+              sendbuf + count * blocksize);
           ++count;
         }
       }
     }
 
     // b) exchange
+    auto reqs = a2a::sendrecv(
+        sendbuf,
+        blocksize * count,
+        sendto,
+        100,
+        recvbuf,
+        blocksize * count,
+        recvfrom,
+        100,
+        comm);
+
+    // Wait for final round
     A2A_ASSERT_RETURNS(
-        MPI_Sendrecv(
-            send_buf,
-            blocksize * count,
-            mpi::mpi_datatype<value_t>::type(),
-            dst,
-            100,
-            recv_buf,
-            blocksize * count,
-            mpi::mpi_datatype<value_t>::type(),
-            src,
-            100,
-            comm,
-            MPI_STATUS_IGNORE),
+        MPI_Waitall(reqs.size(), &(reqs[0]), MPI_STATUSES_IGNORE),
         MPI_SUCCESS);
 
     // c) unpack blocks into recv buffer
     count = 0;
 
     {
-      for (int block = src; block < src + nr; ++block) {
+      for (int block = recvfrom; block < recvfrom + nr; ++block) {
         // Map from block to their idx
-        auto theirblock = block - src;
+        auto theirblock = block - recvfrom;
         if (theirblock & j) {
           auto myblock = (theirblock + me) % nr;
           std::copy(
-              recv_buf + count * blocksize,
-              recv_buf + count * blocksize + blocksize,
+              recvbuf + count * blocksize,
+              recvbuf + count * blocksize + blocksize,
               out + myblock * blocksize);
           ++count;
         }
       }
     }
   }
+  trace.tock(COMMUNICATION);
 }
 }  // namespace a2a
 
