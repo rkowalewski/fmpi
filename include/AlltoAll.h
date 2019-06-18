@@ -13,6 +13,7 @@
 #include <Bruck.h>
 #include <Debug.h>
 #include <Factor.h>
+#include <Mpi.h>
 #include <Trace.h>
 
 static constexpr char MERGE[]         = "merge";
@@ -28,12 +29,7 @@ inline void flatHandshake(
   MPI_Comm_rank(comm, &me);
   MPI_Comm_size(comm, &nr);
 
-  using value_type  = typename std::iterator_traits<InputIt>::value_type;
-  auto mpi_datatype = mpi::mpi_datatype<value_type>::type();
-
   auto trace = TimeTrace{me, "FlatHandshake"};
-
-  std::array<MPI_Request, 2> reqs = {MPI_REQUEST_NULL};
 
   trace.tick(COMMUNICATION);
 
@@ -45,28 +41,16 @@ inline void flatHandshake(
 
   std::tie(sendto, recvfrom) = sendRecvPair(1);
 
-  // Overlapping first round...
-  A2A_ASSERT_RETURNS(
-      MPI_Irecv(
-          std::addressof(*(out + recvfrom * blocksize)),
-          blocksize,
-          mpi_datatype,
-          recvfrom,
-          100,
-          comm,
-          &(reqs[1])),
-      MPI_SUCCESS);
-
-  A2A_ASSERT_RETURNS(
-      MPI_Isend(
-          std::addressof(*(begin + sendto * blocksize)),
-          blocksize,
-          mpi_datatype,
-          sendto,
-          100,
-          comm,
-          &(reqs[0])),
-      MPI_SUCCESS);
+  auto reqs = a2a::sendrecv(
+      std::next(begin, sendto * blocksize),
+      blocksize,
+      sendto,
+      100,
+      std::next(out, recvfrom * blocksize),
+      blocksize,
+      recvfrom,
+      100,
+      comm);
 
   std::copy(
       begin + me * blocksize,
@@ -80,27 +64,16 @@ inline void flatHandshake(
     A2A_ASSERT_RETURNS(
         MPI_Waitall(2, &(reqs[0]), MPI_STATUSES_IGNORE), MPI_SUCCESS);
 
-    A2A_ASSERT_RETURNS(
-        MPI_Irecv(
-            std::addressof(*(out + recvfrom * blocksize)),
-            blocksize,
-            mpi_datatype,
-            recvfrom,
-            100,
-            comm,
-            &(reqs[1])),
-        MPI_SUCCESS);
-
-    A2A_ASSERT_RETURNS(
-        MPI_Isend(
-            std::addressof(*(begin + sendto * blocksize)),
-            blocksize,
-            mpi_datatype,
-            sendto,
-            100,
-            comm,
-            &(reqs[0])),
-        MPI_SUCCESS);
+    reqs = a2a::sendrecv(
+        std::next(begin, sendto * blocksize),
+        blocksize,
+        sendto,
+        100,
+        std::next(out, recvfrom * blocksize),
+        blocksize,
+        recvfrom,
+        100,
+        comm);
   }
 
   // Wait for previous round
@@ -152,39 +125,21 @@ inline void hypercube(
     return;
   }
 
-  using value_type = typename std::iterator_traits<InputIt>::value_type;
-
-  auto mpi_datatype = mpi::mpi_datatype<value_type>::type();
-
   auto trace = TimeTrace{me, "Hypercube"};
   trace.tick(COMMUNICATION);
 
-  std::array<MPI_Request, 2> reqs = {MPI_REQUEST_NULL};
-
   auto partner = me ^ 1;
 
-  // Overlapping first round...
-  A2A_ASSERT_RETURNS(
-      MPI_Irecv(
-          std::addressof(*(out + partner * blocksize)),
-          blocksize,
-          mpi_datatype,
-          partner,
-          100,
-          comm,
-          &(reqs[1])),
-      MPI_SUCCESS);
-
-  A2A_ASSERT_RETURNS(
-      MPI_Isend(
-          std::addressof(*(begin + partner * blocksize)),
-          blocksize,
-          mpi_datatype,
-          partner,
-          100,
-          comm,
-          &(reqs[0])),
-      MPI_SUCCESS);
+  auto reqs = a2a::sendrecv(
+      std::next(begin, partner * blocksize),
+      blocksize,
+      partner,
+      100,
+      std::next(out, partner * blocksize),
+      blocksize,
+      partner,
+      100,
+      comm);
 
   std::copy(
       begin + me * blocksize,
@@ -198,44 +153,16 @@ inline void hypercube(
     A2A_ASSERT_RETURNS(
         MPI_Waitall(2, &(reqs[0]), MPI_STATUSES_IGNORE), MPI_SUCCESS);
 
-#if 0
-    auto res = MPI_Sendrecv(
-        std::addressof(*(begin + partner * blocksize)),
+    reqs = a2a::sendrecv(
+        std::next(begin, partner * blocksize),
         blocksize,
-        mpi_datatype,
         partner,
         100,
-        std::addressof(*(out + partner * blocksize)),
+        std::next(out, partner * blocksize),
         blocksize,
-        mpi_datatype,
         partner,
         100,
-        comm,
-        MPI_STATUS_IGNORE);
-#else
-
-    A2A_ASSERT_RETURNS(
-        MPI_Irecv(
-            std::addressof(*(out + partner * blocksize)),
-            blocksize,
-            mpi_datatype,
-            partner,
-            100,
-            comm,
-            &(reqs[1])),
-        MPI_SUCCESS);
-
-    A2A_ASSERT_RETURNS(
-        MPI_Isend(
-            std::addressof(*(begin + partner * blocksize)),
-            blocksize,
-            mpi_datatype,
-            partner,
-            100,
-            comm,
-            &(reqs[0])),
-        MPI_SUCCESS);
-#endif
+        comm);
   }
 
   // Wait for final round
