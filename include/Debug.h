@@ -5,15 +5,19 @@
 #include <iterator>
 #include <sstream>
 
-#ifdef NDEBUG
-#define ASSERT(x)    \
-  do {               \
-    (void)sizeof(x); \
+#define A2A_UNUSED(x) \
+  do {                \
+    (void)sizeof(x);  \
   } while (0)
+
+#ifdef NDEBUG
+#define A2A_ASSERT(x) A2A_UNUSED(x)
 #else
 #include <cassert>
-#define ASSERT(x) assert(x)
+#define A2A_ASSERT(x) assert(x)
 #endif
+
+#define A2A_ASSERT_RETURNS(x, ret) A2A_ASSERT((x) == ret)
 
 template <class InputIt>
 void printVector(InputIt begin, InputIt end, int me)

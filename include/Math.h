@@ -8,7 +8,7 @@ namespace alltoall {
 template <class T>
 inline constexpr T mod(T a, T b)
 {
-  ASSERT(b > 0);
+  A2A_ASSERT(b > 0);
   T ret = a % b;
   return (ret >= 0) ? (ret) : (ret + b);
 }

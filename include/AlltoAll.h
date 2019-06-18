@@ -39,20 +39,21 @@ inline void flatHandshake(
     auto pair = std::make_pair(mod(me + i, nr), mod(me - i, nr));
     auto dst  = pair.first;
     auto src  = pair.second;
-    auto res  = MPI_Sendrecv(
-        std::addressof(*(begin + pair.first * blocksize)),
-        blocksize,
-        mpi_datatype,
-        dst,
-        100,
-        std::addressof(*(out + pair.second * blocksize)),
-        blocksize,
-        mpi_datatype,
-        src,
-        100,
-        comm,
-        MPI_STATUS_IGNORE);
-    ASSERT(res == MPI_SUCCESS);
+    A2A_ASSERT_RETURNS(
+        MPI_Sendrecv(
+            std::addressof(*(begin + pair.first * blocksize)),
+            blocksize,
+            mpi_datatype,
+            dst,
+            100,
+            std::addressof(*(out + pair.second * blocksize)),
+            blocksize,
+            mpi_datatype,
+            src,
+            100,
+            comm,
+            MPI_STATUS_IGNORE),
+        MPI_SUCCESS);
   }
 
   std::copy(
@@ -97,7 +98,7 @@ inline void hypercube(
   MPI_Comm_rank(comm, &me);
   MPI_Comm_size(comm, &nr);
 
-  ASSERT(nr > 0);
+  A2A_ASSERT(nr > 0);
 
   auto isPower2 = (nr & (nr - 1)) == 0;
 
@@ -109,13 +110,49 @@ inline void hypercube(
 
   auto mpi_datatype = mpi::mpi_datatype<value_type>::type();
 
-
   auto trace = TimeTrace{me, "Hypercube"};
   trace.tick(COMMUNICATION);
 
-  for (int i = 1; i < nr; ++i) {
-    auto partner = me ^ i;
+  std::array<MPI_Request, 2> reqs = {MPI_REQUEST_NULL};
 
+  auto partner = me ^ 1;
+
+  // Overlapping first round...
+  A2A_ASSERT_RETURNS(
+      MPI_Irecv(
+          std::addressof(*(out + partner * blocksize)),
+          blocksize,
+          mpi_datatype,
+          partner,
+          100,
+          comm,
+          &(reqs[1])),
+      MPI_SUCCESS);
+
+  A2A_ASSERT_RETURNS(
+      MPI_Isend(
+          std::addressof(*(begin + partner * blocksize)),
+          blocksize,
+          mpi_datatype,
+          partner,
+          100,
+          comm,
+          &(reqs[0])),
+      MPI_SUCCESS);
+
+  std::copy(
+      begin + me * blocksize,
+      begin + me * blocksize + blocksize,
+      out + me * blocksize);
+
+  for (int i = 2; i < nr; ++i) {
+    partner = me ^ i;
+
+    // Wait for previous round
+    A2A_ASSERT_RETURNS(
+        MPI_Waitall(2, &(reqs[0]), MPI_STATUSES_IGNORE), MPI_SUCCESS);
+
+#if 0
     auto res = MPI_Sendrecv(
         std::addressof(*(begin + partner * blocksize)),
         blocksize,
@@ -129,20 +166,42 @@ inline void hypercube(
         100,
         comm,
         MPI_STATUS_IGNORE);
+#else
 
-    ASSERT(res == MPI_SUCCESS);
+    A2A_ASSERT_RETURNS(
+        MPI_Irecv(
+            std::addressof(*(out + partner * blocksize)),
+            blocksize,
+            mpi_datatype,
+            partner,
+            100,
+            comm,
+            &(reqs[1])),
+        MPI_SUCCESS);
+
+    A2A_ASSERT_RETURNS(
+        MPI_Isend(
+            std::addressof(*(begin + partner * blocksize)),
+            blocksize,
+            mpi_datatype,
+            partner,
+            100,
+            comm,
+            &(reqs[0])),
+        MPI_SUCCESS);
+#endif
   }
 
-  std::copy(
-      begin + me * blocksize,
-      begin + me * blocksize + blocksize,
-      out + me * blocksize);
+  // Wait for final round
+  A2A_ASSERT_RETURNS(
+      MPI_Waitall(2, &(reqs[0]), MPI_STATUSES_IGNORE), MPI_SUCCESS);
 
   trace.tock(COMMUNICATION);
+
   trace.tick(MERGE);
+  // merging
   trace.tock(MERGE);
 }
-
 
 template <class InputIt, class OutputIt, class Op>
 inline void MpiAlltoAll(
@@ -158,17 +217,19 @@ inline void MpiAlltoAll(
   auto trace = TimeTrace{me, "AlltoAll"};
 
   trace.tick(COMMUNICATION);
-  auto res = MPI_Alltoall(
-      std::addressof(*begin),
-      blocksize,
-      mpi_datatype,
-      std::addressof(*out),
-      blocksize,
-      mpi_datatype,
-      comm);
-  trace.tock(COMMUNICATION);
 
-  ASSERT(res == MPI_SUCCESS);
+  A2A_ASSERT_RETURNS(
+      MPI_Alltoall(
+          std::addressof(*begin),
+          blocksize,
+          mpi_datatype,
+          std::addressof(*out),
+          blocksize,
+          mpi_datatype,
+          comm),
+      MPI_SUCCESS);
+
+  trace.tock(COMMUNICATION);
 
   trace.tick(MERGE);
 

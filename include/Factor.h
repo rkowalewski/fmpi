@@ -37,20 +37,21 @@ inline void oneFactor_odd(
           out + me * blocksize);
     }
     else {
-      auto res = MPI_Sendrecv(
-          std::addressof(*(begin + partner * blocksize)),
-          blocksize,
-          mpi_datatype,
-          partner,
-          100,
-          std::addressof(*(out + partner * blocksize)),
-          blocksize,
-          mpi_datatype,
-          partner,
-          100,
-          comm,
-          MPI_STATUS_IGNORE);
-      ASSERT(res == MPI_SUCCESS);
+      A2A_ASSERT_RETURNS(
+          MPI_Sendrecv(
+              std::addressof(*(begin + partner * blocksize)),
+              blocksize,
+              mpi_datatype,
+              partner,
+              100,
+              std::addressof(*(out + partner * blocksize)),
+              blocksize,
+              mpi_datatype,
+              partner,
+              100,
+              comm,
+              MPI_STATUS_IGNORE),
+          MPI_SUCCESS);
     }
   }
 }
@@ -82,20 +83,21 @@ inline void oneFactor_even(
       partner = mod(r - me, nr - 1);
     }
 
-    auto res = MPI_Sendrecv(
-        std::addressof(*(begin + partner * blocksize)),
-        blocksize,
-        mpi_datatype,
-        partner,
-        100,
-        std::addressof(*(out + partner * blocksize)),
-        blocksize,
-        mpi_datatype,
-        partner,
-        100,
-        comm,
-        MPI_STATUS_IGNORE);
-    ASSERT(res == MPI_SUCCESS);
+    A2A_ASSERT_RETURNS(
+        MPI_Sendrecv(
+            std::addressof(*(begin + partner * blocksize)),
+            blocksize,
+            mpi_datatype,
+            partner,
+            100,
+            std::addressof(*(out + partner * blocksize)),
+            blocksize,
+            mpi_datatype,
+            partner,
+            100,
+            comm,
+            MPI_STATUS_IGNORE),
+        MPI_SUCCESS);
   }
 
   std::copy(

@@ -88,7 +88,7 @@ int main(int argc, char* argv[])
     return 1;
   }
 
-  ASSERT(nr >= 1);
+  A2A_ASSERT(nr >= 1);
 
   auto nhosts = std::atoi(argv[1]);
 
@@ -99,13 +99,13 @@ int main(int argc, char* argv[])
   // We have to half the capacity because we do not in-place all to all
   // We again half by the number of processors
   // const size_t number_nodes = nr / 28;
-  ASSERT((nr % nhosts) == 0);
+  A2A_ASSERT((nr % nhosts) == 0);
 
   auto procs_per_node = nr / nhosts;
 
   auto clock           = SynchronizedClock{};
   bool is_clock_synced = clock.Init(comm);
-  ASSERT(is_clock_synced);
+  A2A_ASSERT(is_clock_synced);
 
   // We divide by two because we have in and out buffers
   // Then we divide by the number of PEs per node
@@ -126,7 +126,7 @@ int main(int argc, char* argv[])
 
   nsteps = std::min<std::size_t>(nsteps, 15);
 
-  ASSERT(minblocksize >= sizeof(value_t));
+  A2A_ASSERT(minblocksize >= sizeof(value_t));
 
   if (me == 0) {
     printMeasurementHeader(std::cout);
@@ -137,10 +137,10 @@ int main(int argc, char* argv[])
     // each process sends sencount to all other PEs
     auto sendcount = blocksize / sizeof(value_t);
 
-    ASSERT(blocksize % sizeof(value_t) == 0);
+    A2A_ASSERT(blocksize % sizeof(value_t) == 0);
 
     // Required by good old 32-bit MPI
-    ASSERT(sendcount > 0 && sendcount < std::numeric_limits<int>::max());
+    A2A_ASSERT(sendcount > 0 && sendcount < std::numeric_limits<int>::max());
 
     auto nels = sendcount * nr;
 
@@ -175,7 +175,7 @@ int main(int argc, char* argv[])
       }
 
       for (std::size_t block = 0; block < std::size_t(nr); ++block) {
-        ASSERT(std::is_sorted(
+        A2A_ASSERT(std::is_sorted(
             &data[block * sendcount], &data[(block + 1) * sendcount]));
       }
 
@@ -213,14 +213,14 @@ int main(int argc, char* argv[])
           };
 
       auto barrier = clock.Barrier(comm);
-      ASSERT(barrier.Success(comm));
+      A2A_ASSERT(barrier.Success(comm));
 
       // first we want to obtain the correct result which we can verify then
       // with our own algorithms
 #ifndef NDEBUG
       alltoall::MpiAlltoAll(
           &(data[0]), &(correct[0]), sendcount, comm, merger);
-      ASSERT(std::is_sorted(&correct[0], &(correct[nels])));
+      A2A_ASSERT(std::is_sorted(&correct[0], &(correct[nels])));
 #endif
 
       Params p;
@@ -235,15 +235,15 @@ int main(int argc, char* argv[])
         // We always want to guarantee that all processors start at the same
         // time, so this is a real barrier
         auto barrier = clock.Barrier(comm);
-        ASSERT(barrier.Success(comm));
+        A2A_ASSERT(barrier.Success(comm));
 
         auto t = run_algorithm(
             algo.second, &(data[0]), &(out[0]), sendcount, comm, merger);
 
-#ifndef NDBUG
+#ifndef NDEBUG
         std::sort(&(out[0]), &(out[nels]));
 #endif
-        ASSERT(std::equal(&(correct[0]), &(correct[nels]), &(out[0])));
+        A2A_ASSERT(std::equal(&(correct[0]), &(correct[nels]), &(out[0])));
         // measurements[algo.first].emplace_back(t);
         if (it > 0) {
           auto trace = TimeTrace{me, algo.first};

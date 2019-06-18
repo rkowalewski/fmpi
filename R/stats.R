@@ -26,25 +26,29 @@ if(!exists("summarySE", mode="function")) {
 
 #csv.data <- read.csv(f, header=TRUE, strip.white=TRUE)
 f <- file("stdin")
-df.in <- read_csv(paste(collapse = "\n", readLines(f)), col_names=TRUE, col_types="iii?icid")
+df.in <- read_csv(paste(collapse = "\n", readLines(f)), col_names=TRUE, col_types="iii?iciddd")
 #df.in <- read_csv(paste(collapse = "\n", readLines(f)), col_names=TRUE, col_types="iiilicid")
 close(f)
 
 df.summary <- summarySE(df.in,
-                          measurevar="Time",
+                          measurevar="Ttotal",
                           groupvars=c("Nodes", "Procs", "Round", "Blocksize", "Algo"),
                           na.rm=TRUE)
 
 df.minValues <- df.in %>%
     group_by(Nodes, Procs, Round, Algo) %>%
-    slice(which.min(Time))
+    slice(which.min(Ttotal))
 
 df.maxValues <- df.in %>%
     group_by(Nodes, Procs, Round, Algo) %>%
-    slice(which.max(Time))
+    slice(which.max(Ttotal))
 
 df.summary$minRank <- df.minValues$Rank
 df.summary$maxRank <- df.maxValues$Rank
+
+df.summary <- df.summary %>%
+    group_by(Nodes, Procs, Round, Blocksize, Algo) %>%
+    arrange(median)
 
 #df.summary$minRank <- df.in$Rank[[df.summary$minRow]]
 cat(format_csv(df.summary))

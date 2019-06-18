@@ -31,7 +31,7 @@ std::string const &TimeTrace::context() const noexcept
 void TimeTrace::tick(TraceStore::key_t key)
 {
   if (enabled()) {
-    ASSERT(m_cache.find(key) == std::end(m_cache));
+    A2A_ASSERT(m_cache.find(key) == std::end(m_cache));
     m_cache[key] = ChronoClockNow();
   }
 }
@@ -40,7 +40,7 @@ void TimeTrace::tock(TraceStore::key_t key)
 {
   auto &store = TraceStore::GetInstance();
   if (store.enabled()) {
-    ASSERT(m_cache.find(key) != std::end(m_cache));
+    A2A_ASSERT(m_cache.find(key) != std::end(m_cache));
     store.get(m_context)[key] += ChronoClockNow() - m_cache[key];
     m_cache.erase(key);
   }
@@ -58,7 +58,7 @@ TimeTrace::measurements() const
 {
   auto &      store = TraceStore::GetInstance();
   auto const &m     = store.get(m_context);
-  // ASSERT(m.size() > 0);
+  // A2A_ASSERT(m.size() > 0);
   return m;
 }
 
