@@ -47,8 +47,9 @@ df.summary$minRank <- df.minValues$Rank
 df.summary$maxRank <- df.maxValues$Rank
 
 df.summary <- df.summary %>%
-    group_by(Nodes, Procs, Round, Blocksize, Algo) %>%
-    arrange(median)
+    group_by(Round) %>%
+    arrange(median, .by_group=TRUE)
+
 
 #df.summary$minRank <- df.in$Rank[[df.summary$minRow]]
 cat(format_csv(df.summary))

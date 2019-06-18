@@ -33,33 +33,79 @@ inline void flatHandshake(
 
   auto trace = TimeTrace{me, "FlatHandshake"};
 
+  std::array<MPI_Request, 2> reqs = {MPI_REQUEST_NULL};
+
   trace.tick(COMMUNICATION);
 
-  for (int i = 1; i < nr; ++i) {
-    auto pair = std::make_pair(mod(me + i, nr), mod(me - i, nr));
-    auto dst  = pair.first;
-    auto src  = pair.second;
-    A2A_ASSERT_RETURNS(
-        MPI_Sendrecv(
-            std::addressof(*(begin + pair.first * blocksize)),
-            blocksize,
-            mpi_datatype,
-            dst,
-            100,
-            std::addressof(*(out + pair.second * blocksize)),
-            blocksize,
-            mpi_datatype,
-            src,
-            100,
-            comm,
-            MPI_STATUS_IGNORE),
-        MPI_SUCCESS);
-  }
+  auto sendRecvPair = [me, nr](auto step) {
+    return std::make_pair(mod(me + step, nr), mod(me - step, nr));
+  };
+
+  int sendto, recvfrom;
+
+  std::tie(sendto, recvfrom) = sendRecvPair(1);
+
+  // Overlapping first round...
+  A2A_ASSERT_RETURNS(
+      MPI_Irecv(
+          std::addressof(*(out + recvfrom * blocksize)),
+          blocksize,
+          mpi_datatype,
+          recvfrom,
+          100,
+          comm,
+          &(reqs[1])),
+      MPI_SUCCESS);
+
+  A2A_ASSERT_RETURNS(
+      MPI_Isend(
+          std::addressof(*(begin + sendto * blocksize)),
+          blocksize,
+          mpi_datatype,
+          sendto,
+          100,
+          comm,
+          &(reqs[0])),
+      MPI_SUCCESS);
 
   std::copy(
       begin + me * blocksize,
       begin + me * blocksize + blocksize,
       out + me * blocksize);
+
+  for (int i = 2; i < nr; ++i) {
+    std::tie(sendto, recvfrom) = sendRecvPair(i);
+
+    // Wait for previous round
+    A2A_ASSERT_RETURNS(
+        MPI_Waitall(2, &(reqs[0]), MPI_STATUSES_IGNORE), MPI_SUCCESS);
+
+    A2A_ASSERT_RETURNS(
+        MPI_Irecv(
+            std::addressof(*(out + recvfrom * blocksize)),
+            blocksize,
+            mpi_datatype,
+            recvfrom,
+            100,
+            comm,
+            &(reqs[1])),
+        MPI_SUCCESS);
+
+    A2A_ASSERT_RETURNS(
+        MPI_Isend(
+            std::addressof(*(begin + sendto * blocksize)),
+            blocksize,
+            mpi_datatype,
+            sendto,
+            100,
+            comm,
+            &(reqs[0])),
+        MPI_SUCCESS);
+  }
+
+  // Wait for previous round
+  A2A_ASSERT_RETURNS(
+      MPI_Waitall(2, &(reqs[0]), MPI_STATUSES_IGNORE), MPI_SUCCESS);
 
   trace.tock(COMMUNICATION);
 
