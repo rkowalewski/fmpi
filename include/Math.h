@@ -3,7 +3,7 @@
 
 #include <Debug.h>
 
-namespace alltoall {
+namespace a2a {
 
 template <class T>
 inline constexpr T mod(T a, T b)
@@ -13,6 +13,6 @@ inline constexpr T mod(T a, T b)
   return (ret >= 0) ? (ret) : (ret + b);
 }
 
-}  // namespace alltoall
+}  // namespace a2a
 
 #endif

@@ -6,6 +6,10 @@
 #include <Timer.h>
 #include <Trace.h>
 
+extern char **environ;
+
+namespace a2a {
+
 bool TimeTrace::enabled() const noexcept
 {
   auto &store = TraceStore::GetInstance();
@@ -62,27 +66,24 @@ TimeTrace::measurements() const
   return m;
 }
 
-TraceStore::value_t TimeTrace::lookup(TraceStore::key_t const & key) const
+TraceStore::value_t TimeTrace::lookup(TraceStore::key_t const &key) const
 {
   if (!enabled()) {
     return TraceStore::value_t{};
   }
-  auto const & m = measurements();
-  auto it = m.find(key);
+  auto const &m  = measurements();
+  auto        it = m.find(key);
   if (it == m.end()) {
     return TraceStore::value_t{};
   }
   return it->second;
 }
 
-
 std::unordered_map<TraceStore::key_t, TraceStore::value_t> &TraceStore::get(
     context_t const &ctx)
 {
   return m_traces[ctx];
 }
-
-extern char **environ;
 
 static bool isTraceEnvironFlagEnabled()
 {
@@ -131,3 +132,4 @@ bool TraceStore::enabled() const noexcept
 std::unique_ptr<TraceStore> TraceStore::m_instance{};
 
 std::once_flag TraceStore::m_onceFlag{};
+}  // namespace a2a

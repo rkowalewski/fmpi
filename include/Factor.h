@@ -10,7 +10,7 @@
 #include <Math.h>
 #include <Types.h>
 
-namespace alltoall {
+namespace a2a {
 
 namespace detail {
 
@@ -121,6 +121,6 @@ inline void oneFactor(
   }
 }
 
-}  // namespace alltoall
+}  // namespace a2a
 
 #endif

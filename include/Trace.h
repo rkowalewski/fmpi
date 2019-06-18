@@ -9,6 +9,8 @@
 
 #include <Timer.h>
 
+namespace a2a {
+
 class TimeTrace;
 
 class TraceStore {
@@ -37,8 +39,9 @@ class TraceStore {
 };
 
 class TimeTrace {
-  using key_t = TraceStore::key_t;
+  using key_t   = TraceStore::key_t;
   using value_t = TraceStore::value_t;
+
  public:
   TimeTrace(int pid, TraceStore::context_t ctx);
 
@@ -47,10 +50,10 @@ class TimeTrace {
   void tick(TraceStore::key_t key);
   void tock(TraceStore::key_t key);
 
-  std::unordered_map<TraceStore::key_t, TraceStore::value_t> const &measurements()
-      const;
+  std::unordered_map<TraceStore::key_t, TraceStore::value_t> const &
+  measurements() const;
 
-  TraceStore::value_t lookup(TraceStore::key_t const& key) const;
+  TraceStore::value_t lookup(TraceStore::key_t const &key) const;
 
   int                pid() const noexcept;
   std::string const &context() const noexcept;
@@ -62,5 +65,7 @@ class TimeTrace {
   std::string const                                          m_context{};
   std::unordered_map<TraceStore::key_t, TraceStore::value_t> m_cache;
 };
+
+}  // namespace a2a
 
 #endif

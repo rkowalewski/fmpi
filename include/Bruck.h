@@ -10,15 +10,16 @@
 #include <Math.h>
 #include <Types.h>
 
-namespace alltoall {
+namespace a2a {
 
 template <class InputIt, class OutputIt, class Op>
-inline void bruck(InputIt begin, OutputIt out, int blocksize, MPI_Comm comm, Op&&)
+inline void bruck(
+    InputIt begin, OutputIt out, int blocksize, MPI_Comm comm, Op&&)
 {
   using rank_t = int;
   rank_t me, nr;
-  MPI_Comm_rank(comm, &me);
-  MPI_Comm_size(comm, &nr);
+  A2A_ASSERT_RETURNS(MPI_Comm_rank(comm, &me), MPI_SUCCESS);
+  A2A_ASSERT_RETURNS(MPI_Comm_size(comm, &nr), MPI_SUCCESS);
 
   using value_t = typename std::iterator_traits<InputIt>::value_type;
 
@@ -73,20 +74,21 @@ inline void bruck(InputIt begin, OutputIt out, int blocksize, MPI_Comm comm, Op&
     }
 
     // b) exchange
-    auto res = MPI_Sendrecv(
-        send_buf,
-        blocksize * count,
-        mpi::mpi_datatype<value_t>::type(),
-        dst,
-        100,
-        recv_buf,
-        blocksize * count,
-        mpi::mpi_datatype<value_t>::type(),
-        src,
-        100,
-        comm,
-        MPI_STATUS_IGNORE);
-    ASSERT(res == MPI_SUCCESS);
+    A2A_ASSERT_RETURNS(
+        MPI_Sendrecv(
+            send_buf,
+            blocksize * count,
+            mpi::mpi_datatype<value_t>::type(),
+            dst,
+            100,
+            recv_buf,
+            blocksize * count,
+            mpi::mpi_datatype<value_t>::type(),
+            src,
+            100,
+            comm,
+            MPI_STATUS_IGNORE),
+        MPI_SUCCESS);
 
     // c) unpack blocks into recv buffer
     count = 0;
@@ -189,20 +191,21 @@ inline void bruck_mod(
     }
 
     // b) exchange
-    auto res = MPI_Sendrecv(
-        send_buf,
-        blocksize * count,
-        mpi::mpi_datatype<value_t>::type(),
-        dst,
-        100,
-        recv_buf,
-        blocksize * count,
-        mpi::mpi_datatype<value_t>::type(),
-        src,
-        100,
-        comm,
-        MPI_STATUS_IGNORE);
-    ASSERT(res == MPI_SUCCESS);
+    A2A_ASSERT_RETURNS(
+        MPI_Sendrecv(
+            send_buf,
+            blocksize * count,
+            mpi::mpi_datatype<value_t>::type(),
+            dst,
+            100,
+            recv_buf,
+            blocksize * count,
+            mpi::mpi_datatype<value_t>::type(),
+            src,
+            100,
+            comm,
+            MPI_STATUS_IGNORE),
+        MPI_SUCCESS);
 
     // c) unpack blocks into recv buffer
     count = 0;
@@ -223,6 +226,6 @@ inline void bruck_mod(
     }
   }
 }
-}  // namespace alltoall
+}  // namespace a2a
 
 #endif

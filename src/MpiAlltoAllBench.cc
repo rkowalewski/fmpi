@@ -47,26 +47,26 @@ using benchmark_t =
 std::array<std::pair<std::string, benchmark_t>, 3> algos = {
     // Classic MPI All to All
     std::make_pair(
-        "AlltoAll", alltoall::MpiAlltoAll<iterator_t, iterator_t, merge_t>),
+        "AlltoAll", a2a::MpiAlltoAll<iterator_t, iterator_t, merge_t>),
 #if 0
     // One Factorizations based on Graph Theory
     std::make_pair(
-        "OneFactor", alltoall::oneFactor<iterator_t, iterator_t, merge_t>),
+        "OneFactor", a2a::oneFactor<iterator_t, iterator_t, merge_t>),
 #endif
     // A Simple Flat Handshake which sends and receives never to/from the same
     // rank
     std::make_pair(
         "FlatHandshake",
-        alltoall::flatHandshake<iterator_t, iterator_t, merge_t>),
+        a2a::flatHandshake<iterator_t, iterator_t, merge_t>),
     // Hierarchical XOR Shift Hypercube, works only if #PEs is power of two
     std::make_pair(
-        "Hypercube", alltoall::hypercube<iterator_t, iterator_t, merge_t>),
+        "Hypercube", a2a::hypercube<iterator_t, iterator_t, merge_t>),
 #if 0
     // Bruck Algorithms, first the original one, then a modified version which
     // omits the last local rotation step
-    std::make_pair("Bruck", alltoall::bruck<iterator_t, iterator_t, merge_t>),
+    std::make_pair("Bruck", a2a::bruck<iterator_t, iterator_t, merge_t>),
     std::make_pair(
-        "Bruck_Mod", alltoall::bruck_mod<iterator_t, iterator_t, merge_t>)
+        "Bruck_Mod", a2a::bruck_mod<iterator_t, iterator_t, merge_t>)
 #endif
 };
 
@@ -218,7 +218,7 @@ int main(int argc, char* argv[])
       // first we want to obtain the correct result which we can verify then
       // with our own algorithms
 #ifndef NDEBUG
-      alltoall::MpiAlltoAll(
+      a2a::MpiAlltoAll(
           &(data[0]), &(correct[0]), sendcount, comm, merger);
       A2A_ASSERT(std::is_sorted(&correct[0], &(correct[nels])));
 #endif
@@ -246,7 +246,7 @@ int main(int argc, char* argv[])
         A2A_ASSERT(std::equal(&(correct[0]), &(correct[nels]), &(out[0])));
         // measurements[algo.first].emplace_back(t);
         if (it > 0) {
-          auto trace = TimeTrace{me, algo.first};
+          auto trace = a2a::TimeTrace{me, algo.first};
           printMeasurementCsvLine(
               std::cout,
               p,

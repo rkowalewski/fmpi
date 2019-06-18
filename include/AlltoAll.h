@@ -18,7 +18,7 @@
 static constexpr char MERGE[]         = "merge";
 static constexpr char COMMUNICATION[] = "communication";
 
-namespace alltoall {
+namespace a2a {
 
 template <class InputIt, class OutputIt, class Op>
 inline void flatHandshake(
@@ -259,5 +259,5 @@ inline void MpiAlltoAll(
 
   trace.tock(MERGE);
 }
-}  // namespace alltoall
+}  // namespace a2a
 #endif
