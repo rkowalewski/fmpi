@@ -21,8 +21,8 @@ inline void bruck(
 {
   using rank_t = int;
   rank_t me, nr;
-  A2A_ASSERT_RETURNS(MPI_Comm_rank(comm, &me), MPI_SUCCESS);
-  A2A_ASSERT_RETURNS(MPI_Comm_size(comm, &nr), MPI_SUCCESS);
+  MPI_Comm_rank(comm, &me);
+  MPI_Comm_size(comm, &nr);
 
   using value_t = typename std::iterator_traits<InputIt>::value_type;
 

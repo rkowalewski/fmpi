@@ -26,15 +26,16 @@
 
 constexpr size_t KB = 1 << 10;
 constexpr size_t MB = 1 << 20;
+constexpr size_t GB = 1 << 30;
 
 constexpr size_t niters = 10;
 
-constexpr size_t minblocksize = KB;
+constexpr size_t minblocksize = 128;
 /* constexpr size_t maxblocksize = runtime argument */
 
 // This are approximately 25 GB
 // constexpr size_t capacity_per_node = 32 * MB * 28 * 28;
-constexpr size_t capacity_per_node = MB;
+constexpr size_t capacity_per_node = 16 * GB;
 
 // The container where we store our
 using value_t     = int;
@@ -119,7 +120,7 @@ int main(int argc, char* argv[])
     nsteps = 1;
   }
 
-  nsteps = std::min<std::size_t>(nsteps, 15);
+  nsteps = std::min<std::size_t>(nsteps, 20);
 
   A2A_ASSERT(minblocksize >= sizeof(value_t));
 

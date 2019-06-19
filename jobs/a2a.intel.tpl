@@ -62,6 +62,8 @@ export DASH_MAX_UNIT_THREADS=<<NUM_THREADS>>
 
 #-genv  I_MPI_PIN "on" -genv I_MPI_PIN_DOMAIN "numa"
 
+export A2A_ENABLE_TRACE=1
+
 mpiexec \
     -n $((<<NUM_PROCS>> * <<NUM_NODES>>)) ./build/MpiAlltoAllBench "<<NUM_NODES>>"
 
