@@ -1,7 +1,7 @@
 #!/usr/bin/env Rscript
 
 suppressMessages(library(readr))
-#suppressMessages(library(dplyr))
+suppressMessages(library(dplyr))
 library(ggplot2)
 library(RColorBrewer)
 library(tikzDevice)
@@ -47,7 +47,7 @@ df.summary$minRank <- df.minValues$Rank
 df.summary$maxRank <- df.maxValues$Rank
 
 df.summary <- df.summary %>%
-    group_by(Round) %>%
+    group_by(Nodes, Procs, Round) %>%
     arrange(median, .by_group=TRUE)
 
 
