@@ -45,7 +45,7 @@ using iterator_t  = typename container_t::pointer;
 using benchmark_t =
     std::function<void(iterator_t, iterator_t, int, MPI_Comm, merge_t)>;
 
-std::array<std::pair<std::string, benchmark_t>, 6> algos = {
+std::array<std::pair<std::string, benchmark_t>, 7> algos = {
     // Classic MPI All to All
     std::make_pair(
         "AlltoAll", a2a::MpiAlltoAll<iterator_t, iterator_t, merge_t>),
@@ -56,14 +56,28 @@ std::array<std::pair<std::string, benchmark_t>, 6> algos = {
     // rank
     std::make_pair(
         "FlatHandshake", a2a::flatHandshake<iterator_t, iterator_t, merge_t>),
+    // A scatterd handshake
+    std::make_pair(
+        "ScatteredPairwise8",
+        a2a::scatteredPairwise<iterator_t, iterator_t, merge_t, 8>),
+    // A scatterd handshake
+    std::make_pair(
+        "ScatteredPairwise16",
+        a2a::scatteredPairwise<iterator_t, iterator_t, merge_t, 16>),
+    std::make_pair(
+        "ScatteredPairwise32",
+        a2a::scatteredPairwise<iterator_t, iterator_t, merge_t, 32>),
     // Hierarchical XOR Shift Hypercube, works only if #PEs is power of two
     std::make_pair(
         "Hypercube", a2a::hypercube<iterator_t, iterator_t, merge_t>),
     // Bruck Algorithms, first the original one, then a modified version which
     // omits the last local rotation step
+#if 0
     std::make_pair("Bruck", a2a::bruck<iterator_t, iterator_t, merge_t>),
     std::make_pair(
         "Bruck_Mod", a2a::bruck_mod<iterator_t, iterator_t, merge_t>)
+#endif
+
 };
 
 int main(int argc, char* argv[])
@@ -76,17 +90,43 @@ int main(int argc, char* argv[])
   MPI_Comm_rank(MPI_COMM_WORLD, &me);
   MPI_Comm_size(MPI_COMM_WORLD, &nr);
 
-  if (argc == 1) {
+  if (argc < 2) {
     if (me == 0) {
-      std::cout << "usage: " << argv[0] << " [number of nodes]\n";
+      std::cout << "usage: " << argv[0] << " [number of nodes] <algorithm>\n";
     }
     MPI_Finalize();
     return 1;
   }
 
-  A2A_ASSERT(nr >= 1);
-
   auto nhosts = std::atoi(argv[1]);
+
+  std::vector<std::pair<std::string, benchmark_t>> selected_algos;
+
+  if (argc == 3) {
+    std::string selected_algo = argv[2];
+
+    auto algo = std::find_if(
+        std::begin(algos), std::end(algos), [selected_algo](auto const& p) {
+          return p.first == selected_algo;
+        });
+
+    if (algo == std::end(algos)) {
+      if (me == 0) {
+        std::cout << "invalid algorithm\n";
+      }
+
+      MPI_Finalize();
+      return 1;
+    }
+
+    selected_algos.push_back(*algo);
+  }
+  else {
+    std::copy(
+        std::begin(algos),
+        std::end(algos),
+        std::back_inserter(selected_algos));
+  }
 
   if (me == 0) {
     print_env();
@@ -226,7 +266,7 @@ int main(int argc, char* argv[])
       p.nbytes    = nels * nr * sizeof(value_t);
       p.blocksize = blocksize;
 
-      for (auto const& algo : algos) {
+      for (auto const& algo : selected_algos) {
         // We always want to guarantee that all processors start at the same
         // time, so this is a real barrier
         auto barrier = clock.Barrier(comm);

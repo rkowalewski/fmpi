@@ -2,21 +2,11 @@
 
 suppressMessages(library(readr))
 suppressMessages(library(dplyr))
-library(ggplot2)
-library(RColorBrewer)
-library(tikzDevice)
+#library(ggplot2)
+#library(RColorBrewer)
+#library(tikzDevice)
 #library(extrafont)
 
-
-if(!exists("summarySE", mode="function")) {
-    # Let us source the summary.R script
-    initial.options <- commandArgs(trailingOnly = FALSE)
-    file.arg.name <- "--file="
-    script.name <- sub(file.arg.name, "", initial.options[grep(file.arg.name, initial.options)])
-    script.basename <- dirname(script.name)
-    other.name <- file.path(script.basename, "./include/summary.R")
-    source(other.name)
-}
 
 #args = commandArgs(trailingOnly=TRUE)
 #
@@ -27,30 +17,30 @@ if(!exists("summarySE", mode="function")) {
 #csv.data <- read.csv(f, header=TRUE, strip.white=TRUE)
 f <- file("stdin")
 df.in <- read_csv(paste(collapse = "\n", readLines(f)), col_names=TRUE, col_types="iii?iciddd")
-#df.in <- read_csv(paste(collapse = "\n", readLines(f)), col_names=TRUE, col_types="iiilicid")
 close(f)
 
-df.summary <- summarySE(df.in,
-                          measurevar="Ttotal",
-                          groupvars=c("Nodes", "Procs", "Round", "Blocksize", "Algo"),
-                          na.rm=TRUE)
+df.summ <- df.in %>%
+    group_by(Nodes, Procs, Round, NBytes, Blocksize, Algo) %>%
+    summarize(
+              N = sum(!is.na(Ttotal)),
+              Tmedian = median(Ttotal, na.rm = TRUE),
+              Tmean = mean(Ttotal, na.rm = TRUE),
+              Tmin = min(Ttotal, na.rm = TRUE),
+              Tmax = max(Ttotal, na.rm = TRUE),
+              minRank = Rank[which.min(Ttotal)],
+              maxRank = Rank[which.max(Ttotal)],
+              sd = sd(Ttotal, na.rm = TRUE),
+              Tcomm = median(Tcomm, na.rm = TRUE),
+              Tmerge = median(Tmerge, na.rm = TRUE)
+    ) %>%
+    arrange(Tmedian, .by_group = TRUE)
 
-df.minValues <- df.in %>%
-    group_by(Nodes, Procs, Round, Algo) %>%
-    slice(which.min(Ttotal))
+# Standard Error
+df.summ$se <- df.summ$sd / sqrt(df.summ$N)
+# CI Interval
+ciInterval <- .95
+ciMult <- qt(ciInterval/2 + .5, df.summ$N-1)
+# Sum
+df.summ$ci <- df.summ$se * ciMult
 
-df.maxValues <- df.in %>%
-    group_by(Nodes, Procs, Round, Algo) %>%
-    slice(which.max(Ttotal))
-
-df.summary$minRank <- df.minValues$Rank
-df.summary$maxRank <- df.maxValues$Rank
-
-df.summary <- df.summary %>%
-    group_by(Nodes, Procs, Round) %>%
-    arrange(median, .by_group=TRUE)
-
-
-#df.summary$minRank <- df.in$Rank[[df.summary$minRow]]
-cat(format_csv(df.summary))
-
+cat(format_csv(df.summ))

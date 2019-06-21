@@ -108,6 +108,102 @@ inline void flatHandshake(
   trace.tock(MERGE);
 }
 
+template <class InputIt, class OutputIt, class Op, size_t NReqs>
+inline void scatteredPairwise(
+    InputIt begin, OutputIt out, int blocksize, MPI_Comm comm, Op&& /*op*/)
+{
+  int me, nr;
+  MPI_Comm_rank(comm, &me);
+  MPI_Comm_size(comm, &nr);
+
+  using value_type  = typename std::iterator_traits<InputIt>::value_type;
+  auto mpi_datatype = mpi::mpi_datatype<value_type>::type();
+
+  auto trace = TimeTrace{me, "ScatteredPairwise"};
+
+  trace.tick(COMMUNICATION);
+
+  std::array<MPI_Request, 2 * NReqs> reqs;
+  std::uninitialized_fill(std::begin(reqs), std::end(reqs), MPI_REQUEST_NULL);
+
+#if 0
+  std::copy(
+      begin + me * blocksize,
+      begin + me * blocksize + blocksize,
+      out + me * blocksize);
+#endif
+
+  for (int ii = 0; ii < nr; ii += NReqs) {
+    auto ss = std::min<int>(nr - ii, NReqs);
+
+    for (auto i = 0; i < ss; ++i) {
+      // Overlapping first round...
+      auto recvfrom = mod(me - i + ii, nr);
+
+
+      A2A_ASSERT_RETURNS(
+          MPI_Irecv(
+              std::next(out, recvfrom * blocksize),
+              blocksize,
+              mpi_datatype,
+              recvfrom,
+              100,
+              comm,
+              &(reqs[i])),
+          MPI_SUCCESS);
+    }
+
+    for (auto i = 0; i < ss; ++i) {
+      // Overlapping first round...
+      auto sendto = mod(me + i + ii, nr);
+
+      A2A_ASSERT_RETURNS(
+          MPI_Isend(
+              std::next(begin, sendto * blocksize),
+              blocksize,
+              mpi_datatype,
+              sendto,
+              100,
+              comm,
+              &(reqs[i + ss])),
+          MPI_SUCCESS);
+    }
+
+    // Wait for previous round
+    A2A_ASSERT_RETURNS(
+        MPI_Waitall(reqs.size(), &(reqs[0]), MPI_STATUSES_IGNORE),
+        MPI_SUCCESS);
+  }
+
+  trace.tock(COMMUNICATION);
+
+  trace.tick(MERGE);
+#if 0
+  std::vector<std::pair<OutputIt, OutputIt>> seqs;
+  seqs.reserve(nr);
+
+  for (size_t i = 0; i < std::size_t(nr); ++i) {
+    seqs.push_back(
+        std::make_pair(out + i * blocksize, out + (i + 1) * blocksize));
+  }
+
+  auto merge_buf =
+      std::unique_ptr<value_type[]>(new value_type[blocksize * nr]);
+
+  __gnu_parallel::multiway_merge(
+      seqs.begin(),
+      seqs.end(),
+      merge_buf.get(),
+      blocksize * nr,
+      std::less<value_type>{},
+      __gnu_parallel::sequential_tag{});
+
+  std::copy(merge_buf.get(), merge_buf.get() + blocksize * nr, out);
+
+#endif
+  trace.tock(MERGE);
+}
+
 template <class InputIt, class OutputIt, class Op>
 inline void hypercube(
     InputIt begin, OutputIt out, int blocksize, MPI_Comm comm, Op&& /*op*/)
