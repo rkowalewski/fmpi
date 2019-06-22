@@ -348,7 +348,7 @@ void print_env()
   int   i          = 1;
   char* env_var_kv = *environ;
 
-  std::cout << "A2A_GIT_COMMIT = " << A2A_GIT_COMMIT << "\n";
+  std::cout << "-- A2A_GIT_COMMIT = " << A2A_GIT_COMMIT << "\n";
   for (; env_var_kv != nullptr; ++i) {
     // Split into key and value:
     char*       flag_name_cstr  = env_var_kv;
@@ -359,7 +359,7 @@ void print_env()
 
     if ((std::strstr(flag_name.c_str(), "OMPI_") != nullptr) ||
         (std::strstr(flag_name.c_str(), "I_MPI_") != nullptr)) {
-      std::cout << flag_name << " = " << flag_value << "\n";
+      std::cout << "-- " << flag_name << " = " << flag_value << "\n";
     }
 
     env_var_kv = *(environ + i);
