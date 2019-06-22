@@ -21,6 +21,7 @@
 #include <MPISynchronizedBarrier.h>
 #include <MpiAlltoAllBench.h>
 #include <parallel/algorithm>
+#include <Version.h>
 
 #define W(X) #X << "=" << X << ", "
 
@@ -70,8 +71,8 @@ std::array<std::pair<std::string, benchmark_t>, 7> algos = {
     // Hierarchical XOR Shift Hypercube, works only if #PEs is power of two
     std::make_pair(
         "Hypercube", a2a::hypercube<iterator_t, iterator_t, merge_t>),
-    // Bruck Algorithms, first the original one, then a modified version which
-    // omits the last local rotation step
+// Bruck Algorithms, first the original one, then a modified version which
+// omits the last local rotation step
 #if 0
     std::make_pair("Bruck", a2a::bruck<iterator_t, iterator_t, merge_t>),
     std::make_pair(
@@ -347,6 +348,7 @@ void print_env()
   int   i          = 1;
   char* env_var_kv = *environ;
 
+  std::cout << "A2A_GIT_COMMIT = " << A2A_GIT_COMMIT << "\n";
   for (; env_var_kv != nullptr; ++i) {
     // Split into key and value:
     char*       flag_name_cstr  = env_var_kv;
@@ -362,4 +364,5 @@ void print_env()
 
     env_var_kv = *(environ + i);
   }
+
 }

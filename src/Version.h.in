@@ -1,0 +1,5 @@
+#ifndef VERSION_H__INCLUDED
+
+static constexpr const char* A2A_GIT_COMMIT = "@A2A_GIT_COMMIT@";
+
+#endif
