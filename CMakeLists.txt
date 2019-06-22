@@ -126,7 +126,7 @@ endif()
 add_custom_target(GitVersion
     COMMAND ${CMAKE_COMMAND}
     -D INPUT_FILE=${CMAKE_CURRENT_SOURCE_DIR}/src/Version.h.in
-    -D OUTPUT_FILE=${CMAKE_CURRENT_BINARY_DIR}/src/Version.h
+    -D OUTPUT_FILE=${CMAKE_CURRENT_SOURCE_DIR}/src/Version.h
     -P ${CMAKE_CURRENT_SOURCE_DIR}/cmake/generate_version.cmake
 )
 
