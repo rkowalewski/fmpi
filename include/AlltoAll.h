@@ -119,7 +119,13 @@ inline void scatteredPairwise(
   using value_type  = typename std::iterator_traits<InputIt>::value_type;
   auto mpi_datatype = mpi::mpi_datatype<value_type>::type();
 
-  auto trace = TimeTrace{me, "ScatteredPairwise"};
+  std::string s = "";
+  if (TraceStore::GetInstance().enabled()) {
+    std::ostringstream os;
+    os << "ScatteredPairwise" << NReqs;
+    s = std::move(os.str());
+  }
+  auto trace = TimeTrace{me, s};
 
   trace.tick(COMMUNICATION);
 
@@ -139,7 +145,6 @@ inline void scatteredPairwise(
     for (auto i = 0; i < ss; ++i) {
       // Overlapping first round...
       auto recvfrom = mod(me - i + ii, nr);
-
 
       A2A_ASSERT_RETURNS(
           MPI_Irecv(

@@ -283,6 +283,7 @@ int main(int argc, char* argv[])
         // measurements[algo.first].emplace_back(t);
         if (it > 0) {
           auto trace = a2a::TimeTrace{me, algo.first};
+          A2A_ASSERT(trace.measurements().size() > 0);
           printMeasurementCsvLine(
               std::cout,
               p,
