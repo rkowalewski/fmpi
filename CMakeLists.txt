@@ -75,6 +75,7 @@ target_link_libraries(MPISynchronizedBarrier PRIVATE MPI::MPI_CXX)
 
 # Adding something we can run - Output name matches target name
 add_executable(MpiAlltoAllBench src/MpiAlltoAllBench.cc src/MpiAlltoAllBench.h src/Trace.cc)
+add_dependencies(MpiAlltoAllBench GitVersion)
 target_include_directories(MpiAlltoAllBench PUBLIC include external/tlx)
 target_include_directories(MpiAlltoAllBench PUBLIC src)
 
@@ -122,21 +123,10 @@ if(CMAKE_VERSION VERSION_GREATER 3.6 AND ENABLE_CLANG_TIDY)
     #    )
 endif()
 
-IF(EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/.git)
-  FIND_PACKAGE(Git)
-  IF(GIT_FOUND)
-    EXECUTE_PROCESS(
-      COMMAND ${GIT_EXECUTABLE} rev-parse --short HEAD
-      WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
-      OUTPUT_VARIABLE "A2A_GIT_COMMIT"
-      ERROR_QUIET
-      OUTPUT_STRIP_TRAILING_WHITESPACE)
-    MESSAGE( STATUS "Git version: ${A2A_GIT_COMMIT}" )
-  ELSE(GIT_FOUND)
-    SET(A2A_GIT_COMMIT 0)
-  ENDIF(GIT_FOUND)
-ENDIF(EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/.git)
-
-configure_file(${CMAKE_CURRENT_SOURCE_DIR}/src/Version.h.in ${CMAKE_CURRENT_SOURCE_DIR}/src/Version.h @ONLY)
-
+add_custom_target(GitVersion
+    COMMAND ${CMAKE_COMMAND}
+    -D INPUT_FILE=${CMAKE_CURRENT_SOURCE_DIR}/src/Version.h.in
+    -D OUTPUT_FILE=${CMAKE_CURRENT_BINARY_DIR}/src/Version.h
+    -P ${CMAKE_CURRENT_SOURCE_DIR}/cmake/generate_version.cmake
+)
 
