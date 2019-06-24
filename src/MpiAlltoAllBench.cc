@@ -37,7 +37,7 @@ constexpr size_t minblocksize = 128;
 // This are approximately 25 GB
 // constexpr size_t capacity_per_node = 32 * MB * 28 * 28;
 // constexpr size_t capacity_per_node = 16 * GB;
-constexpr size_t capacity_per_node = 128;
+constexpr size_t capacity_per_node = 128 * 28 * 2;
 
 // The container where we store our
 using value_t     = int;
@@ -290,6 +290,7 @@ int main(int argc, char* argv[])
       p.blocksize = blocksize;
 
       for (auto const& algo : selected_algos) {
+        P("running algorithm: " << algo.first);
         // We always want to guarantee that all processors start at the same
         // time, so this is a real barrier
         auto barrier = clock.Barrier(comm);

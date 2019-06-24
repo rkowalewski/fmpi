@@ -44,7 +44,7 @@ void printVector(InputIt begin, InputIt end, int me)
 #define P(x)                  \
   do {                        \
     std::ostringstream os;    \
-    os << "-- " << x << "\n"; \
+    os << "-- " << x << std::endl; \
     std::cout << os.str();    \
   } while (0)
 #endif
