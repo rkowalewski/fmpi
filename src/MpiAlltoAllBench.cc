@@ -76,20 +76,20 @@ std::array<std::pair<std::string, benchmark_t>, 14> algos = {
         "ScatteredPairwise128",
         a2a::scatteredPairwise<iterator_t, iterator_t, merge_t, 128>),
     std::make_pair(
-        "ScatteredPairwiseWaitany1",
-        a2a::scatteredPairwiseWaitany<iterator_t, iterator_t, merge_t, 1>),
-    std::make_pair(
-        "ScatteredPairwiseWaitany2",
-        a2a::scatteredPairwiseWaitany<iterator_t, iterator_t, merge_t, 2>),
-    std::make_pair(
-        "ScatteredPairwiseWaitany4",
-        a2a::scatteredPairwiseWaitany<iterator_t, iterator_t, merge_t, 4>),
-    std::make_pair(
         "ScatteredPairwiseWaitany8",
         a2a::scatteredPairwiseWaitany<iterator_t, iterator_t, merge_t, 8>),
     std::make_pair(
         "ScatteredPairwiseWaitany16",
         a2a::scatteredPairwiseWaitany<iterator_t, iterator_t, merge_t, 16>),
+    std::make_pair(
+        "ScatteredPairwiseWaitany32",
+        a2a::scatteredPairwiseWaitany<iterator_t, iterator_t, merge_t, 32>),
+    std::make_pair(
+        "ScatteredPairwiseWaitany64",
+        a2a::scatteredPairwiseWaitany<iterator_t, iterator_t, merge_t, 64>),
+    std::make_pair(
+        "ScatteredPairwiseWaitany128",
+        a2a::scatteredPairwiseWaitany<iterator_t, iterator_t, merge_t, 128>),
     // Hierarchical XOR Shift Hypercube, works only if #PEs is power of two
     std::make_pair(
         "Hypercube", a2a::hypercube<iterator_t, iterator_t, merge_t>),
