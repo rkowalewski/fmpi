@@ -36,8 +36,8 @@ constexpr size_t minblocksize = 128;
 
 // This are approximately 25 GB
 // constexpr size_t capacity_per_node = 32 * MB * 28 * 28;
-//constexpr size_t capacity_per_node = 16 * GB;
-constexpr size_t capacity_per_node = 500 * KB;
+// constexpr size_t capacity_per_node = 16 * GB;
+constexpr size_t capacity_per_node = 128;
 
 // The container where we store our
 using value_t     = int;
@@ -306,11 +306,15 @@ int main(int argc, char* argv[])
         if (it > 0) {
           auto trace = a2a::TimeTrace{me, algo.first};
 
+#if 0
           if (!(((nr & (nr - 1)) == 0))) {
             if (algo.first.find("Hypercube") == std::string::npos) {
-              A2A_ASSERT(trace.measurements().size() > 0);
+              if (trace.enabled()) {
+                A2A_ASSERT(trace.measurements().size() > 0);
+              }
             }
           }
+#endif
           printMeasurementCsvLine(
               std::cout,
               p,

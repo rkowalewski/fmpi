@@ -123,6 +123,10 @@ if(CMAKE_VERSION VERSION_GREATER 3.6 AND ENABLE_CLANG_TIDY)
     #    )
 endif()
 
+if (ENABLE_LOGGING)
+    target_compile_definitions (MpiAlltoAllBench PRIVATE A2A_ENABLE_LOGGING)
+endif()
+
 add_custom_target(GitVersion
     COMMAND ${CMAKE_COMMAND}
     -D INPUT_FILE=${CMAKE_CURRENT_SOURCE_DIR}/src/Version.h.in

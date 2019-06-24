@@ -36,15 +36,18 @@ void printVector(InputIt begin, InputIt end, int me)
   std::cout << os.str();
 }
 
+#define P(x)
+
 #ifndef NDEBUG
+#ifdef A2A_ENABLE_LOGGING
+#undef P
 #define P(x)                  \
   do {                        \
     std::ostringstream os;    \
     os << "-- " << x << "\n"; \
     std::cout << os.str();    \
   } while (0)
-#else
-#define P(x)
+#endif
 #endif
 
 #endif
