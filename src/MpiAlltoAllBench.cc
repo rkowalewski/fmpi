@@ -29,7 +29,13 @@ constexpr size_t KB = 1 << 10;
 constexpr size_t MB = 1 << 20;
 constexpr size_t GB = 1 << 30;
 
+#ifdef NDEBUG
+constexpr size_t nwarmup = 1;
 constexpr size_t niters = 10;
+#else
+constexpr size_t nwarmup = 0;
+constexpr size_t niters = 1;
+#endif
 
 constexpr size_t minblocksize = 128;
 /* constexpr size_t maxblocksize = runtime argument */
@@ -37,7 +43,7 @@ constexpr size_t minblocksize = 128;
 // This are approximately 25 GB
 // constexpr size_t capacity_per_node = 32 * MB * 28 * 28;
 // constexpr size_t capacity_per_node = 16 * GB;
-constexpr size_t capacity_per_node = 128 * 28 * 2;
+constexpr size_t capacity_per_node = 512 * KB;
 
 // The container where we store our
 using value_t     = int;
@@ -160,17 +166,16 @@ int main(int argc, char* argv[])
   // const size_t number_nodes = nr / 28;
   A2A_ASSERT((nr % nhosts) == 0);
 
-  auto procs_per_node = nr / nhosts;
-
-  auto clock           = SynchronizedClock{};
-  bool is_clock_synced = clock.Init(comm);
-  A2A_ASSERT(is_clock_synced);
-
   // We divide by two because we have in and out buffers
   // Then we divide by the number of PEs per node
   // Then we divide again divide by number of PEs to obtain the largest
   // blocksize.
+#ifdef NDEBUG
+  auto procs_per_node = nr / nhosts;
   const size_t maxprocsize = capacity_per_node / (2 * procs_per_node);
+#else
+  const size_t maxprocsize = minblocksize * nr;
+#endif
 
   // We have to divide the maximum capacity per proc by the number of PE
   // to get the largest possible block size
@@ -179,7 +184,7 @@ int main(int argc, char* argv[])
   auto nsteps =
       std::ceil(std::log2(maxblocksize)) - std::ceil(std::log2(minblocksize));
 
-  if (nsteps < 0) {
+  if (nsteps <= 0) {
     nsteps = 1;
   }
 
@@ -191,10 +196,19 @@ int main(int argc, char* argv[])
     printMeasurementHeader(std::cout);
   }
 
+  //calibrate clock
+  auto clock           = SynchronizedClock{};
+  bool is_clock_synced = clock.Init(comm);
+  A2A_ASSERT(is_clock_synced);
+
   for (size_t blocksize = minblocksize, step = 1; step <= nsteps;
        blocksize *= 2, ++step) {
     // each process sends sencount to all other PEs
     auto sendcount = blocksize / sizeof(value_t);
+
+    if (me == 0) {
+      P("sendcount: " << sendcount);
+    }
 
     A2A_ASSERT(blocksize % sizeof(value_t) == 0);
 
@@ -209,7 +223,7 @@ int main(int argc, char* argv[])
     correct.reset(new value_t[nels]);
 #endif
 
-    for (size_t it = 0; it < niters + 1; ++it) {
+    for (size_t it = 0; it < niters + nwarmup; ++it) {
 #pragma omp parallel
       {
         std::mt19937_64 generator(random_seed_seq::get_instance());
@@ -304,7 +318,7 @@ int main(int argc, char* argv[])
 #endif
         A2A_ASSERT(std::equal(&(correct[0]), &(correct[nels]), &(out[0])));
         // measurements[algo.first].emplace_back(t);
-        if (it > 0) {
+        if ((nwarmup > 0 && it > nwarmup) || (nwarmup == 0)) {
           auto trace = a2a::TimeTrace{me, algo.first};
 
 #if 0

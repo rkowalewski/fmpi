@@ -142,9 +142,12 @@ inline void scatteredPairwise(
   for (int ii = 0; ii < nr; ii += NReqs) {
     auto ss = std::min<int>(nr - ii, NReqs);
 
+    P ("ii block: " << ss << ", ss: " << ss);
     for (auto i = 0; i < ss; ++i) {
       // Overlapping first round...
-      auto recvfrom = mod(me - i + ii, nr);
+      auto recvfrom = mod(me - i - ii, nr);
+
+      P(me << " recvfrom " << recvfrom);
 
       A2A_ASSERT_RETURNS(
           MPI_Irecv(
@@ -161,6 +164,8 @@ inline void scatteredPairwise(
     for (auto i = 0; i < ss; ++i) {
       // Overlapping first round...
       auto sendto = mod(me + i + ii, nr);
+
+      P(me << " sendto " << sendto);
 
       A2A_ASSERT_RETURNS(
           MPI_Isend(
