@@ -20,8 +20,8 @@
 
 #include <MPISynchronizedBarrier.h>
 #include <MpiAlltoAllBench.h>
-#include <parallel/algorithm>
 #include <Version.h>
+#include <parallel/algorithm>
 
 #define W(X) #X << "=" << X << ", "
 
@@ -36,7 +36,8 @@ constexpr size_t minblocksize = 128;
 
 // This are approximately 25 GB
 // constexpr size_t capacity_per_node = 32 * MB * 28 * 28;
-constexpr size_t capacity_per_node = 16 * GB;
+//constexpr size_t capacity_per_node = 16 * GB;
+constexpr size_t capacity_per_node = 500 * KB;
 
 // The container where we store our
 using value_t     = int;
@@ -46,7 +47,7 @@ using iterator_t  = typename container_t::pointer;
 using benchmark_t =
     std::function<void(iterator_t, iterator_t, int, MPI_Comm, merge_t)>;
 
-std::array<std::pair<std::string, benchmark_t>, 7> algos = {
+std::array<std::pair<std::string, benchmark_t>, 14> algos = {
     // Classic MPI All to All
     std::make_pair(
         "AlltoAll", a2a::MpiAlltoAll<iterator_t, iterator_t, merge_t>),
@@ -68,6 +69,27 @@ std::array<std::pair<std::string, benchmark_t>, 7> algos = {
     std::make_pair(
         "ScatteredPairwise32",
         a2a::scatteredPairwise<iterator_t, iterator_t, merge_t, 32>),
+    std::make_pair(
+        "ScatteredPairwise64",
+        a2a::scatteredPairwise<iterator_t, iterator_t, merge_t, 64>),
+    std::make_pair(
+        "ScatteredPairwise128",
+        a2a::scatteredPairwise<iterator_t, iterator_t, merge_t, 128>),
+    std::make_pair(
+        "ScatteredPairwiseWaitany1",
+        a2a::scatteredPairwiseWaitany<iterator_t, iterator_t, merge_t, 1>),
+    std::make_pair(
+        "ScatteredPairwiseWaitany2",
+        a2a::scatteredPairwiseWaitany<iterator_t, iterator_t, merge_t, 2>),
+    std::make_pair(
+        "ScatteredPairwiseWaitany4",
+        a2a::scatteredPairwiseWaitany<iterator_t, iterator_t, merge_t, 4>),
+    std::make_pair(
+        "ScatteredPairwiseWaitany8",
+        a2a::scatteredPairwiseWaitany<iterator_t, iterator_t, merge_t, 8>),
+    std::make_pair(
+        "ScatteredPairwiseWaitany16",
+        a2a::scatteredPairwiseWaitany<iterator_t, iterator_t, merge_t, 16>),
     // Hierarchical XOR Shift Hypercube, works only if #PEs is power of two
     std::make_pair(
         "Hypercube", a2a::hypercube<iterator_t, iterator_t, merge_t>),
@@ -283,7 +305,12 @@ int main(int argc, char* argv[])
         // measurements[algo.first].emplace_back(t);
         if (it > 0) {
           auto trace = a2a::TimeTrace{me, algo.first};
-          A2A_ASSERT(trace.measurements().size() > 0);
+
+          if (!(((nr & (nr - 1)) == 0))) {
+            if (algo.first.find("Hypercube") == std::string::npos) {
+              A2A_ASSERT(trace.measurements().size() > 0);
+            }
+          }
           printMeasurementCsvLine(
               std::cout,
               p,
@@ -365,5 +392,4 @@ void print_env()
 
     env_var_kv = *(environ + i);
   }
-
 }

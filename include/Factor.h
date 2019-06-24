@@ -19,7 +19,7 @@ namespace a2a {
 
 namespace detail {
 
-template <class InputIt, class OutputIt, class Op>
+template <class InputIt, class OutputIt, class Op, std::size_t NReqs = 1>
 inline void oneFactor_odd(
     InputIt begin, OutputIt out, int blocksize, MPI_Comm comm, Op&& /*op*/)
 {
@@ -63,7 +63,7 @@ inline void oneFactor_odd(
   trace.tock(COMMUNICATION);
 }
 
-template <class InputIt, class OutputIt, class Op>
+template <class InputIt, class OutputIt, class Op, std::size_t NReqs = 1>
 inline void oneFactor_even(
     InputIt begin, OutputIt out, int blocksize, MPI_Comm comm, Op&&)
 {
@@ -89,33 +89,16 @@ inline void oneFactor_even(
 
   auto trace = TimeTrace{me, "OneFactor"};
   trace.tick(COMMUNICATION);
-  auto p = partner(0);
-
-  auto reqs = a2a::sendrecv(
-      std::next(begin, p * blocksize),
-      blocksize,
-      p,
-      100,
-      std::next(out, p * blocksize),
-      blocksize,
-      p,
-      100,
-      comm);
 
   std::copy(
       begin + me * blocksize,
       begin + me * blocksize + blocksize,
       out + me * blocksize);
 
-  for (int r = 1; r < nr - 1; ++r) {
-    p = partner(r);
+  for (int r = 0; r < nr - 1; ++r) {
+    auto p = partner(r);
 
-    // Wait for previous round
-    A2A_ASSERT_RETURNS(
-        MPI_Waitall(reqs.size(), &(reqs[0]), MPI_STATUSES_IGNORE),
-        MPI_SUCCESS);
-
-    reqs = a2a::sendrecv(
+    auto reqs = a2a::sendrecv(
         std::next(begin, p * blocksize),
         blocksize,
         p,
@@ -125,16 +108,18 @@ inline void oneFactor_even(
         p,
         100,
         comm);
+
+    // Wait for previous round
+    A2A_ASSERT_RETURNS(
+        MPI_Waitall(reqs.size(), &(reqs[0]), MPI_STATUSES_IGNORE),
+        MPI_SUCCESS);
   }
 
-  // Final Round
-  A2A_ASSERT_RETURNS(
-      MPI_Waitall(reqs.size(), &(reqs[0]), MPI_STATUSES_IGNORE), MPI_SUCCESS);
   trace.tock(COMMUNICATION);
 }
 }  // namespace detail
 
-template <class InputIt, class OutputIt, class Op>
+template <class InputIt, class OutputIt, class Op, size_t NReqs = 1>
 inline void oneFactor(
     InputIt begin, OutputIt out, int blocksize, MPI_Comm comm, Op&& op)
 {

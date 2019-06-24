@@ -7,17 +7,22 @@
 
 #define A2A_UNUSED(x) \
   do {                \
-    (void)sizeof(x);  \
+    (void)(x);        \
   } while (0)
 
 #ifdef NDEBUG
+
 #define A2A_ASSERT(x) A2A_UNUSED(x)
+
+#define A2A_ASSERT_RETURNS(x, ret) \
+  A2A_UNUSED(x);                   \
+  A2A_UNUSED(ret)
 #else
+
 #include <cassert>
 #define A2A_ASSERT(x) assert(x)
-#endif
-
 #define A2A_ASSERT_RETURNS(x, ret) A2A_ASSERT((x) == ret)
+#endif
 
 template <class InputIt>
 void printVector(InputIt begin, InputIt end, int me)
@@ -30,5 +35,16 @@ void printVector(InputIt begin, InputIt end, int me)
   os << "\n";
   std::cout << os.str();
 }
+
+#ifndef NDEBUG
+#define P(x)                  \
+  do {                        \
+    std::ostringstream os;    \
+    os << "-- " << x << "\n"; \
+    std::cout << os.str();    \
+  } while (0)
+#else
+#define P(x)
+#endif
 
 #endif
