@@ -401,7 +401,7 @@ inline void hypercube(
 
   A2A_ASSERT(nr > 0);
 
-  auto isPower2 = (nr & (nr - 1)) == 0;
+  auto isPower2 = isPow2(static_cast<unsigned>(nr));
 
   if (!isPower2) {
     return;

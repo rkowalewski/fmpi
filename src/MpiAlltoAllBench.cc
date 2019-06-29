@@ -31,10 +31,10 @@ constexpr size_t GB = 1 << 30;
 
 #ifdef NDEBUG
 constexpr size_t nwarmup = 1;
-constexpr size_t niters = 10;
+constexpr size_t niters  = 10;
 #else
 constexpr size_t nwarmup = 0;
-constexpr size_t niters = 1;
+constexpr size_t niters  = 1;
 #endif
 
 constexpr size_t minblocksize = 128;
@@ -171,8 +171,8 @@ int main(int argc, char* argv[])
   // Then we divide again divide by number of PEs to obtain the largest
   // blocksize.
 #ifdef NDEBUG
-  auto procs_per_node = nr / nhosts;
-  const size_t maxprocsize = capacity_per_node / (2 * procs_per_node);
+  auto         procs_per_node = nr / nhosts;
+  const size_t maxprocsize    = capacity_per_node / (2 * procs_per_node);
 #else
   const size_t maxprocsize = minblocksize * nr;
 #endif
@@ -196,7 +196,7 @@ int main(int argc, char* argv[])
     printMeasurementHeader(std::cout);
   }
 
-  //calibrate clock
+  // calibrate clock
   auto clock           = SynchronizedClock{};
   bool is_clock_synced = clock.Init(comm);
   A2A_ASSERT(is_clock_synced);
@@ -307,6 +307,14 @@ int main(int argc, char* argv[])
         P("running algorithm: " << algo.first);
         // We always want to guarantee that all processors start at the same
         // time, so this is a real barrier
+
+        auto isHypercube =
+            algo.first.find("Hypercube") != std::string::npos;
+
+        if (isHypercube && !a2a::isPow2(static_cast<unsigned>(nr))) {
+          continue;
+        }
+
         auto barrier = clock.Barrier(comm);
         A2A_ASSERT(barrier.Success(comm));
 
