@@ -19,7 +19,7 @@ f <- file("stdin")
 df.in <- read_csv(paste(collapse = "\n", readLines(f)), col_names=TRUE, col_types="iii?iciddd")
 close(f)
 
-df.summ <- df.in %>%
+df.stats <- df.in %>%
     group_by(Nodes, Procs, Round, NBytes, Blocksize, Algo) %>%
     summarize(
               N = sum(!is.na(Ttotal)),
@@ -33,14 +33,21 @@ df.summ <- df.in %>%
               Tcomm = median(Tcomm, na.rm = TRUE),
               Tmerge = median(Tmerge, na.rm = TRUE)
     ) %>%
+    # add the speedup
+    mutate(speedup = Tmedian[Algo == "AlltoAll"] / Tmedian) %>%
     arrange(Tmedian, .by_group = TRUE)
 
+
+
 # Standard Error
-df.summ$se <- df.summ$sd / sqrt(df.summ$N)
+df.stats$se <- df.stats$sd / sqrt(df.stats$N)
 # CI Interval
 ciInterval <- .95
-ciMult <- qt(ciInterval/2 + .5, df.summ$N-1)
+ciMult <- qt(ciInterval/2 + .5, df.stats$N-1)
 # Sum
-df.summ$ci <- df.summ$se * ciMult
+df.stats$ci <- df.stats$se * ciMult
 
-cat(format_csv(df.summ))
+df.stats$PPN <- df.stats$Procs / df.stats$Nodes
+
+cat(format_csv(df.stats))
+

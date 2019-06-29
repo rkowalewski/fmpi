@@ -2,3 +2,4 @@ build
 *.pdf
 Version.h
 logs
+results
