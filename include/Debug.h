@@ -41,11 +41,11 @@ void printVector(InputIt begin, InputIt end, int me)
 #ifndef NDEBUG
 #ifdef A2A_ENABLE_LOGGING
 #undef P
-#define P(x)                  \
-  do {                        \
-    std::ostringstream os;    \
-    os << "-- " << x << std::endl; \
-    std::cout << os.str();    \
+#define P(x)                                                                 \
+  do {                                                                       \
+    std::ostringstream os;                                                   \
+    os << "-- [ " << __func__ << ":" << __LINE__ << " ] " << x << std::endl; \
+    std::cout << os.str();                                                   \
   } while (0)
 #endif
 #endif

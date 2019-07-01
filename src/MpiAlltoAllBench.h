@@ -3,6 +3,7 @@
 #include <mpi.h>
 
 #include <algorithm>
+#include <array>
 #include <functional>
 #include <string>
 #include <utility>
@@ -18,7 +19,9 @@ struct StringDoublePair : std::pair<std::string, double> {
 bool operator<(StringDoublePair const& lhs, StringDoublePair const& rhs);
 std::ostream& operator<<(std::ostream& os, StringDoublePair const& p);
 
-using merge_t = std::function<void(void*, void*, void*, void*, void*)>;
+template <class InputIterator, class OutputIterator, size_t N>
+using merge_t = std::function<void(
+    std::array<std::pair<InputIterator, InputIterator>, N>, OutputIterator)>;
 
 struct Params {
   size_t nhosts;

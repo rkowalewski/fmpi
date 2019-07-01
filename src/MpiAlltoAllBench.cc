@@ -50,13 +50,22 @@ using value_t     = int;
 using container_t = std::unique_ptr<value_t[]>;
 using iterator_t  = typename container_t::pointer;
 
-using benchmark_t =
-    std::function<void(iterator_t, iterator_t, int, MPI_Comm, merge_t)>;
+using benchmark_t = std::function<void(
+    iterator_t,
+    iterator_t,
+    int,
+    MPI_Comm,
+    merge_t<iterator_t, iterator_t, 8>)>;
 
-std::array<std::pair<std::string, benchmark_t>, 14> algos = {
+std::array<std::pair<std::string, benchmark_t>, 3> algos = {
     // Classic MPI All to All
     std::make_pair(
-        "AlltoAll", a2a::MpiAlltoAll<iterator_t, iterator_t, merge_t>),
+        "AlltoAll",
+        a2a::MpiAlltoAll<
+            iterator_t,
+            iterator_t,
+            merge_t<iterator_t, iterator_t, 8>>),
+#if 0
     // One Factorizations based on Graph Theory
     std::make_pair(
         "OneFactor", a2a::oneFactor<iterator_t, iterator_t, merge_t>),
@@ -81,9 +90,22 @@ std::array<std::pair<std::string, benchmark_t>, 14> algos = {
     std::make_pair(
         "ScatteredPairwise128",
         a2a::scatteredPairwise<iterator_t, iterator_t, merge_t, 128>),
+#endif
     std::make_pair(
         "ScatteredPairwiseWaitany8",
-        a2a::scatteredPairwiseWaitany<iterator_t, iterator_t, merge_t, 8>),
+        a2a::scatteredPairwiseWaitany<
+            iterator_t,
+            iterator_t,
+            merge_t<iterator_t, iterator_t, 8>,
+            8>),
+    std::make_pair(
+        "ScatteredPairwiseWaitsome8",
+        a2a::scatteredPairwiseWaitsome<
+            iterator_t,
+            iterator_t,
+            merge_t<iterator_t, iterator_t, 8>,
+            8>)
+#if 0
     std::make_pair(
         "ScatteredPairwiseWaitany16",
         a2a::scatteredPairwiseWaitany<iterator_t, iterator_t, merge_t, 16>),
@@ -99,6 +121,7 @@ std::array<std::pair<std::string, benchmark_t>, 14> algos = {
     // Hierarchical XOR Shift Hypercube, works only if #PEs is power of two
     std::make_pair(
         "Hypercube", a2a::hypercube<iterator_t, iterator_t, merge_t>),
+#endif
 // Bruck Algorithms, first the original one, then a modified version which
 // omits the last local rotation step
 #if 0
@@ -106,7 +129,6 @@ std::array<std::pair<std::string, benchmark_t>, 14> algos = {
     std::make_pair(
         "Bruck_Mod", a2a::bruck_mod<iterator_t, iterator_t, merge_t>)
 #endif
-
 };
 
 int main(int argc, char* argv[])
@@ -252,38 +274,15 @@ int main(int argc, char* argv[])
             &data[block * sendcount], &data[(block + 1) * sendcount]));
       }
 
-      auto merger =
-          [&](void* begin1, void* end1, void* begin2, void* end2, void* res) {
-#if 0
-        std::array<std::pair<value_t*, value_t*>, 2> seqs{
-            std::make_pair(
-                static_cast<value_t*>(begin1), static_cast<value_t*>(end1)),
-            std::make_pair(
-                static_cast<value_t*>(begin2), static_cast<value_t*>(end2)),
-        };
-
+      auto merger = [&](std::array<std::pair<iterator_t, iterator_t>, 8> seqs,
+                        iterator_t res) {
         __gnu_parallel::multiway_merge(
             std::begin(seqs),
             std::end(seqs),
-            static_cast<value_t*>(res),
+            res,
             nels,
-            std::less<value_t>{},
-            __gnu_parallel::sequential_tag{});
-#else
-            std::copy(
-                static_cast<value_t*>(begin1),
-                static_cast<value_t*>(end1),
-                static_cast<value_t*>(res));
-            std::copy(
-                static_cast<value_t*>(begin2),
-                static_cast<value_t*>(end2),
-                static_cast<value_t*>(res) +
-                    std::distance(
-                        static_cast<value_t*>(begin1),
-                        static_cast<value_t*>(end1)));
-
-#endif
-          };
+            std::less<value_t>{});
+      };
 
       auto barrier = clock.Barrier(comm);
       A2A_ASSERT(barrier.Success(comm));
@@ -308,8 +307,7 @@ int main(int argc, char* argv[])
         // We always want to guarantee that all processors start at the same
         // time, so this is a real barrier
 
-        auto isHypercube =
-            algo.first.find("Hypercube") != std::string::npos;
+        auto isHypercube = algo.first.find("Hypercube") != std::string::npos;
 
         if (isHypercube && !a2a::isPow2(static_cast<unsigned>(nr))) {
           continue;
