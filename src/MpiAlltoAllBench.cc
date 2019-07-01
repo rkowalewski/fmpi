@@ -38,9 +38,9 @@ constexpr size_t niters  = 1;
 #endif
 
 constexpr size_t minblocksize = 2048;
-/* This means that we use the capacity per node and scale the blocksize in
- * successive steps */
-constexpr size_t maxblocksize = 0;
+/* If maxblocksiz == 0, this means that we use the capacity per node and scale
+ * the minblocksize in successive steps */
+constexpr size_t maxblocksize = 2048;
 /* constexpr size_t maxblocksize = runtime argument */
 
 // This are approximately 25 GB
