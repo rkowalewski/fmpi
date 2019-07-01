@@ -31,3 +31,7 @@ do
     rm -f "$tmpFile"
   fi
 done
+
+echo "-- splitting CSV results"
+bash "$SCRIPTPATH/splitCSV.sh"
+
