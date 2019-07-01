@@ -37,7 +37,10 @@ constexpr size_t nwarmup = 0;
 constexpr size_t niters  = 1;
 #endif
 
-constexpr size_t minblocksize = 128;
+constexpr size_t minblocksize = 2048;
+/* This means that we use the capacity per node and scale the blocksize in
+ * successive steps */
+constexpr size_t maxblocksize = 0;
 /* constexpr size_t maxblocksize = runtime argument */
 
 // This are approximately 25 GB
@@ -201,10 +204,11 @@ int main(int argc, char* argv[])
 
   // We have to divide the maximum capacity per proc by the number of PE
   // to get the largest possible block size
-  const size_t maxblocksize = maxprocsize / nr;
+  const size_t _maxblocksize =
+      (maxblocksize == 0) ? maxprocsize / nr : maxblocksize;
 
-  auto nsteps =
-      std::ceil(std::log2(maxblocksize)) - std::ceil(std::log2(minblocksize));
+  auto nsteps = std::ceil(std::log2(_maxblocksize)) -
+                std::ceil(std::log2(minblocksize));
 
   if (nsteps <= 0) {
     nsteps = 1;
