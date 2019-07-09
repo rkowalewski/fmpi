@@ -5,11 +5,8 @@ SCRIPT=$(readlink -f "$0")
 # Absolute path this script is in, thus /home/user/bin
 SCRIPTPATH=$(dirname "$SCRIPT")
 
-for dir in $(ls -1 "${SCRIPTPATH}/logs")
-do
-  mydir="$SCRIPTPATH/logs/$dir"
-  if [ -d "$mydir" ]
-  then
+gatherStatistics() {
+    mydir="$1"
     echo "-- analyzing directory: $mydir"
     tmpFile="$(mktemp)"
     firstFile="$(ls -l $mydir/*.out | grep '^-' | awk '{print $9}' | head -n 1)"
@@ -29,8 +26,23 @@ do
 
     # remove temporary file to clean up everything
     rm -f "$tmpFile"
-  fi
-done
+}
+
+DIR="$1"
+
+if [ -z "$DIR" ]
+then
+  for dir in $(ls -1 "${SCRIPTPATH}/logs")
+  do
+    mydir="$SCRIPTPATH/logs/$dir"
+    if [ -d "$mydir" ]
+    then
+      gatherStatistics "$mydir"
+    fi
+  done
+else
+  gatherStatistics "$DIR"
+fi
 
 echo "-- splitting CSV results"
 bash "$SCRIPTPATH/splitCSV.sh"
