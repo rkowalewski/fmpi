@@ -127,10 +127,21 @@ if (ENABLE_LOGGING)
     target_compile_definitions (MpiAlltoAllBench PRIVATE A2A_ENABLE_LOGGING)
 endif()
 
+if (UNIX)
+    execute_process(COMMAND getconf LEVEL3_CACHE_SIZE
+        OUTPUT_VARIABLE _l3CacheSize OUTPUT_STRIP_TRAILING_WHITESPACE)
+    execute_process(COMMAND getconf LEVEL2_CACHE_SIZE
+        OUTPUT_VARIABLE _l2CacheSize OUTPUT_STRIP_TRAILING_WHITESPACE)
+    target_compile_definitions (MpiAlltoAllBench PRIVATE A2A_CACHELEVEL3_SIZE=${_l3CacheSize})
+    target_compile_definitions (MpiAlltoAllBench PRIVATE A2A_CACHELEVEL2_SIZE=${_l2CacheSize})
+endif()
+
+
 add_custom_target(GitVersion
     COMMAND ${CMAKE_COMMAND}
     -D INPUT_FILE=${CMAKE_CURRENT_SOURCE_DIR}/src/Version.h.in
     -D OUTPUT_FILE=${CMAKE_CURRENT_SOURCE_DIR}/src/Version.h
     -P ${CMAKE_CURRENT_SOURCE_DIR}/cmake/generate_version.cmake
 )
+
 

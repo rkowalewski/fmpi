@@ -37,10 +37,10 @@ constexpr size_t nwarmup = 0;
 constexpr size_t niters  = 1;
 #endif
 
-constexpr size_t minblocksize = 2048;
+constexpr size_t minblocksize = 8;
 /* If maxblocksiz == 0, this means that we use the capacity per node and scale
  * the minblocksize in successive steps */
-constexpr size_t maxblocksize = 2048;
+constexpr size_t maxblocksize = minblocksize << 5;
 /* constexpr size_t maxblocksize = runtime argument */
 
 // This are approximately 25 GB
@@ -54,11 +54,7 @@ using container_t = std::unique_ptr<value_t[]>;
 using iterator_t  = typename container_t::pointer;
 
 using benchmark_t = std::function<void(
-    iterator_t,
-    iterator_t,
-    int,
-    MPI_Comm,
-    merge_t<iterator_t, iterator_t, 8>)>;
+    iterator_t, iterator_t, int, MPI_Comm, merge_t<iterator_t, iterator_t>)>;
 
 std::array<std::pair<std::string, benchmark_t>, 3> algos = {
     // Classic MPI All to All
@@ -67,7 +63,7 @@ std::array<std::pair<std::string, benchmark_t>, 3> algos = {
         a2a::MpiAlltoAll<
             iterator_t,
             iterator_t,
-            merge_t<iterator_t, iterator_t, 8>>),
+            merge_t<iterator_t, iterator_t>>),
 #if 0
     // One Factorizations based on Graph Theory
     std::make_pair(
@@ -93,21 +89,28 @@ std::array<std::pair<std::string, benchmark_t>, 3> algos = {
     std::make_pair(
         "ScatteredPairwise128",
         a2a::scatteredPairwise<iterator_t, iterator_t, merge_t, 128>),
-#endif
     std::make_pair(
         "ScatteredPairwiseWaitany8",
         a2a::scatteredPairwiseWaitany<
             iterator_t,
             iterator_t,
-            merge_t<iterator_t, iterator_t, 8>,
+            merge_t<iterator_t, iterator_t>,
             8>),
+#endif
     std::make_pair(
         "ScatteredPairwiseWaitsome8",
         a2a::scatteredPairwiseWaitsome<
             iterator_t,
             iterator_t,
-            merge_t<iterator_t, iterator_t, 8>,
-            8>)
+            merge_t<iterator_t, iterator_t>,
+            8>),
+    std::make_pair(
+        "ScatteredPairwiseWaitsome16",
+        a2a::scatteredPairwiseWaitsome<
+            iterator_t,
+            iterator_t,
+            merge_t<iterator_t, iterator_t>,
+            16>)
 #if 0
     std::make_pair(
         "ScatteredPairwiseWaitany16",
@@ -199,7 +202,7 @@ int main(int argc, char* argv[])
   auto         procs_per_node = nr / nhosts;
   const size_t maxprocsize    = capacity_per_node / (2 * procs_per_node);
 #else
-  const size_t maxprocsize = minblocksize * nr;
+  const size_t maxprocsize = minblocksize;
 #endif
 
   // We have to divide the maximum capacity per proc by the number of PE
@@ -215,6 +218,8 @@ int main(int argc, char* argv[])
   }
 
   nsteps = std::min<std::size_t>(nsteps, 20);
+
+  P(me << " nsteps: " << nsteps);
 
   A2A_ASSERT(minblocksize >= sizeof(value_t));
 
@@ -278,8 +283,11 @@ int main(int argc, char* argv[])
             &data[block * sendcount], &data[(block + 1) * sendcount]));
       }
 
-      auto merger = [&](std::array<std::pair<iterator_t, iterator_t>, 8> seqs,
-                        iterator_t res) {
+      auto merger = [nels](
+                        std::vector<std::pair<iterator_t, iterator_t>> seqs,
+                        iterator_t                                     res) {
+        // parallel merge does not support inplace merging
+        // nels must be the number of elements in all sequences
         __gnu_parallel::multiway_merge(
             std::begin(seqs),
             std::end(seqs),
@@ -287,9 +295,6 @@ int main(int argc, char* argv[])
             nels,
             std::less<value_t>{});
       };
-
-      auto barrier = clock.Barrier(comm);
-      A2A_ASSERT(barrier.Success(comm));
 
       // first we want to obtain the correct result which we can verify then
       // with our own algorithms
@@ -323,23 +328,13 @@ int main(int argc, char* argv[])
         auto t = run_algorithm(
             algo.second, &(data[0]), &(out[0]), sendcount, comm, merger);
 
-#ifndef NDEBUG
-        std::sort(&(out[0]), &(out[nels]));
-#endif
+        //printVector(&(out[0]), &(out[nels]), me);
+
         A2A_ASSERT(std::equal(&(correct[0]), &(correct[nels]), &(out[0])));
         // measurements[algo.first].emplace_back(t);
         if ((nwarmup > 0 && it > nwarmup) || (nwarmup == 0)) {
           auto trace = a2a::TimeTrace{me, algo.first};
 
-#if 0
-          if (!(((nr & (nr - 1)) == 0))) {
-            if (algo.first.find("Hypercube") == std::string::npos) {
-              if (trace.enabled()) {
-                A2A_ASSERT(trace.measurements().size() > 0);
-              }
-            }
-          }
-#endif
           printMeasurementCsvLine(
               std::cout,
               p,

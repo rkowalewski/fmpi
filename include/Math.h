@@ -4,6 +4,8 @@
 #include <Debug.h>
 #include <type_traits>
 
+#include <climits>
+
 namespace a2a {
 
 template <class T>
@@ -18,9 +20,20 @@ inline constexpr auto isPow2(T v)
 {
   static_assert(
       std::is_integral<T>::value && std::is_unsigned<T>::value,
-      "only unsigned types supported");
+      "only unsigned integer types supported");
 
   return (v & (v - 1)) == 0;
+}
+
+template <class T>
+inline constexpr auto abs(T v)
+{
+  static_assert(
+      std::is_integral<T>::value && std::is_signed<T>::value,
+      "only signed integer types supported");
+
+  auto const mask = v >> (sizeof(T) * CHAR_BIT - 1);
+  return (v + mask) ^ mask;
 }
 
 }  // namespace a2a

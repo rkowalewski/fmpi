@@ -36,7 +36,18 @@ void printVector(InputIt begin, InputIt end, int me)
   std::cout << os.str();
 }
 
+template <class InputIt>
+auto tokenizeRange(InputIt begin, InputIt end)
+{
+  std::ostringstream os;
+  using value_t = typename std::iterator_traits<InputIt>::value_type;
+  std::copy(begin, end, std::ostream_iterator<value_t>(os, " "));
+  return os.str();
+}
+
+
 #define P(x)
+#define PRANGE(a, b)
 
 #ifndef NDEBUG
 #ifdef A2A_ENABLE_LOGGING
@@ -46,6 +57,17 @@ void printVector(InputIt begin, InputIt end, int me)
     std::ostringstream os;                                                   \
     os << "-- [ " << __func__ << ":" << __LINE__ << " ] " << x << std::endl; \
     std::cout << os.str();                                                   \
+  } while (0)
+
+#undef PRANGE
+#define PRANGE(a, b)                                                        \
+  do {                                                                      \
+    std::ostringstream os;                                                  \
+    using value_t = typename std::iterator_traits<decltype(a)>::value_type; \
+    os << "-- [ " << __func__ << ":" << __LINE__ << " ] ";                  \
+    std::copy(a, b, std::ostream_iterator<value_t>(os, " "));               \
+    os << std::endl;                                                        \
+    std::cout << os.str();                                                  \
   } while (0)
 #endif
 #endif

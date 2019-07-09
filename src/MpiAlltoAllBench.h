@@ -19,9 +19,9 @@ struct StringDoublePair : std::pair<std::string, double> {
 bool operator<(StringDoublePair const& lhs, StringDoublePair const& rhs);
 std::ostream& operator<<(std::ostream& os, StringDoublePair const& p);
 
-template <class InputIterator, class OutputIterator, size_t N>
+template <class InputIterator, class OutputIterator>
 using merge_t = std::function<void(
-    std::array<std::pair<InputIterator, InputIterator>, N>, OutputIterator)>;
+    std::vector<std::pair<InputIterator, InputIterator>>, OutputIterator)>;
 
 struct Params {
   size_t nhosts;
