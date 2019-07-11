@@ -37,16 +37,16 @@ constexpr size_t nwarmup = 0;
 constexpr size_t niters  = 1;
 #endif
 
-constexpr size_t minblocksize = 8;
+constexpr size_t minblocksize = 128;
+//constexpr size_t minblocksize = 32768 * 2;
 /* If maxblocksiz == 0, this means that we use the capacity per node and scale
  * the minblocksize in successive steps */
-constexpr size_t maxblocksize = minblocksize << 5;
+constexpr size_t maxblocksize = 32768;
 /* constexpr size_t maxblocksize = runtime argument */
 
 // This are approximately 25 GB
 // constexpr size_t capacity_per_node = 32 * MB * 28 * 28;
-// constexpr size_t capacity_per_node = 16 * GB;
-constexpr size_t capacity_per_node = 512 * KB;
+constexpr size_t capacity_per_node = 16 * GB;
 
 // The container where we store our
 using value_t     = int;
@@ -219,6 +219,12 @@ int main(int argc, char* argv[])
 
   nsteps = std::min<std::size_t>(nsteps, 20);
 
+  if (me == 0) {
+    std::cout << "++ number of blocksize steps: " << nsteps << "\n";
+    std::cout << "++ minblocksize: " << minblocksize << "\n";
+    std::cout << "++ maxlocksize: " << _maxblocksize << "\n";
+  }
+
   P(me << " nsteps: " << nsteps);
 
   A2A_ASSERT(minblocksize >= sizeof(value_t));
@@ -232,7 +238,7 @@ int main(int argc, char* argv[])
   bool is_clock_synced = clock.Init(comm);
   A2A_ASSERT(is_clock_synced);
 
-  for (size_t blocksize = minblocksize, step = 1; step <= nsteps;
+  for (size_t blocksize = minblocksize, step = 0; step <= nsteps;
        blocksize *= 2, ++step) {
     // each process sends sencount to all other PEs
     auto sendcount = blocksize / sizeof(value_t);
@@ -307,7 +313,7 @@ int main(int argc, char* argv[])
       p.nhosts    = nhosts;
       p.nprocs    = nr;
       p.me        = me;
-      p.step      = step;
+      p.step      = step + 1;
       p.nbytes    = nels * nr * sizeof(value_t);
       p.blocksize = blocksize;
 
