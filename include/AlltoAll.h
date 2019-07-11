@@ -375,6 +375,7 @@ inline void scatteredPairwiseWaitany(
   trace.tock(MERGE);
 }
 
+namespace detail {
 template <class T, std::size_t NReqs>
 class CommState {
   using buffer_t =
@@ -463,7 +464,8 @@ class CommState {
     return m_freelist.size();
   }
 
-  chunks_storage_t<MAX_COMPLETED_CHUNKS> const& completed_receives() const noexcept
+  chunks_storage_t<MAX_COMPLETED_CHUNKS> const& completed_receives() const
+      noexcept
   {
     return m_completed;
   }
@@ -479,11 +481,27 @@ class CommState {
 
   buffer_t m_buffer{};
 };
+}  // namespace detail
 
-template <class InputIt, class OutputIt, class Op, size_t NReqs = 1>
+template <class InputIt, class OutputIt, class Op, size_t NReqs = 2>
 inline void scatteredPairwiseWaitsome(
     InputIt begin, OutputIt out, int blocksize, MPI_Comm comm, Op&& op)
 {
+  // Tuning Parameters:
+
+  // NReqs: Maximum Number of pending receives
+
+  // Defines the size of a task. Here we say that at least 50% of pending
+  // receives need to be ready before we combine them in a local computation.
+  // This of course depends on the size of a pending receive.
+  //
+  // An alternative may be: Given that messages are relatively small we can
+  // wait until either the L2 or L3 cache is full to maximize the benefit for
+  // local computation
+  constexpr auto utilization_threshold = (NReqs / 2);
+  static_assert(
+      utilization_threshold, "at least two concurrent receives required");
+
   int me, nr;
   MPI_Comm_rank(comm, &me);
   MPI_Comm_size(comm, &nr);
@@ -526,7 +544,7 @@ inline void scatteredPairwiseWaitsome(
 
   // allocate the communication state which provides the receive buffer enough
   // blocks of size blocksize.
-  CommState<value_type, NReqs> commState{std::size_t(blocksize)};
+  detail::CommState<value_type, NReqs> commState{std::size_t(blocksize)};
 
   A2A_ASSERT(2 * reqsInFlight <= reqs.size());
 
@@ -583,15 +601,10 @@ inline void scatteredPairwiseWaitsome(
           (reqsInFlight + 1)
                   : nr);
 
-  auto chunkIteratorPair = [blocksize](auto bufIt, auto block) {
-    auto f = std::next(bufIt, block * blocksize);
-    auto l = std::next(f, blocksize);
-
-    return std::make_pair(f, l);
-  };
-
   // local portion
-  chunks_to_merge.push_back(chunkIteratorPair(begin, me));
+  auto f = std::next(begin, me * blocksize);
+  auto l = std::next(f, blocksize);
+  chunks_to_merge.push_back(std::make_pair(f, l));
 
   if (alreadyDone) {
     // We are already done
@@ -627,14 +640,14 @@ inline void scatteredPairwiseWaitsome(
     size_t ncReqs = 0, ncrReqs = 0;
     auto   outIt = out;
 
-    trace.tock(COMMUNICATION);
-
     // request indexes indexes which have been completed so far
     std::array<int, reqs.size()> reqsCompleted{};
 
     std::vector<std::size_t> mergedChunksPsum;
     mergedChunksPsum.reserve(nr);
     mergedChunksPsum.push_back(0);
+
+    trace.tock(COMMUNICATION);
 
     while (ncReqs < totalReqs) {
       int nReqCompleted;
@@ -690,15 +703,17 @@ inline void scatteredPairwiseWaitsome(
       A2A_ASSERT((nReceivedChunks + nSentChunks) == nReqCompleted);
 
       // Number of open receives in this round.
-      auto openReceives =
-          std::min<std::size_t>(totalExchanges - nrreqs, nReceivedChunks);
+      auto const maxVals = {// Number of total open receives
+                            totalExchanges - nrreqs,
+                            // Number of free receive slots
+                            static_cast<size_t>(nReceivedChunks),
+                            // number of free memory slots
+                            commState.available_slots()};
 
-      // post new receives to keep the queue busy
-      auto it = fstCompletedReq;
-      for (std::size_t nPosted = 0;
-           it < fstSendRequest &&
-           nPosted < std::min(commState.available_slots(), openReceives);
-           ++it, ++nPosted) {
+      auto const maxRecvs =
+          *std::min_element(std::begin(maxVals), std::end(maxVals));
+
+      for (auto it = fstSendRequest; it < fstSendRequest + maxRecvs; ++it) {
         auto recvfrom = recvRank(nrreqs + 1);
 
         auto reqIdx = *it;
@@ -722,12 +737,10 @@ inline void scatteredPairwiseWaitsome(
         ++nrreqs;
       }
 
-      it = fstSendRequest;
-      for (std::size_t nPosted = 0;
-           it < lstCompletedReq &&
-           nPosted <
-               std::min<std::size_t>(totalExchanges - nsreqs, nSentChunks);
-           ++it, ++nPosted) {
+      auto const maxSents =
+          std::min<std::size_t>(totalExchanges - nsreqs, nSentChunks);
+
+      for (auto it = fstSendRequest; it < fstSendRequest + maxSents; ++it) {
         auto reqIdx = *it;
 
         // a send request is done, so post a new one...
@@ -759,8 +772,9 @@ inline void scatteredPairwiseWaitsome(
           commState.completed_receives().size() + chunks_to_merge.size();
       // minimum number of chunks to merge: ideally we have a full level2
       // cache
+
       bool const enough_merges_available =
-          mergeCount > 1 && mergeCount >= (NReqs / 2);
+          mergeCount >= utilization_threshold;
 
       if (enough_merges_available || (allReceivesDone && mergeCount)) {
         // 1) copy completed chunks into another vector
@@ -781,33 +795,36 @@ inline void scatteredPairwiseWaitsome(
         commState.release_completed();
         chunks_to_merge.clear();
       }
-      else if (
-          allReceivesDone && (ncReqs < totalReqs) &&
-          mergedChunksPsum.size() > 2) {
-        // receives are done but we still wait for send requests
-        // Let's merge a deeper level in the tree
-        using buffer_t = tlx::
-            SimpleVector<value_type, tlx::SimpleVectorMode::NoInitNoDestroy>;
+      else {
+        auto const sentReqsOpen    = allReceivesDone && (ncReqs < totalReqs);
+        auto const needsFinalMerge = mergedChunksPsum.size() > 2;
 
-        A2A_ASSERT(chunks_to_merge.empty());
+        if (sentReqsOpen && needsFinalMerge) {
+          // receives are done but we still wait for send requests
+          // Let's merge a deeper level in the tree
+          using buffer_t = tlx::SimpleVector<
+              value_type,
+              tlx::SimpleVectorMode::NoInitNoDestroy>;
 
-        buffer_t mergeBuffer{std::size_t(nr) * blocksize};
-        std::transform(
-            std::begin(mergedChunksPsum),
-            std::prev(std::end(mergedChunksPsum)),
-            std::next(std::begin(mergedChunksPsum)),
-            std::back_inserter(chunks_to_merge),
-            [rbuf = out](auto first, auto last) {
-              return std::make_pair(
-                  std::next(rbuf, first), std::next(rbuf, last));
-            });
-        op(chunks_to_merge, mergeBuffer.begin());
-        mergedChunksPsum.erase(
-            std::next(std::begin(mergedChunksPsum)),
-            std::prev(std::end(mergedChunksPsum)));
-        std::move(mergeBuffer.begin(), mergeBuffer.end(), out);
+          A2A_ASSERT(chunks_to_merge.empty());
+
+          buffer_t mergeBuffer{std::size_t(nr) * blocksize};
+          std::transform(
+              std::begin(mergedChunksPsum),
+              std::prev(std::end(mergedChunksPsum)),
+              std::next(std::begin(mergedChunksPsum)),
+              std::back_inserter(chunks_to_merge),
+              [rbuf = out](auto first, auto last) {
+                return std::make_pair(
+                    std::next(rbuf, first), std::next(rbuf, last));
+              });
+          op(chunks_to_merge, mergeBuffer.begin());
+          mergedChunksPsum.erase(
+              std::next(std::begin(mergedChunksPsum)),
+              std::prev(std::end(mergedChunksPsum)));
+          std::move(mergeBuffer.begin(), mergeBuffer.end(), out);
+        }
       }
-
       trace.tock(MERGE);
     }
     trace.tick(MERGE);
@@ -820,6 +837,7 @@ inline void scatteredPairwiseWaitsome(
       A2A_ASSERT(chunks_to_merge.empty());
 
       buffer_t mergeBuffer{std::size_t(nr) * blocksize};
+      // generate pairs of chunks to merge
       std::transform(
           std::begin(mergedChunksPsum),
           std::prev(std::end(mergedChunksPsum)),
@@ -829,7 +847,9 @@ inline void scatteredPairwiseWaitsome(
             return std::make_pair(
                 std::next(rbuf, first), std::next(rbuf, last));
           });
+      // merge
       op(chunks_to_merge, mergeBuffer.begin());
+      // switch buffer back to output iterator
       std::move(mergeBuffer.begin(), mergeBuffer.end(), out);
     }
 
