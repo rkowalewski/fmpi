@@ -41,9 +41,26 @@ then
     fi
   done
 else
+  if [ ! -d "$DIR" ]
+  then
+    echo "not a directory: $DIR"
+    exit 1
+  fi
   gatherStatistics "$DIR"
 fi
 
 echo "-- splitting CSV results"
 bash "$SCRIPTPATH/splitCSV.sh"
+
+echo "-- calculating overall statistics"
+if [ -z "$DIR" ]
+then
+  for f in $(ls -1 "${SCRIPTPATH}/results")
+  do
+    echo "not implemented yet"
+  done
+else
+  _dir="$(basename $DIR)"
+  Rscript "$SCRIPTPATH/R/selectTop.R" "$SCRIPTPATH/results/${_dir}.csv" "$SCRIPTPATH/results/partials/${_dir}/${_dir}"
+fi
 
