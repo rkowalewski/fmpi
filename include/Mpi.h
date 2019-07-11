@@ -1,7 +1,8 @@
-#ifndef MPI_H__INCLUDED
-#define MPI_H__INCLUDED
+#ifndef MPI_H
+#define MPI_H
 
 #include <mpi.h>
+
 #include <array>
 #include <type_traits>
 

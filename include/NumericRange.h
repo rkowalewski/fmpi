@@ -1,5 +1,5 @@
-#ifndef DASH__META__NUMERICRANGE_H
-#define DASH__META__NUMERICRANGE_H
+#ifndef NUMERICRANGE_H
+#define NUMERICRANGE_H
 // -*- C++ -*-
 // Copyright (c) 2017, Just Software Solutions Ltd
 // All rights reserved.
@@ -56,7 +56,7 @@ template <typename T>
 struct IncrementBy {
   T delta;
 
-  IncrementBy(T delta_)
+  explicit IncrementBy(T delta_)
     : delta(std::move(delta_))
   {
   }
@@ -83,9 +83,9 @@ class numeric_range {
     if (m_dir == direction::increasing) {
       return m_current >= m_final;
     }
-    else {
+    
       return m_current <= m_final;
-    }
+    
   }
 
  public:
@@ -103,7 +103,7 @@ class numeric_range {
       T value;
 
      public:
-      postinc_return(T value_)
+      explicit postinc_return(T value_)
         : value(std::move(value_))
       {
       }
@@ -120,10 +120,11 @@ class numeric_range {
     using pointer           = T*;
     using difference_type   = void;
 
-    iterator(numeric_range* range_)
+    explicit iterator(numeric_range* range_)
       : range(range_)
     {
-      if (range) check_done();
+      if (range) { check_done();
+}
     }
 
     T operator*() const
@@ -138,14 +139,15 @@ class numeric_range {
 
     iterator& operator++()
     {
-      if (!range)
+      if (!range) {
         throw std::runtime_error("Increment a past-the-end iterator");
+}
       range->m_inc(range->m_current);
       check_done();
       return *this;
     }
 
-    postinc_return operator++(int)
+    const postinc_return operator++(int)
     {
       postinc_return temp(**this);
       ++*this;
@@ -197,7 +199,8 @@ class numeric_range {
 template <typename T>
 numeric_range<T> range(T from, T to)
 {
-  if (to < from) throw std::runtime_error("Cannot count down ");
+  if (to < from) { throw std::runtime_error("Cannot count down ");
+}
   return numeric_range<T>(std::move(from), std::move(to));
 }
 
@@ -210,7 +213,8 @@ numeric_range<T> range(T to)
 template <typename T>
 numeric_range<T, IncrementBy<T>> range(T from, T to, T delta)
 {
-  if (!delta) throw std::runtime_error("Step must be non-zero");
+  if (!delta) { throw std::runtime_error("Step must be non-zero");
+}
   using direction = typename numeric_range<T, IncrementBy<T>>::direction;
   direction const m_dir =
       (delta > T()) ? direction::increasing : direction::decreasing;

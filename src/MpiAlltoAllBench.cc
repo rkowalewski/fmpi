@@ -23,7 +23,7 @@
 #include <Version.h>
 #include <parallel/algorithm>
 
-#define W(X) #X << "=" << X << ", "
+#define W(X) #X << "=" << (X) << ", "
 
 constexpr size_t KB = 1 << 10;
 constexpr size_t MB = 1 << 20;
@@ -41,7 +41,7 @@ constexpr size_t minblocksize = 128;
 //constexpr size_t minblocksize = 32768 * 2;
 /* If maxblocksiz == 0, this means that we use the capacity per node and scale
  * the minblocksize in successive steps */
-constexpr size_t maxblocksize = 32768;
+constexpr size_t maxblocksize = 1024;
 /* constexpr size_t maxblocksize = runtime argument */
 
 // This are approximately 25 GB
@@ -254,10 +254,10 @@ int main(int argc, char* argv[])
 
     auto nels = sendcount * nr;
 
-    data.reset(new value_t[nels]);
-    out.reset(new value_t[nels]);
+    data = std::make_unique<value_t[]>(nels);
+    out = std::make_unique<value_t[]>(nels);
 #ifndef NDEBUG
-    correct.reset(new value_t[nels]);
+    correct = std::make_unique<value_t[]>(nels);
 #endif
 
     for (size_t it = 0; it < niters + nwarmup; ++it) {
@@ -309,7 +309,7 @@ int main(int argc, char* argv[])
       A2A_ASSERT(std::is_sorted(&correct[0], &(correct[nels])));
 #endif
 
-      Params p;
+      Params p{};
       p.nhosts    = nhosts;
       p.nprocs    = nr;
       p.me        = me;
@@ -380,7 +380,7 @@ void printMeasurementHeader(std::ostream& os)
 void printMeasurementCsvLine(
     std::ostream&                      os,
     Params                             m,
-    std::string                        algorithm,
+    const std::string&                        algorithm,
     std::tuple<double, double, double> times)
 {
   double total, tmerge, tcomm;

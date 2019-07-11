@@ -1,5 +1,5 @@
-#ifndef CONSTANTS_H__INCLUDED
-#define CONSTANTS_H__INCLUDED
+#ifndef CONSTANTS_H
+#define CONSTANTS_H
 namespace a2a {
 static constexpr char MERGE[]         = "merge";
 static constexpr char COMMUNICATION[] = "communication";

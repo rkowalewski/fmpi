@@ -1,5 +1,5 @@
-#ifndef BRUCK_H__INCLUDED
-#define BRUCK_H__INCLUDED
+#ifndef ALLTOALL_H
+#define ALLTOALL_H
 
 #include <mpi.h>
 
@@ -22,6 +22,7 @@
 #include <Trace.h>
 
 namespace a2a {
+#if 0
 
 template <class InputIt, class OutputIt, class Op>
 inline void flatHandshake(
@@ -195,6 +196,7 @@ inline void scatteredPairwise(
 #endif
   trace.tock(MERGE);
 }
+#endif
 
 template <class InputIt, class OutputIt, class Op, size_t NReqs = 1>
 inline void scatteredPairwiseWaitany(
@@ -207,7 +209,7 @@ inline void scatteredPairwiseWaitany(
   using value_type  = typename std::iterator_traits<InputIt>::value_type;
   auto mpi_datatype = mpi::mpi_datatype<value_type>::type();
 
-  std::string s = "";
+  std::string s;
   if (TraceStore::GetInstance().enabled()) {
     std::ostringstream os;
     os << "ScatteredPairwiseWaitany" << NReqs;
@@ -417,27 +419,27 @@ class CommState {
     }
   }
 
-  iterator_t receive_allocate(int idx)
+  iterator_t receive_allocate(int key)
   {
     A2A_ASSERT(m_arena_freelist.size() > 0);
-    A2A_ASSERT(0 <= idx && std::size_t(idx) < NReqs);
-    A2A_ASSERT(m_freelist.size() && m_freelist.size() <= MAX_FREE_CHUNKS);
+    A2A_ASSERT(0 <= key && std::size_t(key) < NReqs);
+    A2A_ASSERT(!m_freelist.empty() && m_freelist.size() <= MAX_FREE_CHUNKS);
 
     // access last block remove it from stack
     auto freeBlock = m_freelist.top();
     m_freelist.pop();
 
-    m_pending[idx] = freeBlock;
+    m_pending[key] = freeBlock;
     return freeBlock.first;
   }
 
-  void receive_complete(int idx)
+  void receive_complete(int key)
   {
     A2A_ASSERT(m_arena_completed.size() > 0);
-    A2A_ASSERT(0 <= idx && std::size_t(idx) < NReqs);
+    A2A_ASSERT(0 <= key && std::size_t(key) < NReqs);
     A2A_ASSERT(m_completed.size() < MAX_COMPLETED_CHUNKS);
 
-    auto block = m_pending[idx];
+    auto block = m_pending[key];
     m_completed.push_back(block);
   }
 
@@ -453,7 +455,7 @@ class CommState {
     // 2) reset completed receives
     m_completed.clear();
 
-    A2A_ASSERT(m_freelist.size() && m_freelist.size() <= MAX_FREE_CHUNKS);
+    A2A_ASSERT(!m_freelist.empty() && m_freelist.size() <= MAX_FREE_CHUNKS);
   }
 
   std::size_t available_slots() const noexcept
@@ -461,7 +463,7 @@ class CommState {
     return m_freelist.size();
   }
 
-  chunks_storage_t<MAX_COMPLETED_CHUNKS> const& completed_receives() const
+  chunks_storage_t<MAX_COMPLETED_CHUNKS> const& completed_receives() const noexcept
   {
     return m_completed;
   }
@@ -489,7 +491,7 @@ inline void scatteredPairwiseWaitsome(
   using value_type  = typename std::iterator_traits<InputIt>::value_type;
   auto mpi_datatype = mpi::mpi_datatype<value_type>::type();
 
-  std::string s = "";
+  std::string s;
   if (TraceStore::GetInstance().enabled()) {
     std::ostringstream os;
     os << "ScatteredPairwiseWaitany" << NReqs;
@@ -500,7 +502,7 @@ inline void scatteredPairwiseWaitsome(
 
   trace.tick(COMMUNICATION);
 
-  std::array<MPI_Request, 2 * NReqs> reqs;
+  std::array<MPI_Request, 2 * NReqs> reqs{};
   std::uninitialized_fill(std::begin(reqs), std::end(reqs), MPI_REQUEST_NULL);
 
   auto const totalExchanges = static_cast<size_t>(nr - 1);
@@ -628,7 +630,7 @@ inline void scatteredPairwiseWaitsome(
     trace.tock(COMMUNICATION);
 
     // request indexes indexes which have been completed so far
-    std::array<int, reqs.size()> reqsCompleted;
+    std::array<int, reqs.size()> reqsCompleted{};
 
     std::vector<std::size_t> mergedChunksPsum;
     mergedChunksPsum.reserve(nr);
@@ -839,74 +841,6 @@ inline void scatteredPairwiseWaitsome(
                 std::begin(mergedChunksPsum), std::end(mergedChunksPsum)));
   }
   A2A_ASSERT(std::is_sorted(out, out + nr * blocksize));
-}
-
-template <class InputIt, class OutputIt, class Op>
-inline void hypercube(
-    InputIt begin, OutputIt out, int blocksize, MPI_Comm comm, Op&& /*op*/)
-{
-  int me, nr;
-  MPI_Comm_rank(comm, &me);
-  MPI_Comm_size(comm, &nr);
-
-  A2A_ASSERT(nr > 0);
-
-  auto isPower2 = isPow2(static_cast<unsigned>(nr));
-
-  if (!isPower2) {
-    return;
-  }
-
-  auto trace = TimeTrace{me, "Hypercube"};
-  trace.tick(COMMUNICATION);
-
-  auto partner = me ^ 1;
-
-  auto reqs = a2a::sendrecv(
-      std::next(begin, partner * blocksize),
-      blocksize,
-      partner,
-      100,
-      std::next(out, partner * blocksize),
-      blocksize,
-      partner,
-      100,
-      comm);
-
-  std::copy(
-      begin + me * blocksize,
-      begin + me * blocksize + blocksize,
-      out + me * blocksize);
-
-  for (int i = 2; i < nr; ++i) {
-    partner = me ^ i;
-
-    // Wait for previous round
-    A2A_ASSERT_RETURNS(
-        MPI_Waitall(reqs.size(), &(reqs[0]), MPI_STATUSES_IGNORE),
-        MPI_SUCCESS);
-
-    reqs = a2a::sendrecv(
-        std::next(begin, partner * blocksize),
-        blocksize,
-        partner,
-        100,
-        std::next(out, partner * blocksize),
-        blocksize,
-        partner,
-        100,
-        comm);
-  }
-
-  // Wait for final round
-  A2A_ASSERT_RETURNS(
-      MPI_Waitall(reqs.size(), &(reqs[0]), MPI_STATUSES_IGNORE), MPI_SUCCESS);
-
-  trace.tock(COMMUNICATION);
-
-  trace.tick(MERGE);
-  // merging
-  trace.tock(MERGE);
 }
 
 template <class InputIt, class OutputIt, class Op>

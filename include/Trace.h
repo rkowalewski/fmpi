@@ -1,5 +1,5 @@
-#ifndef TRACE_H__INCLUDED
-#define TRACE_H__INCLUDED
+#ifndef TRACE_H
+#define TRACE_H
 
 #include <iosfwd>
 #include <memory>
@@ -47,8 +47,8 @@ class TimeTrace {
 
   bool enabled() const noexcept;
 
-  void tick(TraceStore::key_t key);
-  void tock(TraceStore::key_t key);
+  void tick(const TraceStore::key_t& key);
+  void tock(const TraceStore::key_t& key);
 
   std::unordered_map<TraceStore::key_t, TraceStore::value_t> const &
   measurements() const;

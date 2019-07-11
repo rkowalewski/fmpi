@@ -17,7 +17,7 @@ namespace a2a {
 
 template <class InputIt, class OutputIt, class Op>
 inline void bruck(
-    InputIt begin, OutputIt out, int blocksize, MPI_Comm comm, Op&&)
+    InputIt begin, OutputIt out, int blocksize, MPI_Comm comm, Op&& /*unused*/)
 {
   using rank_t = int;
   rank_t me, nr;
@@ -132,7 +132,7 @@ inline void bruck(
 
 template <class InputIt, class OutputIt, class Op>
 inline void bruck_mod(
-    InputIt begin, OutputIt out, int blocksize, MPI_Comm comm, Op&&)
+    InputIt begin, OutputIt out, int blocksize, MPI_Comm comm, Op&& /*unused*/)
 {
   using rank_t = int;
   rank_t me, nr;

@@ -70,7 +70,7 @@ inline auto oneFactor_even(int nr)
 
 inline auto oneFactor(int nr)
 {
-  if (nr % 2) {
+  if ((nr % 2) != 0) {
     return oneFactor_odd(nr);
   }
   return oneFactor_even(nr);
@@ -114,12 +114,13 @@ inline auto hypercube(int nr)
 inline auto ndigits(int nr)
 {
   size_t length = 1;
-  while (nr /= 10) length++;
+  while ((nr /= 10) != 0) { length++;
+}
   return length;
 }
 
 void print_dot(
-    std::vector<std::vector<RankPair>> tournament, std::string title)
+    std::vector<std::vector<RankPair>> tournament, const std::string& title)
 {
   auto n_ranks = tournament.size();
   auto nd      = ndigits(n_ranks);
@@ -138,7 +139,7 @@ void print_dot(
       std::cout << std::setfill('0') << std::setw(nd) << p;
       std::cout << std::setfill('0') << std::setw(nd) << r;
       if (p == 0) {
-        std::cout << " [label=\"\" xlabel=\"" << r << "\" width=.3]\n";
+        std::cout << R"( [label="" xlabel=")" << r << "\" width=.3]\n";
       }
       else {
         std::cout << " [label=\"\" width=.3]\n";
@@ -182,7 +183,7 @@ void print_dot(
 }
 
 void print_dot_directed(
-    std::vector<std::vector<RankPair>> tournament, std::string title)
+    std::vector<std::vector<RankPair>> tournament, const std::string& title)
 {
   auto n_ranks = tournament.size();
   auto nd      = ndigits(n_ranks);
@@ -201,7 +202,7 @@ void print_dot_directed(
       std::cout << std::setfill('0') << std::setw(nd) << p;
       std::cout << std::setfill('0') << std::setw(nd) << r;
       if (p == 0) {
-        std::cout << " [label=\"\" xlabel=\"" << r << "\" width=.3]\n";
+        std::cout << R"( [label="" xlabel=")" << r << "\" width=.3]\n";
       }
       else {
         std::cout << " [label=\"\" width=.3]\n";
@@ -281,7 +282,7 @@ static std::array<
              std::make_pair("hypercube", hypercube),
              std::make_pair("personalized_exchange", flatHandshake)};
 
-void print_usage(std::string prog)
+void print_usage(const std::string& prog)
 {
   std::cout << "usage: " << prog << "<algorithm> <nprocs>\n\n";
 

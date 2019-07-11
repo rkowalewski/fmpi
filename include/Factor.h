@@ -65,7 +65,7 @@ inline void oneFactor_odd(
 
 template <class InputIt, class OutputIt, class Op, std::size_t NReqs = 1>
 inline void oneFactor_even(
-    InputIt begin, OutputIt out, int blocksize, MPI_Comm comm, Op&&)
+    InputIt begin, OutputIt out, int blocksize, MPI_Comm comm, Op&& /*unused*/)
 {
   int me, nr;
   MPI_Comm_rank(comm, &me);
@@ -79,12 +79,12 @@ inline void oneFactor_even(
     if (me == nr - 1) {
       return idle;
     }
-    else if (me == idle) {
+    if (me == idle) {
       return nr - 1;
     }
-    else {
+    
       return mod(step - me, nr - 1);
-    }
+    
   };
 
   auto trace = TimeTrace{me, "OneFactor"};

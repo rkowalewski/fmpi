@@ -1,5 +1,5 @@
-#ifndef MACRO_H__INCLUDED
-#define MACRO_H__INCLUDED
+#ifndef DEBUG_H
+#define DEBUG_H
 #include <algorithm>
 #include <iostream>
 #include <iterator>
@@ -21,7 +21,7 @@
 
 #include <cassert>
 #define A2A_ASSERT(x) assert(x)
-#define A2A_ASSERT_RETURNS(x, ret) A2A_ASSERT((x) == ret)
+#define A2A_ASSERT_RETURNS(x, ret) A2A_ASSERT((x) == (ret))
 #endif
 
 template <class InputIt>
@@ -45,19 +45,20 @@ auto tokenizeRange(InputIt begin, InputIt end)
   return os.str();
 }
 
-
 #define P(x)
 #define PRANGE(a, b)
 
 #ifndef NDEBUG
 #ifdef A2A_ENABLE_LOGGING
 #undef P
+// NOLINT
 #define P(x)                                                                 \
   do {                                                                       \
     std::ostringstream os;                                                   \
     os << "-- [ " << __func__ << ":" << __LINE__ << " ] " << x << std::endl; \
     std::cout << os.str();                                                   \
   } while (0)
+// DISABLE_NOLINT
 
 #undef PRANGE
 #define PRANGE(a, b)                                                        \

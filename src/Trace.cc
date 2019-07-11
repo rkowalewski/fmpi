@@ -32,7 +32,7 @@ std::string const &TimeTrace::context() const noexcept
   return m_context;
 }
 
-void TimeTrace::tick(TraceStore::key_t key)
+void TimeTrace::tick(const TraceStore::key_t& key)
 {
   if (enabled()) {
     A2A_ASSERT(m_cache.find(key) == std::end(m_cache));
@@ -40,7 +40,7 @@ void TimeTrace::tick(TraceStore::key_t key)
   }
 }
 
-void TimeTrace::tock(TraceStore::key_t key)
+void TimeTrace::tock(const TraceStore::key_t& key)
 {
   auto &store = TraceStore::GetInstance();
   if (store.enabled()) {
@@ -114,9 +114,9 @@ TraceStore &TraceStore::GetInstance()
 {
   std::call_once(m_onceFlag, [] {
     m_instance.reset(new TraceStore);
-    (*m_instance.get()).m_enabled = isTraceEnvironFlagEnabled();
+    (*m_instance).m_enabled = isTraceEnvironFlagEnabled();
   });
-  return *m_instance.get();
+  return *m_instance;
 }
 
 void TraceStore::clear()

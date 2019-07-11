@@ -1,5 +1,5 @@
-#ifndef MATH_H__INCLUDED
-#define MATH_H__INCLUDED
+#ifndef MATH_H
+#define MATH_H
 
 #include <Debug.h>
 #include <type_traits>

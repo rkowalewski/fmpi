@@ -1,5 +1,5 @@
-#ifndef TYPES_H__INCLUDED
-#define TYPES_H__INCLUDED
+#ifndef TYPES_H
+#define TYPES_H
 #include <mpi.h>
 
 #include <type_traits>
