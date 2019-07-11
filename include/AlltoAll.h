@@ -383,7 +383,7 @@ class CommState {
   using chunk_t    = std::pair<iterator_t, iterator_t>;
 
   // Buffer for up to 2 * NReqs pending chunks
-  static constexpr size_t MAX_FREE_CHUNKS = 2* NReqs;
+  static constexpr size_t MAX_FREE_CHUNKS      = 2 * NReqs;
   static constexpr size_t MAX_COMPLETED_CHUNKS = MAX_FREE_CHUNKS;
 
   template <std::size_t N>
@@ -507,6 +507,21 @@ inline void scatteredPairwiseWaitsome(
   auto const totalReqs      = 2 * totalExchanges;
   auto const reqsInFlight   = std::min(totalExchanges, NReqs);
 
+  auto recvRank = [nr, me](int phase) {
+    if (a2a::isPow2(static_cast<unsigned>(nr))) {
+      return me ^ phase;
+    }
+    return mod(me - phase, nr);
+  };
+
+  auto sendRank = [nr, me](int phase) {
+    if (a2a::isPow2(static_cast<unsigned>(nr))) {
+      return me ^ phase;
+    }
+
+    return mod(me + phase, nr);
+  };
+
   // allocate the communication state which provides the receive buffer enough
   // blocks of size blocksize.
   CommState<value_type, NReqs> commState{std::size_t(blocksize)};
@@ -517,7 +532,7 @@ inline void scatteredPairwiseWaitsome(
 
   for (nrreqs = 0; nrreqs < reqsInFlight; ++nrreqs) {
     // receive from
-    auto recvfrom = mod(me - static_cast<int>(nrreqs) - 1, nr);
+    auto recvfrom = recvRank(nrreqs + 1);
 
     P(me << " recvfrom block " << recvfrom << ", req " << nrreqs);
 
@@ -540,7 +555,7 @@ inline void scatteredPairwiseWaitsome(
 
   for (nsreqs = 0; nsreqs < reqsInFlight; ++nsreqs) {
     // receive from
-    auto sendto = mod(me + static_cast<int>(nsreqs) + 1, nr);
+    auto sendto = sendRank(nsreqs + 1);
 
     auto reqIdx = nsreqs + reqsInFlight;
 
@@ -659,7 +674,8 @@ inline void scatteredPairwiseWaitsome(
           std::distance(fstCompletedReq, fstSendRequest);
       auto const nSentChunks = std::distance(fstSendRequest, lstCompletedReq);
 
-      P(me << " available chunks to merge: " << commState.completed_receives().size() + nReceivedChunks);
+      P(me << " available chunks to merge: "
+           << commState.completed_receives().size() + nReceivedChunks);
 
       // mark all receives
       std::for_each(
@@ -681,7 +697,7 @@ inline void scatteredPairwiseWaitsome(
            it < fstSendRequest &&
            nPosted < std::min(commState.available_slots(), openReceives);
            ++it, ++nPosted) {
-        auto recvfrom = mod(me - static_cast<int>(nrreqs) - 1, nr);
+        auto recvfrom = recvRank(nrreqs + 1);
 
         auto reqIdx = *it;
 
@@ -714,7 +730,7 @@ inline void scatteredPairwiseWaitsome(
 
         // a send request is done, so post a new one...
         // receive from
-        auto sendto = mod(me + static_cast<int>(nsreqs) + 1, nr);
+        auto sendto = sendRank(nsreqs + 1);
 
         P(me << " sendto " << sendto);
 
