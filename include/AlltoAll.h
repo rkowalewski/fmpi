@@ -512,7 +512,7 @@ inline void scatteredPairwiseWaitsome(
   std::string s;
   if (TraceStore::GetInstance().enabled()) {
     std::ostringstream os;
-    os << "ScatteredPairwiseWaitany" << NReqs;
+    os << "ScatteredPairwiseWaitsome" << NReqs;
     s = os.str();
   }
 
