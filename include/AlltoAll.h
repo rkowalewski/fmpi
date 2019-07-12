@@ -711,8 +711,9 @@ inline void scatteredPairwiseWaitsome(
                             // number of free memory slots
                             commState.available_slots()};
 
-
-      P(me << " open receives: " << totalExchanges - nrreqs << ", received chunks: " << nReceivedChunks << ", avaiable slots: " << commState.available_slots());
+      P(me << " open receives: " << totalExchanges - nrreqs
+           << ", received chunks: " << nReceivedChunks
+           << ", avaiable slots: " << commState.available_slots());
       auto const maxRecvs =
           *std::min_element(std::begin(maxVals), std::end(maxVals));
 
