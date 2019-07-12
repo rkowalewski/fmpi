@@ -411,7 +411,7 @@ class CommState {
   {
     std::fill(std::begin(m_pending), std::end(m_pending), chunk_t{});
 
-    auto r = a2a::range<std::size_t>(MAX_FREE_CHUNKS - 1, -1, -1);
+    auto r = a2a::range<int>(MAX_FREE_CHUNKS - 1, -1, -1);
 
     for (auto const& block : r) {
       auto f = std::next(std::begin(m_buffer), block * blocksize);

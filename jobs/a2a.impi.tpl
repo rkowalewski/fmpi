@@ -17,7 +17,7 @@
 #@ island_count=1
 
 #@ wall_clock_limit=<<WCLIMIT>>
-#@ job_name=<<JOB_NAME>>
+#@ job_name=a2a.impi
 #@ network.MPI=sn_all,not_shared,us
 #@ initialdir=/home/hpc/pr92fo/di25qoy/workspaces/alltoall
 #@ output=/home/hpc/pr92fo/di25qoy/logs/$(job_name)/job.n<<NUM_NODES>>p<<NUM_PROCS>>t<<NUM_THREADS>>.$(schedd_host).$(jobid).out
@@ -65,5 +65,5 @@ export DASH_MAX_UNIT_THREADS=<<NUM_THREADS>>
 export A2A_ENABLE_TRACE=0
 
 mpiexec \
-    -n $((<<NUM_PROCS>> * <<NUM_NODES>>)) ./build/MpiAlltoAllBench "<<NUM_NODES>>"
+    -n $((<<NUM_PROCS>> * <<NUM_NODES>>)) ./build.impi/MpiAlltoAllBench.impi "<<NUM_NODES>>"
 
