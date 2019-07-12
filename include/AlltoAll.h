@@ -679,14 +679,15 @@ inline void scatteredPairwiseWaitsome(
 
       // we want all receive requests on the left, and send requests on the
       // right
-      auto fstSendRequest = std::partition(
+      auto const fstRecvRequest = fstCompletedReq;
+      auto const fstSendRequest = std::partition(
           fstCompletedReq, lstCompletedReq, [reqsInFlight](auto req) {
             // left half of reqs array array are receives
             return req < static_cast<int>(reqsInFlight);
           });
 
       auto const nReceivedChunks =
-          std::distance(fstCompletedReq, fstSendRequest);
+          std::distance(fstRecvRequest, fstSendRequest);
       auto const nSentChunks = std::distance(fstSendRequest, lstCompletedReq);
 
       P(me << " available chunks to merge: "
@@ -694,7 +695,7 @@ inline void scatteredPairwiseWaitsome(
 
       // mark all receives
       std::for_each(
-          fstCompletedReq, fstSendRequest, [&commState](auto reqIdx) {
+          fstRecvRequest, fstSendRequest, [&commState](auto reqIdx) {
             commState.receive_complete(reqIdx);
           });
 
@@ -710,13 +711,19 @@ inline void scatteredPairwiseWaitsome(
                             // number of free memory slots
                             commState.available_slots()};
 
+
+      P(me << " open receives: " << totalExchanges - nrreqs << ", received chunks: " << nReceivedChunks << ", avaiable slots: " << commState.available_slots());
       auto const maxRecvs =
           *std::min_element(std::begin(maxVals), std::end(maxVals));
 
-      for (auto it = fstSendRequest; it < fstSendRequest + maxRecvs; ++it) {
+      P(me << " max receives: " << maxRecvs);
+      A2A_ASSERT((fstRecvRequest + maxRecvs) <= fstSendRequest);
+      for (auto it = fstRecvRequest; it < fstRecvRequest + maxRecvs; ++it) {
         auto recvfrom = recvRank(nrreqs + 1);
 
         auto reqIdx = *it;
+
+        P(me << " allocating receive index: " << reqIdx);
 
         auto* buf = commState.receive_allocate(reqIdx);
 
