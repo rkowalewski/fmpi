@@ -96,7 +96,7 @@ static bool isTraceEnvironFlagEnabled()
     // Split into key and value:
     char *      flag_name_cstr  = env_var_kv;
     char *      flag_value_cstr = std::strstr(env_var_kv, "=");
-    int         flag_name_len   = flag_value_cstr - flag_name_cstr;
+    auto         flag_name_len   = flag_value_cstr - flag_name_cstr;
     std::string flag_name(flag_name_cstr, flag_name_cstr + flag_name_len);
     std::string flag_value(flag_value_cstr + 1);
 

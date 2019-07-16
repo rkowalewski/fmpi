@@ -6,6 +6,7 @@
 #include <cassert>
 #include <iterator>
 #include <memory>
+#include <vector>
 
 #include <Constants.h>
 #include <Debug.h>
@@ -29,7 +30,7 @@ inline void oneFactor_odd(
 
   assert(nr % 2);
 
-  auto steps = a2a::range(1, nr + 1);
+  auto steps = a2a::range(0, nr);
 
   auto trace = TimeTrace{me, "OneFactor"};
   trace.tick(COMMUNICATION);
@@ -65,7 +66,11 @@ inline void oneFactor_odd(
 
 template <class InputIt, class OutputIt, class Op, std::size_t NReqs = 1>
 inline void oneFactor_even(
-    InputIt begin, OutputIt out, int blocksize, MPI_Comm comm, Op&& /*unused*/)
+    InputIt  begin,
+    OutputIt out,
+    int      blocksize,
+    MPI_Comm comm,
+    Op&& /*unused*/)
 {
   int me, nr;
   MPI_Comm_rank(comm, &me);
@@ -82,9 +87,8 @@ inline void oneFactor_even(
     if (me == idle) {
       return nr - 1;
     }
-    
-      return mod(step - me, nr - 1);
-    
+
+    return mod(step - me, nr - 1);
   };
 
   auto trace = TimeTrace{me, "OneFactor"};
@@ -125,12 +129,35 @@ inline void oneFactor(
 {
   int nr;
   MPI_Comm_size(comm, &nr);
+
+  using value_type  = typename std::iterator_traits<InputIt>::value_type;
+  auto rbuf = std::unique_ptr<value_type[]>(new value_type[nr * blocksize]);
+
   if (nr % 2) {
-    detail::oneFactor_odd(begin, out, blocksize, comm, std::forward<Op>(op));
+    detail::oneFactor_odd(begin, &rbuf[0], blocksize, comm, std::forward<Op>(op));
   }
   else {
-    detail::oneFactor_even(begin, out, blocksize, comm, std::forward<Op>(op));
+    detail::oneFactor_even(begin, &rbuf[0], blocksize, comm, std::forward<Op>(op));
   }
+
+
+  std::vector<std::pair<InputIt, InputIt>> chunks;
+  chunks.reserve(nr);
+
+  auto range = a2a::range(0, nr * blocksize, blocksize);
+
+
+  std::transform(
+      std::begin(range),
+      std::end(range),
+      std::back_inserter(chunks),
+      [buf = rbuf.get(), blocksize](auto offset) {
+        auto f = std::next(buf, offset);
+        auto l = std::next(f, blocksize);
+        return std::make_pair(f, l);
+      });
+
+  op(chunks, out);
 }
 
 }  // namespace a2a

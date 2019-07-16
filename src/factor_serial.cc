@@ -30,11 +30,11 @@ inline auto oneFactor_odd(int nr)
   assert(nr % 2);
 
   std::vector<std::vector<RankPair>> res(nr);
-  for (int me = 1; me <= nr; ++me) {
+  for (int phase = 0; phase < nr; ++phase) {
     for (int r = 0; r < nr; ++r) {
-      res[me - 1].push_back(RankPair(r, mod(me - r, nr)));
+      res[phase].push_back(RankPair(r, mod(phase - r, nr)));
     }
-    assert(res[me - 1].size() == std::size_t(nr));
+    assert(res[phase].size() == std::size_t(nr));
   }
   return res;
 }
@@ -45,24 +45,24 @@ inline auto oneFactor_even(int nr)
 
   std::vector<std::vector<RankPair>> res(nr);
 
-  for (int me = 0; me < nr; ++me) {
-    for (int r = 0; r < nr - 1; ++r) {
-      auto idle = mod(nr * r / 2, nr - 1);
-      if (me == nr - 1) {
-        res[r + 1].push_back(RankPair{me, idle});
+  for (int phase = 0; phase < nr; ++phase) {
+    for (int me = 0; me < nr - 1; ++me) {
+      auto idle = mod(nr * me / 2, nr - 1);
+      if (phase == nr - 1) {
+        res[me + 1].push_back(RankPair{phase, idle});
       }
-      else if (me == idle) {
-        res[r + 1].push_back(RankPair{idle, nr - 1});
+      else if (phase == idle) {
+        res[me + 1].push_back(RankPair{idle, nr - 1});
       }
       else {
-        res[r + 1].push_back(RankPair{me, mod(r - me, nr - 1)});
+        res[me + 1].push_back(RankPair{phase, mod(me - phase, nr - 1)});
       }
     }
   }
 
   // self loops
-  for (int r = 0; r < nr; ++r) {
-    res[0].push_back(RankPair(r, r));
+  for (int me = 0; me < nr; ++me) {
+    res[0].push_back(RankPair(me, me));
   }
 
   return res;
@@ -114,8 +114,9 @@ inline auto hypercube(int nr)
 inline auto ndigits(int nr)
 {
   size_t length = 1;
-  while ((nr /= 10) != 0) { length++;
-}
+  while ((nr /= 10) != 0) {
+    length++;
+  }
   return length;
 }
 
@@ -173,7 +174,7 @@ void print_dot(
       std::cout << std::setfill('0') << std::setw(nd) << r + 1;
       std::cout << std::setfill('0') << std::setw(nd) << pair.second;
       if (p > 3) {
-        //std::cout << "[style=invis]";
+        // std::cout << "[style=invis]";
       }
       std::cout << "\n";
     }
@@ -248,12 +249,12 @@ void print_dot_directed(
         std::cout << std::setfill('0') << std::setw(nd) << partners.first;
         std::cout << "[color=cornflowerblue";
 
-       // if (p > 3) {
-          std::cout << ",style=invis]";
-       // }
-       // else {
-          std::cout << "]";
-       // }
+        // if (p > 3) {
+        std::cout << ",style=invis]";
+        // }
+        // else {
+        std::cout << "]";
+        // }
         std::cout << "\n";
 
         std::cout << "r";
@@ -263,7 +264,7 @@ void print_dot_directed(
         std::cout << std::setfill('0') << std::setw(nd) << r;
         std::cout << std::setfill('0') << std::setw(nd) << p;
         if (p > 3) {
-          //std::cout << "[style=invis]";
+          // std::cout << "[style=invis]";
         }
         std::cout << "\n";
       }

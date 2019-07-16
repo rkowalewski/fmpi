@@ -56,7 +56,7 @@ using iterator_t  = typename container_t::pointer;
 using benchmark_t = std::function<void(
     iterator_t, iterator_t, int, MPI_Comm, merge_t<iterator_t, iterator_t>)>;
 
-std::array<std::pair<std::string, benchmark_t>, 3> algos = {
+std::array<std::pair<std::string, benchmark_t>, 6> algos = {
     // Classic MPI All to All
     std::make_pair(
         "AlltoAll",
@@ -64,10 +64,10 @@ std::array<std::pair<std::string, benchmark_t>, 3> algos = {
             iterator_t,
             iterator_t,
             merge_t<iterator_t, iterator_t>>),
-#if 0
     // One Factorizations based on Graph Theory
     std::make_pair(
-        "OneFactor", a2a::oneFactor<iterator_t, iterator_t, merge_t>),
+        "OneFactor", a2a::oneFactor<iterator_t, iterator_t, merge_t<iterator_t, iterator_t>>),
+#if 0
     // A Simple Flat Handshake which sends and receives never to/from the same
     // rank
     std::make_pair(
@@ -98,15 +98,33 @@ std::array<std::pair<std::string, benchmark_t>, 3> algos = {
             8>),
 #endif
     std::make_pair(
-        "ScatteredPairwiseWaitsome8",
+        "ScatteredPairwiseWaitsomeFlatHandshake8",
         a2a::scatteredPairwiseWaitsome<
+            a2a::AllToAllAlgorithm::FLAT_HANDSHAKE,
             iterator_t,
             iterator_t,
             merge_t<iterator_t, iterator_t>,
             8>),
     std::make_pair(
-        "ScatteredPairwiseWaitsome16",
+        "ScatteredPairwiseWaitsomeFlatHandshake16",
         a2a::scatteredPairwiseWaitsome<
+            a2a::AllToAllAlgorithm::FLAT_HANDSHAKE,
+            iterator_t,
+            iterator_t,
+            merge_t<iterator_t, iterator_t>,
+            16>),
+    std::make_pair(
+        "ScatteredPairwiseWaitsomeOneFactor8",
+        a2a::scatteredPairwiseWaitsome<
+            a2a::AllToAllAlgorithm::ONE_FACTOR,
+            iterator_t,
+            iterator_t,
+            merge_t<iterator_t, iterator_t>,
+            8>),
+    std::make_pair(
+        "ScatteredPairwiseWaitsomeOneFactor16",
+        a2a::scatteredPairwiseWaitsome<
+            a2a::AllToAllAlgorithm::ONE_FACTOR,
             iterator_t,
             iterator_t,
             merge_t<iterator_t, iterator_t>,
@@ -210,7 +228,7 @@ int main(int argc, char* argv[])
   const size_t _maxblocksize =
       (maxblocksize == 0) ? maxprocsize / nr : maxblocksize;
 
-  auto nsteps = std::ceil(std::log2(_maxblocksize)) -
+  std::size_t nsteps = std::ceil(std::log2(_maxblocksize)) -
                 std::ceil(std::log2(minblocksize));
 
   if (nsteps <= 0) {
@@ -305,7 +323,7 @@ int main(int argc, char* argv[])
       // first we want to obtain the correct result which we can verify then
       // with our own algorithms
 #ifndef NDEBUG
-      a2a::MpiAlltoAll(&(data[0]), &(correct[0]), sendcount, comm, merger);
+      a2a::MpiAlltoAll(&(data[0]), &(correct[0]), static_cast<int>(sendcount), comm, merger);
       A2A_ASSERT(std::is_sorted(&correct[0], &(correct[nels])));
 #endif
 
@@ -332,7 +350,7 @@ int main(int argc, char* argv[])
         A2A_ASSERT(barrier.Success(comm));
 
         auto t = run_algorithm(
-            algo.second, &(data[0]), &(out[0]), sendcount, comm, merger);
+            algo.second, &(data[0]), &(out[0]), static_cast<int>(sendcount), comm, merger);
 
         //printVector(&(out[0]), &(out[nels]), me);
 
@@ -411,7 +429,7 @@ void print_env()
     // Split into key and value:
     char*       flag_name_cstr  = env_var_kv;
     char*       flag_value_cstr = std::strstr(env_var_kv, "=");
-    int         flag_name_len   = flag_value_cstr - flag_name_cstr;
+    auto         flag_name_len   = flag_value_cstr - flag_name_cstr;
     std::string flag_name(flag_name_cstr, flag_name_cstr + flag_name_len);
     std::string flag_value(flag_value_cstr + 1);
 

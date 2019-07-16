@@ -65,7 +65,7 @@ inline auto sendrecv(
           sto,
           stag,
           rbuf,
-          rcount,
+          static_cast<int>(rcount),
           mpi_datatype,
           rfrom,
           rtag,
