@@ -416,52 +416,44 @@ struct selectAlgorithm<AllToAllAlgorithm::ONE_FACTOR> {
   using type = OneFactor;
 };
 
-#if 0
-template <class Schedule, class BufAlloc, class CommOp>
+using rank_t = typename AlltoAllCommunicator::rank_t;
+
+template <class Schedule, class ReqIdx, class BufAlloc, class CommOp>
 inline auto enqueueMpiOps(
-    typename AlltoAllCommunicator::rank_t firstPhase,
-    typename AlltoAllCommunicator::rank_t lastPhase,
-    Schedule&&                            schedule,
-    BufAlloc&&                            bufAlloc,
-    CommOp&&                              commOp)
+    rank_t const firstPhase,
+    rank_t const me,
+    rank_t const reqsInFlight,
+    Schedule&&   partner,
+    ReqIdx&&     reqIdx,
+    BufAlloc&&   bufAlloc,
+    CommOp&&     commOp)
 {
-  using rank_t  = AlltoAllCommunicator::rank_t;
-  rank_t nrreqs = 0, rphase = firstPhase;
+  rank_t phase, nreqs;
 
-  for (rphase = 0; rphase < lastPhase; ++rphase) {
-    // receive from
-    P(me << " phase " << rphase);
-    auto recvfrom = schedule.recvRank(static_cast<int>(rphase));
+  for (phase = firstPhase, nreqs = 0; nreqs < reqsInFlight; ++phase) {
+    auto peer = partner(phase);
 
-    if (recvfrom == me) {
-      P(me << " skipping recv phase " << rphase);
+    if (peer == me) {
+      P(me << " skipping local phase " << phase);
       continue;
     }
 
-    P(me << " recvfrom block " << recvfrom << ", req " << nrreqs);
+    auto idx = reqIdx(nreqs);
 
-    auto* buf = bufAlloc(nrreqs);
+    P(me << " exchanging data with " << peer << " phase " << phase
+         << " reqIdx " << idx);
 
-    A2A_ASSERT(rbuf);
+    auto* buf = bufAlloc(peer, idx);
 
-    commOp(
+    A2A_ASSERT(buf);
 
-    // post request
-    A2A_ASSERT_RETURNS(
-        MPI_Irecv(
-            rbuf,
-            blocksize,
-            mpi_datatype,
-            recvfrom,
-            100,
-            comm,
-            &(reqs[nrreqs])),
-        MPI_SUCCESS);
+    A2A_ASSERT_RETURNS(commOp(buf, peer, idx), MPI_SUCCESS);
 
-    ++nrreqs;
+    ++nreqs;
   }
+
+  return phase;
 }
-#endif
 }  // namespace detail
 
 template <
@@ -522,65 +514,69 @@ inline void scatteredPairwiseWaitsome(
 
   A2A_ASSERT(2 * reqsInFlight <= reqs.size());
 
-  std::size_t nsreqs, nrreqs;
-  int         sphase, rphase;
+  std::size_t nsreqs = 0, nrreqs = 0, sphase = 0, rphase = 0;
 
-  for (nrreqs = 0, rphase = 0; nrreqs < reqsInFlight; ++rphase) {
-    // receive from
-    P(me << " phase " << rphase);
-    auto recvfrom = commAlgo.recvRank(static_cast<int>(rphase));
+  auto rschedule = [&commAlgo](auto phase) {
+    return commAlgo.recvRank(phase);
+  };
 
-    if (recvfrom == me) {
-      P(me << " skipping recv phase " << rphase);
-      continue;
-    }
+  auto rbufAlloc = [&commState](auto /*peer*/, auto reqIdx) {
+    return commState.receive_allocate(reqIdx);
+  };
 
-    P(me << " recvfrom block " << recvfrom << ", req " << nrreqs);
+  auto receiveOp = [reqs = &reqs[0], blocksize, mpi_datatype, comm](
+                       auto* buf, auto peer, auto reqIdx) {
+    return MPI_Irecv(
+        buf,
+        blocksize,
+        mpi_datatype,
+        peer,
+        100,
+        comm,
+        std::next(reqs, reqIdx));
+  };
 
-    auto* rbuf = commState.receive_allocate(static_cast<int>(nrreqs));
+  rphase = detail::enqueueMpiOps(
+      rphase,
+      me,
+      reqsInFlight,
+      rschedule,
+      [](auto nreqs) { return nreqs; },
+      rbufAlloc,
+      receiveOp);
 
-    A2A_ASSERT(rbuf);
+  nrreqs += reqsInFlight;
 
-    // post request
-    A2A_ASSERT_RETURNS(
-        MPI_Irecv(
-            rbuf,
-            blocksize,
-            mpi_datatype,
-            recvfrom,
-            100,
-            comm,
-            &(reqs[nrreqs])),
-        MPI_SUCCESS);
+  auto sschedule = [&commAlgo](auto phase) {
+    return commAlgo.sendRank(phase);
+  };
 
-    ++nrreqs;
-  }
+  auto sbufAlloc = [begin, blocksize](auto peer, auto /*reqIdx*/) {
+    return &*std::next(begin, peer * blocksize);
+  };
 
-  for (nsreqs = 0, sphase = 0; nsreqs < reqsInFlight; ++sphase) {
-    // receive from
-    P(me << " phase " << sphase);
-    auto sendto = commAlgo.sendRank(sphase);
+  auto sendOp = [reqs = &reqs[0], blocksize, mpi_datatype, comm](
+                    auto* buf, auto peer, auto reqIdx) {
+    return MPI_Isend(
+        buf,
+        blocksize,
+        mpi_datatype,
+        peer,
+        100,
+        comm,
+        std::next(reqs, reqIdx));
+  };
 
-    if (sendto == me) {
-      P(me << " skipping send phase " << sphase);
-      continue;
-    }
+  sphase = detail::enqueueMpiOps(
+      sphase,
+      me,
+      reqsInFlight,
+      sschedule,
+      [reqsInFlight](auto nreqs) { return nreqs + reqsInFlight; },
+      sbufAlloc,
+      sendOp);
 
-    auto reqIdx = nsreqs + reqsInFlight;
-
-    P(me << " sendto block " << sendto << ", req " << reqIdx);
-    A2A_ASSERT_RETURNS(
-        MPI_Isend(
-            std::next(begin, sendto * blocksize),
-            blocksize,
-            mpi_datatype,
-            sendto,
-            100,
-            comm,
-            &(reqs[reqIdx])),
-        MPI_SUCCESS);
-    ++nsreqs;
-  }
+  nsreqs += reqsInFlight;
 
   auto alreadyDone = reqsInFlight == totalExchanges;
 
@@ -713,66 +709,34 @@ inline void scatteredPairwiseWaitsome(
 
       A2A_ASSERT((fstRecvRequest + maxRecvs) <= fstSendRequest);
 
-      for (auto it = fstRecvRequest; it < fstRecvRequest + maxRecvs;
-           ++rphase) {
-        auto recvfrom = commAlgo.recvRank(rphase);
+      rphase = detail::enqueueMpiOps(
+          rphase,
+          me,
+          maxRecvs,
+          rschedule,
+          [fstRecvRequest](auto nreqs) {
+            return *std::next(fstRecvRequest, nreqs);
+          },
+          rbufAlloc,
+          receiveOp);
 
-        if (recvfrom == me) {
-          continue;
-        }
-
-        auto reqIdx = *it;
-
-        auto* buf = commState.receive_allocate(reqIdx);
-
-        A2A_ASSERT(buf);
-
-        P(me << " recvfrom block " << recvfrom << ", req " << reqIdx);
-
-        A2A_ASSERT_RETURNS(
-            MPI_Irecv(
-                buf,
-                blocksize,
-                mpi_datatype,
-                recvfrom,
-                100,
-                comm,
-                &(reqs[reqIdx])),
-            MPI_SUCCESS);
-        ++nrreqs;
-        ++it;
-      }
+      nrreqs += maxRecvs;
 
       auto const maxSents =
           std::min<std::size_t>(totalExchanges - nsreqs, nSentChunks);
 
-      for (auto it = fstSendRequest; it < fstSendRequest + maxSents;
-           ++sphase) {
-        auto reqIdx = *it;
+      sphase = detail::enqueueMpiOps(
+          sphase,
+          me,
+          maxSents,
+          sschedule,
+          [fstSendRequest](auto nreqs) {
+            return *std::next(fstSendRequest, nreqs);
+          },
+          sbufAlloc,
+          sendOp);
 
-        // a send request is done, so post a new one...
-        // receive from
-        auto sendto = commAlgo.sendRank(sphase);
-
-        if (sendto == me) {
-          continue;
-        }
-
-        P(me << " sendto " << sendto);
-
-        A2A_ASSERT_RETURNS(
-            MPI_Isend(
-                std::next(begin, sendto * blocksize),
-                blocksize,
-                mpi_datatype,
-                sendto,
-                100,
-                comm,
-                &(reqs[reqIdx])),
-            MPI_SUCCESS);
-        ++nsreqs;
-        ++it;
-      }
+      nsreqs += maxSents;
 
       trace.tock(COMMUNICATION);
 
