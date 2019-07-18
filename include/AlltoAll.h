@@ -384,7 +384,7 @@ class OneFactor : public detail::AlltoAllCommunicator {
  private:
   constexpr rank_t factor_even(rank_t phase) const noexcept
   {
-    rank_t idle = mod(size() * phase / 2, size() - 1);
+    rank_t idle = mod<rank_t>(size() * phase / 2, size() - 1);
 
     if (me() == static_cast<rank_t>(size()) - 1) {
       return idle;
