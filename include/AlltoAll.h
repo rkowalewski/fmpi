@@ -329,16 +329,6 @@ class AlltoAllCommunicator {
     return m_me;
   }
 
-  constexpr unsigned phaseCount() const noexcept
-  {
-    return size();
-  }
-
-  constexpr unsigned localPhase() const noexcept
-  {
-    return 0;
-  }
-
  private:
   std::uint32_t m_nr{};
   rank_t        m_me{MPI_PROC_NULL};
@@ -425,6 +415,53 @@ template <>
 struct selectAlgorithm<AllToAllAlgorithm::ONE_FACTOR> {
   using type = OneFactor;
 };
+
+#if 0
+template <class Schedule, class BufAlloc, class CommOp>
+inline auto enqueueMpiOps(
+    typename AlltoAllCommunicator::rank_t firstPhase,
+    typename AlltoAllCommunicator::rank_t lastPhase,
+    Schedule&&                            schedule,
+    BufAlloc&&                            bufAlloc,
+    CommOp&&                              commOp)
+{
+  using rank_t  = AlltoAllCommunicator::rank_t;
+  rank_t nrreqs = 0, rphase = firstPhase;
+
+  for (rphase = 0; rphase < lastPhase; ++rphase) {
+    // receive from
+    P(me << " phase " << rphase);
+    auto recvfrom = schedule.recvRank(static_cast<int>(rphase));
+
+    if (recvfrom == me) {
+      P(me << " skipping recv phase " << rphase);
+      continue;
+    }
+
+    P(me << " recvfrom block " << recvfrom << ", req " << nrreqs);
+
+    auto* buf = bufAlloc(nrreqs);
+
+    A2A_ASSERT(rbuf);
+
+    commOp(
+
+    // post request
+    A2A_ASSERT_RETURNS(
+        MPI_Irecv(
+            rbuf,
+            blocksize,
+            mpi_datatype,
+            recvfrom,
+            100,
+            comm,
+            &(reqs[nrreqs])),
+        MPI_SUCCESS);
+
+    ++nrreqs;
+  }
+}
+#endif
 }  // namespace detail
 
 template <
@@ -519,10 +556,7 @@ inline void scatteredPairwiseWaitsome(
     ++nrreqs;
   }
 
-  for (nsreqs = 0, sphase = 0;
-       nsreqs < reqsInFlight &&
-       sphase < static_cast<int>(commAlgo.phaseCount());
-       ++sphase) {
+  for (nsreqs = 0, sphase = 0; nsreqs < reqsInFlight; ++sphase) {
     // receive from
     P(me << " phase " << sphase);
     auto sendto = commAlgo.sendRank(sphase);
@@ -693,7 +727,7 @@ inline void scatteredPairwiseWaitsome(
 
         A2A_ASSERT(buf);
 
-        P(me << " recvfrom " << recvfrom);
+        P(me << " recvfrom block " << recvfrom << ", req " << reqIdx);
 
         A2A_ASSERT_RETURNS(
             MPI_Irecv(
