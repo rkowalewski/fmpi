@@ -524,8 +524,11 @@ inline void scatteredPairwiseWaitsome(
     return commState.receive_allocate(reqIdx);
   };
 
-  auto receiveOp = [reqs = &reqs[0], blocksize, mpi_datatype, comm](
+  auto receiveOp = [reqs = &reqs[0], blocksize, mpi_datatype, comm, me](
                        auto* buf, auto peer, auto reqIdx) {
+
+    P(me << " receiving from " << peer << " reqIdx " << reqIdx);
+
     return MPI_Irecv(
         buf,
         blocksize,
@@ -555,8 +558,9 @@ inline void scatteredPairwiseWaitsome(
     return &*std::next(begin, peer * blocksize);
   };
 
-  auto sendOp = [reqs = &reqs[0], blocksize, mpi_datatype, comm](
+  auto sendOp = [reqs = &reqs[0], blocksize, mpi_datatype, comm, me](
                     auto* buf, auto peer, auto reqIdx) {
+    P(me << " sending to " << peer << " reqIdx " << reqIdx);
     return MPI_Isend(
         buf,
         blocksize,
