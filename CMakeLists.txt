@@ -124,7 +124,6 @@ target_link_libraries(MPISynchronizedBarrier PRIVATE MPI::MPI_CXX)
 add_executable(MpiAlltoAllBench src/MpiAlltoAllBench.cc src/MpiAlltoAllBench.h src/Trace.cc)
 # set debug postfix in binary
 set_target_properties(MpiAlltoAllBench PROPERTIES DEBUG_POSTFIX ".${CMAKE_DEBUG_POSTFIX}")
-set_target_properties(MpiAlltoAllBench PROPERTIES RELEASE_POSTFIX ".${MPI_IMPL_ID}")
 
 add_dependencies(MpiAlltoAllBench GitVersion)
 target_include_directories(MpiAlltoAllBench PUBLIC include external/tlx)
