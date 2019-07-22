@@ -489,6 +489,8 @@ inline void scatteredPairwiseWaitsome(
   auto mpi_datatype = mpi::mpi_datatype<value_type>::type();
 
   std::string s;
+
+
   if (TraceStore::GetInstance().enabled()) {
     std::ostringstream os;
     os << "ScatteredPairwiseWaitsome" << algo_type::NAME << NReqs;
@@ -496,6 +498,8 @@ inline void scatteredPairwiseWaitsome(
   }
 
   auto trace = TimeTrace{me, s};
+
+  P(me << " running algorithm " << s << ", blocksize: " << blocksize);
 
   trace.tick(COMMUNICATION);
 
@@ -510,6 +514,7 @@ inline void scatteredPairwiseWaitsome(
 
   // allocate the communication state which provides the receive buffer enough
   // blocks of size blocksize.
+
   detail::CommState<value_type, NReqs> commState{std::size_t(blocksize)};
 
   A2A_ASSERT(2 * reqsInFlight <= reqs.size());
@@ -756,12 +761,16 @@ inline void scatteredPairwiseWaitsome(
       bool const enough_merges_available =
           mergeCount >= utilization_threshold;
 
+      P(me << " ready chunks: " << mergeCount);
+
       if (enough_merges_available || (allReceivesDone && mergeCount)) {
         // 1) copy completed chunks into another vector
         std::copy(
             std::begin(commState.completed_receives()),
             std::end(commState.completed_receives()),
             std::back_inserter(chunks_to_merge));
+
+        P(me << " merging " << chunks_to_merge.size() << " chunks");
 
         // 2) merge all chunks
         op(chunks_to_merge, outIt);
@@ -793,10 +802,18 @@ inline void scatteredPairwiseWaitsome(
                 return std::make_pair(
                     std::next(rbuf, first), std::next(rbuf, last));
               });
+
+          P(me << " final merge of " << chunks_to_merge.size() << " chunks");
+
           op(chunks_to_merge, mergeBuffer.begin());
+          chunks_to_merge.clear();
           mergedChunksPsum.erase(
               std::next(std::begin(mergedChunksPsum)),
               std::prev(std::end(mergedChunksPsum)));
+
+      P(me << " mergedChunksPsum: "
+           << tokenizeRange(std::begin(mergedChunksPsum), std::end(mergedChunksPsum)));
+
           std::move(mergeBuffer.begin(), mergeBuffer.end(), out);
         }
       }
@@ -817,6 +834,8 @@ inline void scatteredPairwiseWaitsome(
             return std::make_pair(
                 std::next(rbuf, first), std::next(rbuf, last));
           });
+
+      P(me << " final merge of " << chunks_to_merge.size() << " chunks");
       // merge
       op(chunks_to_merge, mergeBuffer.begin());
       // switch buffer back to output iterator

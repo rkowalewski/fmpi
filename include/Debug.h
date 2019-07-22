@@ -45,10 +45,10 @@
 #define A2A_ASSERT_RETURNS(expr, ret) \
   (true ? static_cast<void>(expr) : static_cast<void>(0))
 #else
-#include <cassert>
+#include <exception>
 #define A2A_ASSERT(expr)                           \
   (A2A_PREDICT_TRUE((expr)) ? static_cast<void>(0) \
-                            : [] { assert(false && #expr); }())  // NOLINT
+                            : [] { throw std::runtime_error{#expr}; }())  // NOLINT
 #define A2A_ASSERT_RETURNS(expr, ret) A2A_ASSERT((expr) == (ret))
 #endif
 

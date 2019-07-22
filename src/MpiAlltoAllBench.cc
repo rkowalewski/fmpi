@@ -37,11 +37,11 @@ constexpr size_t nwarmup = 0;
 constexpr size_t niters  = 1;
 #endif
 
-constexpr size_t minblocksize = 128;
+constexpr size_t minblocksize = 1 << 7;
 //constexpr size_t minblocksize = 32768 * 2;
 /* If maxblocksiz == 0, this means that we use the capacity per node and scale
  * the minblocksize in successive steps */
-constexpr size_t maxblocksize = 1024;
+constexpr size_t maxblocksize = 1 << 16;
 /* constexpr size_t maxblocksize = runtime argument */
 
 // This are approximately 25 GB
@@ -112,7 +112,8 @@ std::array<std::pair<std::string, benchmark_t>, 6> algos = {
             iterator_t,
             iterator_t,
             merge_t<iterator_t, iterator_t>,
-            16>),
+            16>)
+      ,
     std::make_pair(
         "ScatteredPairwiseWaitsomeOneFactor8",
         a2a::scatteredPairwiseWaitsome<
@@ -272,6 +273,7 @@ int main(int argc, char* argv[])
 
     auto nels = sendcount * nr;
 
+
     data = std::make_unique<value_t[]>(nels);
     out = std::make_unique<value_t[]>(nels);
 #ifndef NDEBUG
@@ -337,6 +339,7 @@ int main(int argc, char* argv[])
 
       for (auto const& algo : selected_algos) {
         P("running algorithm: " << algo.first);
+
         // We always want to guarantee that all processors start at the same
         // time, so this is a real barrier
 
@@ -354,7 +357,11 @@ int main(int argc, char* argv[])
 
         //printVector(&(out[0]), &(out[nels]), me);
 
+        P(me << " finished Algorithm " << algo.first << ", size: " << blocksize << "...\n");
         A2A_ASSERT(std::equal(&(correct[0]), &(correct[nels]), &(out[0])));
+
+        P(me << " finished Validation " << algo.first << ", size: " << blocksize << "...\n");
+
         // measurements[algo.first].emplace_back(t);
         if ((nwarmup > 0 && it > nwarmup) || (nwarmup == 0)) {
           auto trace = a2a::TimeTrace{me, algo.first};
@@ -371,6 +378,9 @@ int main(int argc, char* argv[])
         }
       }
     }
+    //synchronize before advancing to the next stage
+    P(me << " reaching barrier, going to next iteration");
+    MPI_Barrier(comm);
   }
 
   MPI_Finalize();
