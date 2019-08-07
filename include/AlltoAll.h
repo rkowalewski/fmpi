@@ -490,7 +490,6 @@ inline void scatteredPairwiseWaitsome(
 
   std::string s;
 
-
   if (TraceStore::GetInstance().enabled()) {
     std::ostringstream os;
     os << "ScatteredPairwiseWaitsome" << algo_type::NAME << NReqs;
@@ -531,7 +530,6 @@ inline void scatteredPairwiseWaitsome(
 
   auto receiveOp = [reqs = &reqs[0], blocksize, mpi_datatype, comm, me](
                        auto* buf, auto peer, auto reqIdx) {
-
     P(me << " receiving from " << peer << " reqIdx " << reqIdx);
 
     return MPI_Irecv(
@@ -751,19 +749,14 @@ inline void scatteredPairwiseWaitsome(
 
       trace.tick(MERGE);
 
-      auto const allReceivesDone = ncrReqs == totalExchanges;
-
+      // MergeCount includes new partial receives from this round and larger
+      // merges from deeper levels.
       auto const mergeCount =
           commState.completed_receives().size() + chunks_to_merge.size();
 
-      // minimum number of chunks to merge: ideally we have a full level2
-      // cache
-      bool const enough_merges_available =
-          mergeCount >= utilization_threshold;
-
       P(me << " ready chunks: " << mergeCount);
 
-      if (enough_merges_available || (allReceivesDone && mergeCount)) {
+      if (mergeCount >= utilization_threshold) {
         // 1) copy completed chunks into another vector
         std::copy(
             std::begin(commState.completed_receives()),
@@ -785,10 +778,11 @@ inline void scatteredPairwiseWaitsome(
         chunks_to_merge.clear();
       }
       else {
-        auto const sentReqsOpen    = allReceivesDone && (ncReqs < totalReqs);
+        auto const allReceivesDone = ncrReqs == totalExchanges;
+        auto const waitingForSents = allReceivesDone && (ncReqs < totalReqs);
         auto const needsFinalMerge = mergedChunksPsum.size() > 2;
 
-        if (sentReqsOpen && needsFinalMerge) {
+        if (waitingForSents && needsFinalMerge) {
           A2A_ASSERT(chunks_to_merge.empty());
 
           auto mergeBuffer = merge_buffer_t{std::size_t(nr) * blocksize};
@@ -811,8 +805,10 @@ inline void scatteredPairwiseWaitsome(
               std::next(std::begin(mergedChunksPsum)),
               std::prev(std::end(mergedChunksPsum)));
 
-      P(me << " mergedChunksPsum: "
-           << tokenizeRange(std::begin(mergedChunksPsum), std::end(mergedChunksPsum)));
+          P(me << " mergedChunksPsum: "
+               << tokenizeRange(
+                      std::begin(mergedChunksPsum),
+                      std::end(mergedChunksPsum)));
 
           std::move(mergeBuffer.begin(), mergeBuffer.end(), out);
         }
