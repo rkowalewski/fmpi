@@ -21,10 +21,11 @@ outputCsvPrefixPath <- args[2]
 
 winners <- csv.data %>%
     group_by(Nodes, Procs, Round, NBytes, Blocksize, PPN) %>%
-    top_n(-3, Tmedian) %>%
     arrange(PPN)
 
-winners <- winners[c("Nodes", "Procs", "PPN", "NBytes", "Blocksize", "Algo", "Tmedian",  "speedup")]
+#top_n(-3, Tmedian) %>%
+
+winners <- winners[c("Nodes", "Procs", "PPN", "NBytes", "Blocksize", "Algo", "speedup", "Tmedian",  "Tcomm", "Tmerge")]
 
 write.csv(winners, paste(outputCsvPrefixPath, ".winners.csv", sep=""), row.names=FALSE)
 
