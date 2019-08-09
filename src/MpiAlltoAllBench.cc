@@ -56,7 +56,7 @@ using iterator_t  = typename container_t::pointer;
 using benchmark_t = std::function<void(
     iterator_t, iterator_t, int, MPI_Comm, merge_t<iterator_t, iterator_t>)>;
 
-std::array<std::pair<std::string, benchmark_t>, 6> algos = {
+std::array<std::pair<std::string, benchmark_t>, 8> algos = {
     // Classic MPI All to All
     std::make_pair(
         "AlltoAll",
@@ -98,6 +98,14 @@ std::array<std::pair<std::string, benchmark_t>, 6> algos = {
             8>),
 #endif
     std::make_pair(
+        "ScatteredPairwiseWaitsomeFlatHandshake4",
+        a2a::scatteredPairwiseWaitsome<
+            a2a::AllToAllAlgorithm::FLAT_HANDSHAKE,
+            iterator_t,
+            iterator_t,
+            merge_t<iterator_t, iterator_t>,
+            4>),
+    std::make_pair(
         "ScatteredPairwiseWaitsomeFlatHandshake8",
         a2a::scatteredPairwiseWaitsome<
             a2a::AllToAllAlgorithm::FLAT_HANDSHAKE,
@@ -114,6 +122,14 @@ std::array<std::pair<std::string, benchmark_t>, 6> algos = {
             merge_t<iterator_t, iterator_t>,
             16>)
       ,
+    std::make_pair(
+        "ScatteredPairwiseWaitsomeOneFactor4",
+        a2a::scatteredPairwiseWaitsome<
+            a2a::AllToAllAlgorithm::ONE_FACTOR,
+            iterator_t,
+            iterator_t,
+            merge_t<iterator_t, iterator_t>,
+            4>),
     std::make_pair(
         "ScatteredPairwiseWaitsomeOneFactor8",
         a2a::scatteredPairwiseWaitsome<
@@ -363,7 +379,7 @@ int main(int argc, char* argv[])
         P(me << " finished Validation " << algo.first << ", size: " << blocksize << "...\n");
 
         // measurements[algo.first].emplace_back(t);
-        if ((nwarmup > 0 && it > nwarmup) || (nwarmup == 0)) {
+        if (it >= nwarmup) {
           auto trace = a2a::TimeTrace{me, algo.first};
 
           printMeasurementCsvLine(

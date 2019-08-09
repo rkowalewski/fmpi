@@ -757,7 +757,7 @@ inline void scatteredPairwiseWaitsome(
       P(me << " ready chunks: " << mergeCount);
 
       if (mergeCount >= utilization_threshold) {
-        // 1) copy completed chunks into another vector
+        // 1) copy completed chunks into std::vector (API requirements)
         std::copy(
             std::begin(commState.completed_receives()),
             std::end(commState.completed_receives()),
