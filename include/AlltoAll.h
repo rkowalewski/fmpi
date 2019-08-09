@@ -749,14 +749,19 @@ inline void scatteredPairwiseWaitsome(
 
       trace.tick(MERGE);
 
-      // MergeCount includes new partial receives from this round and larger
-      // merges from deeper levels.
+      auto const allReceivesDone = ncrReqs == totalExchanges;
+
       auto const mergeCount =
           commState.completed_receives().size() + chunks_to_merge.size();
 
+      // minimum number of chunks to merge: ideally we have a full level2
+      // cache
+      bool const enough_merges_available =
+          mergeCount >= utilization_threshold;
+
       P(me << " ready chunks: " << mergeCount);
 
-      if (mergeCount >= utilization_threshold) {
+      if (enough_merges_available || (allReceivesDone && mergeCount)) {
         // 1) copy completed chunks into another vector
         std::copy(
             std::begin(commState.completed_receives()),
@@ -778,11 +783,10 @@ inline void scatteredPairwiseWaitsome(
         chunks_to_merge.clear();
       }
       else {
-        auto const allReceivesDone = ncrReqs == totalExchanges;
-        auto const waitingForSents = allReceivesDone && (ncReqs < totalReqs);
+        auto const sentReqsOpen    = allReceivesDone && (ncReqs < totalReqs);
         auto const needsFinalMerge = mergedChunksPsum.size() > 2;
 
-        if (waitingForSents && needsFinalMerge) {
+        if (sentReqsOpen && needsFinalMerge) {
           A2A_ASSERT(chunks_to_merge.empty());
 
           auto mergeBuffer = merge_buffer_t{std::size_t(nr) * blocksize};
