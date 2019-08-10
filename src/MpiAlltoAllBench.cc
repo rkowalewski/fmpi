@@ -33,15 +33,15 @@ constexpr size_t GB = 1 << 30;
 constexpr size_t nwarmup = 1;
 constexpr size_t niters  = 10;
 #else
-constexpr size_t nwarmup = 0;
-constexpr size_t niters  = 1;
+constexpr int nwarmup = 0;
+constexpr int niters  = 1;
 #endif
 
 constexpr size_t minblocksize = 1 << 7;
-//constexpr size_t minblocksize = 32768 * 2;
+// constexpr size_t minblocksize = 32768 * 2;
 /* If maxblocksiz == 0, this means that we use the capacity per node and scale
  * the minblocksize in successive steps */
-constexpr size_t maxblocksize = 1 << 16;
+constexpr size_t maxblocksize = 1 << 10;
 /* constexpr size_t maxblocksize = runtime argument */
 
 // This are approximately 25 GB
@@ -56,47 +56,27 @@ using iterator_t  = typename container_t::pointer;
 using benchmark_t = std::function<void(
     iterator_t, iterator_t, int, MPI_Comm, merge_t<iterator_t, iterator_t>)>;
 
-std::array<std::pair<std::string, benchmark_t>, 8> algos = {
-    // Classic MPI All to All
+std::array<std::pair<std::string, benchmark_t>, 9> algos = {
     std::make_pair(
         "AlltoAll",
         a2a::MpiAlltoAll<
             iterator_t,
             iterator_t,
             merge_t<iterator_t, iterator_t>>),
-    // One Factorizations based on Graph Theory
     std::make_pair(
-        "OneFactor", a2a::oneFactor<iterator_t, iterator_t, merge_t<iterator_t, iterator_t>>),
-#if 0
-    // A Simple Flat Handshake which sends and receives never to/from the same
-    // rank
-    std::make_pair(
-        "FlatHandshake", a2a::flatHandshake<iterator_t, iterator_t, merge_t>),
-    // A scatterd handshake
-    std::make_pair(
-        "ScatteredPairwise8",
-        a2a::scatteredPairwise<iterator_t, iterator_t, merge_t, 8>),
-    // A scatterd handshake
-    std::make_pair(
-        "ScatteredPairwise16",
-        a2a::scatteredPairwise<iterator_t, iterator_t, merge_t, 16>),
-    std::make_pair(
-        "ScatteredPairwise32",
-        a2a::scatteredPairwise<iterator_t, iterator_t, merge_t, 32>),
-    std::make_pair(
-        "ScatteredPairwise64",
-        a2a::scatteredPairwise<iterator_t, iterator_t, merge_t, 64>),
-    std::make_pair(
-        "ScatteredPairwise128",
-        a2a::scatteredPairwise<iterator_t, iterator_t, merge_t, 128>),
-    std::make_pair(
-        "ScatteredPairwiseWaitany8",
-        a2a::scatteredPairwiseWaitany<
+        "ScatteredPairwiseFlatHandshake",
+        a2a::scatteredPairwise<
+            a2a::AllToAllAlgorithm::FLAT_HANDSHAKE,
             iterator_t,
             iterator_t,
-            merge_t<iterator_t, iterator_t>,
-            8>),
-#endif
+            merge_t<iterator_t, iterator_t>>),
+    std::make_pair(
+        "ScatteredPairwiseOneFactor",
+        a2a::scatteredPairwise<
+            a2a::AllToAllAlgorithm::ONE_FACTOR,
+            iterator_t,
+            iterator_t,
+            merge_t<iterator_t, iterator_t>>),
     std::make_pair(
         "ScatteredPairwiseWaitsomeFlatHandshake4",
         a2a::scatteredPairwiseWaitsome<
@@ -120,8 +100,7 @@ std::array<std::pair<std::string, benchmark_t>, 8> algos = {
             iterator_t,
             iterator_t,
             merge_t<iterator_t, iterator_t>,
-            16>)
-      ,
+            16>),
     std::make_pair(
         "ScatteredPairwiseWaitsomeOneFactor4",
         a2a::scatteredPairwiseWaitsome<
@@ -246,7 +225,7 @@ int main(int argc, char* argv[])
       (maxblocksize == 0) ? maxprocsize / nr : maxblocksize;
 
   std::size_t nsteps = std::ceil(std::log2(_maxblocksize)) -
-                std::ceil(std::log2(minblocksize));
+                       std::ceil(std::log2(minblocksize));
 
   if (nsteps <= 0) {
     nsteps = 1;
@@ -289,14 +268,13 @@ int main(int argc, char* argv[])
 
     auto nels = sendcount * nr;
 
-
     data = std::make_unique<value_t[]>(nels);
-    out = std::make_unique<value_t[]>(nels);
+    out  = std::make_unique<value_t[]>(nels);
 #ifndef NDEBUG
     correct = std::make_unique<value_t[]>(nels);
 #endif
 
-    for (size_t it = 0; it < niters + nwarmup; ++it) {
+    for (int it = 0; it < niters + nwarmup; ++it) {
 #pragma omp parallel
       {
         std::mt19937_64 generator(random_seed_seq::get_instance());
@@ -341,7 +319,12 @@ int main(int argc, char* argv[])
       // first we want to obtain the correct result which we can verify then
       // with our own algorithms
 #ifndef NDEBUG
-      a2a::MpiAlltoAll(&(data[0]), &(correct[0]), static_cast<int>(sendcount), comm, merger);
+      a2a::MpiAlltoAll(
+          &(data[0]),
+          &(correct[0]),
+          static_cast<int>(sendcount),
+          comm,
+          merger);
       A2A_ASSERT(std::is_sorted(&correct[0], &(correct[nels])));
 #endif
 
@@ -369,14 +352,21 @@ int main(int argc, char* argv[])
         A2A_ASSERT(barrier.Success(comm));
 
         auto t = run_algorithm(
-            algo.second, &(data[0]), &(out[0]), static_cast<int>(sendcount), comm, merger);
+            algo.second,
+            &(data[0]),
+            &(out[0]),
+            static_cast<int>(sendcount),
+            comm,
+            merger);
 
-        //printVector(&(out[0]), &(out[nels]), me);
+        // printVector(&(out[0]), &(out[nels]), me);
 
-        P(me << " finished Algorithm " << algo.first << ", size: " << blocksize << "...\n");
+        P(me << " finished Algorithm " << algo.first
+             << ", size: " << blocksize << "...\n");
         A2A_ASSERT(std::equal(&(correct[0]), &(correct[nels]), &(out[0])));
 
-        P(me << " finished Validation " << algo.first << ", size: " << blocksize << "...\n");
+        P(me << " finished Validation " << algo.first
+             << ", size: " << blocksize << "...\n");
 
         // measurements[algo.first].emplace_back(t);
         if (it >= nwarmup) {
@@ -394,7 +384,7 @@ int main(int argc, char* argv[])
         }
       }
     }
-    //synchronize before advancing to the next stage
+    // synchronize before advancing to the next stage
     P(me << " reaching barrier, going to next iteration");
     MPI_Barrier(comm);
   }
@@ -424,7 +414,7 @@ void printMeasurementHeader(std::ostream& os)
 void printMeasurementCsvLine(
     std::ostream&                      os,
     Params                             m,
-    const std::string&                        algorithm,
+    const std::string&                 algorithm,
     std::tuple<double, double, double> times)
 {
   double total, tmerge, tcomm;
@@ -455,7 +445,7 @@ void print_env()
     // Split into key and value:
     char*       flag_name_cstr  = env_var_kv;
     char*       flag_value_cstr = std::strstr(env_var_kv, "=");
-    auto         flag_name_len   = flag_value_cstr - flag_name_cstr;
+    auto        flag_name_len   = flag_value_cstr - flag_name_cstr;
     std::string flag_name(flag_name_cstr, flag_name_cstr + flag_name_len);
     std::string flag_value(flag_value_cstr + 1);
 

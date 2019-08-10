@@ -61,8 +61,14 @@ inline auto oneFactor_even(int nr)
   }
 
   // self loops
-  for (int me = 0; me < nr; ++me) {
-    res[0].push_back(RankPair(me, me));
+  for (int r = 0; r < nr; ++r) {
+    res[0].push_back(RankPair(r, r));
+  }
+
+  for (size_t phase = 0; phase < res.size(); ++phase) {
+    std::cout << "{";
+    std::copy(std::begin(res[phase]), std::end(res[phase]), std::ostream_iterator<RankPair>(std::cout, ", "));
+    std::cout << "}\n";
   }
 
   return res;
@@ -250,7 +256,7 @@ void print_dot_directed(
         std::cout << "[color=cornflowerblue";
 
         // if (p > 3) {
-        std::cout << ",style=invis]";
+        //std::cout << ",style=invis]";
         // }
         // else {
         std::cout << "]";

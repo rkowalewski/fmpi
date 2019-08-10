@@ -23,39 +23,7 @@ inline auto sendrecv(
     int      rtag,
     MPI_Comm comm)
 {
-  std::array<MPI_Request, 2> reqs = {MPI_REQUEST_NULL, MPI_REQUEST_NULL};
-
-  static_assert(std::is_same<S, R>::value, "");
-
   auto mpi_datatype = mpi::mpi_datatype<S>::type();
-
-#if 0
-
-  // Overlapping first round...
-  A2A_ASSERT_RETURNS(
-      MPI_Irecv(
-          rbuf,
-          static_cast<int>(rcount),
-          mpi_datatype,
-          rfrom,
-          rtag,
-          comm,
-          &(reqs[REQ_RECV])),
-      MPI_SUCCESS);
-
-  // Overlapping first round...
-  A2A_ASSERT_RETURNS(
-      MPI_Isend(
-          sbuf,
-          static_cast<int>(scount),
-          mpi_datatype,
-          sto,
-          stag,
-          comm,
-          &(reqs[REQ_SEND])),
-      MPI_SUCCESS);
-
-#else
 
   A2A_ASSERT_RETURNS(
       MPI_Sendrecv(
@@ -72,10 +40,6 @@ inline auto sendrecv(
           comm,
           MPI_STATUSES_IGNORE),
       MPI_SUCCESS);
-
-#endif
-
-  return reqs;
 }
 
 }  // namespace a2a

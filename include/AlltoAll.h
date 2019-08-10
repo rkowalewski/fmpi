@@ -22,183 +22,11 @@
 #include <Trace.h>
 
 namespace a2a {
-#if 0
 
-template <class InputIt, class OutputIt, class Op>
-inline void flatHandshake(
-    InputIt begin, OutputIt out, int blocksize, MPI_Comm comm, Op&& /*op*/)
-{
-  int me, nr;
-  MPI_Comm_rank(comm, &me);
-  MPI_Comm_size(comm, &nr);
-
-  auto trace = TimeTrace{me, "FlatHandshake"};
-
-  trace.tick(COMMUNICATION);
-
-  auto sendRecvPair = [me, nr](auto step) {
-    return std::make_pair(mod(me + step, nr), mod(me - step, nr));
-  };
-
-  int sendto, recvfrom;
-
-  std::tie(sendto, recvfrom) = sendRecvPair(1);
-
-  auto reqs = a2a::sendrecv(
-      std::next(begin, sendto * blocksize),
-      blocksize,
-      sendto,
-      100,
-      std::next(out, recvfrom * blocksize),
-      blocksize,
-      recvfrom,
-      100,
-      comm);
-
-  std::copy(
-      begin + me * blocksize,
-      begin + me * blocksize + blocksize,
-      out + me * blocksize);
-
-  for (int i = 2; i < nr; ++i) {
-    std::tie(sendto, recvfrom) = sendRecvPair(i);
-
-    // Wait for previous round
-    A2A_ASSERT_RETURNS(
-        MPI_Waitall(reqs.size(), &(reqs[0]), MPI_STATUSES_IGNORE),
-        MPI_SUCCESS);
-
-    reqs = a2a::sendrecv(
-        std::next(begin, sendto * blocksize),
-        blocksize,
-        sendto,
-        100,
-        std::next(out, recvfrom * blocksize),
-        blocksize,
-        recvfrom,
-        100,
-        comm);
-  }
-
-  // Wait for previous round
-  A2A_ASSERT_RETURNS(
-      MPI_Waitall(reqs.size(), &(reqs[0]), MPI_STATUSES_IGNORE), MPI_SUCCESS);
-
-  trace.tock(COMMUNICATION);
-
-  trace.tick(MERGE);
-
-  trace.tock(MERGE);
-}
-
-template <class InputIt, class OutputIt, class Op, size_t NReqs = 1>
-inline void scatteredPairwise(
-    InputIt begin, OutputIt out, int blocksize, MPI_Comm comm, Op&& /*op*/)
-{
-  int me, nr;
-  MPI_Comm_rank(comm, &me);
-  MPI_Comm_size(comm, &nr);
-
-  using value_type  = typename std::iterator_traits<InputIt>::value_type;
-  auto mpi_datatype = mpi::mpi_datatype<value_type>::type();
-
-  std::string s = "";
-  if (TraceStore::GetInstance().enabled()) {
-    std::ostringstream os;
-    os << "ScatteredPairwise" << NReqs;
-    s = os.str();
-  }
-  auto trace = TimeTrace{me, s};
-
-  trace.tick(COMMUNICATION);
-
-  std::array<MPI_Request, 2 * NReqs> reqs;
-  std::uninitialized_fill(std::begin(reqs), std::end(reqs), MPI_REQUEST_NULL);
-
-#if 0
-  std::copy(
-      begin + me * blocksize,
-      begin + me * blocksize + blocksize,
-      out + me * blocksize);
-#endif
-
-  for (int ii = 0; ii < nr; ii += NReqs) {
-    auto ss = std::min<int>(nr - ii, NReqs);
-
-    P("ii block: " << ss << ", ss: " << ss);
-    for (auto i = 0; i < ss; ++i) {
-      // Overlapping first round...
-      auto recvfrom = mod(me - i - ii, nr);
-
-      P(me << " recvfrom " << recvfrom);
-
-      A2A_ASSERT_RETURNS(
-          MPI_Irecv(
-              std::next(out, recvfrom * blocksize),
-              blocksize,
-              mpi_datatype,
-              recvfrom,
-              100,
-              comm,
-              &(reqs[i])),
-          MPI_SUCCESS);
-    }
-
-    for (auto i = 0; i < ss; ++i) {
-      // Overlapping first round...
-      auto sendto = mod(me + i + ii, nr);
-
-      P(me << " sendto " << sendto);
-
-      A2A_ASSERT_RETURNS(
-          MPI_Isend(
-              std::next(begin, sendto * blocksize),
-              blocksize,
-              mpi_datatype,
-              sendto,
-              100,
-              comm,
-              &(reqs[i + ss])),
-          MPI_SUCCESS);
-    }
-
-    // Wait for previous round
-    A2A_ASSERT_RETURNS(
-        MPI_Waitall(reqs.size(), &(reqs[0]), MPI_STATUSES_IGNORE),
-        MPI_SUCCESS);
-  }
-
-  trace.tock(COMMUNICATION);
-
-  trace.tick(MERGE);
-#if 0
-  std::vector<std::pair<OutputIt, OutputIt>> seqs;
-  seqs.reserve(nr);
-
-  for (size_t i = 0; i < std::size_t(nr); ++i) {
-    seqs.push_back(
-        std::make_pair(out + i * blocksize, out + (i + 1) * blocksize));
-  }
-
-  auto merge_buf =
-      std::unique_ptr<value_type[]>(new value_type[blocksize * nr]);
-
-  __gnu_parallel::multiway_merge(
-      seqs.begin(),
-      seqs.end(),
-      merge_buf.get(),
-      blocksize * nr,
-      std::less<value_type>{},
-      __gnu_parallel::sequential_tag{});
-
-  std::copy(merge_buf.get(), merge_buf.get() + blocksize * nr, out);
-
-#endif
-  trace.tock(MERGE);
-}
-#endif
+enum class AllToAllAlgorithm { FLAT_HANDSHAKE, ONE_FACTOR };
 
 namespace detail {
+
 template <class T, std::size_t NReqs>
 class CommState {
   using buffer_t =
@@ -217,8 +45,6 @@ class CommState {
       std::vector<chunk_t, tlx::StackAllocator<chunk_t, N * sizeof(chunk_t)>>;
 
  public:
-  CommState() = default;
-
   explicit CommState(size_type blocksize)
     : m_completed(
           0,
@@ -305,12 +131,12 @@ class CommState {
   buffer_t m_buffer{};
 };
 
-class AlltoAllCommunicator {
+class A2ACommBase {
  public:
   using rank_t = int32_t;
 
-  AlltoAllCommunicator() = default;
-  AlltoAllCommunicator(MPI_Comm comm)
+  A2ACommBase() = default;
+  A2ACommBase(MPI_Comm comm)
   {
     A2A_ASSERT_RETURNS(MPI_Comm_rank(comm, &m_me), MPI_SUCCESS);
     rank_t nr;
@@ -334,10 +160,8 @@ class AlltoAllCommunicator {
   rank_t        m_me{MPI_PROC_NULL};
 };
 
-}  // namespace detail
-
-class FlatHandshake : public detail::AlltoAllCommunicator {
-  using base_t = detail::AlltoAllCommunicator;
+class FlatHandshake : public detail::A2ACommBase {
+  using base_t = detail::A2ACommBase;
 
  public:
   static constexpr const char* NAME = "FlatHandshake";
@@ -363,8 +187,8 @@ class FlatHandshake : public detail::AlltoAllCommunicator {
   }
 };
 
-class OneFactor : public detail::AlltoAllCommunicator {
-  using base_t = detail::AlltoAllCommunicator;
+class OneFactor : public detail::A2ACommBase {
+  using base_t = detail::A2ACommBase;
 
  public:
   static constexpr const char* NAME = "OneFactor";
@@ -403,9 +227,6 @@ class OneFactor : public detail::AlltoAllCommunicator {
   }
 };
 
-enum class AllToAllAlgorithm { FLAT_HANDSHAKE, ONE_FACTOR };
-
-namespace detail {
 template <AllToAllAlgorithm algo>
 struct selectAlgorithm {
   using type = FlatHandshake;
@@ -416,7 +237,7 @@ struct selectAlgorithm<AllToAllAlgorithm::ONE_FACTOR> {
   using type = OneFactor;
 };
 
-using rank_t = typename AlltoAllCommunicator::rank_t;
+using rank_t = typename A2ACommBase::rank_t;
 
 template <class Schedule, class ReqIdx, class BufAlloc, class CommOp>
 inline auto enqueueMpiOps(
@@ -454,6 +275,7 @@ inline auto enqueueMpiOps(
 
   return phase;
 }
+
 }  // namespace detail
 
 template <
@@ -852,6 +674,97 @@ inline void scatteredPairwiseWaitsome(
   A2A_ASSERT(std::is_sorted(out, out + nr * blocksize));
 }
 
+template <AllToAllAlgorithm algo, class InputIt, class OutputIt, class Op>
+inline void scatteredPairwise(
+    InputIt begin, OutputIt out, int blocksize, MPI_Comm comm, Op&& op)
+{
+  int me, nr;
+  MPI_Comm_rank(comm, &me);
+  MPI_Comm_size(comm, &nr);
+
+  using algo_type  = typename detail::selectAlgorithm<algo>::type;
+  using value_type = typename std::iterator_traits<InputIt>::value_type;
+
+  auto mpi_datatype = mpi::mpi_datatype<value_type>::type();
+  auto rbuf = std::unique_ptr<value_type[]>(new value_type[nr * blocksize]);
+
+  std::string s;
+
+  if (TraceStore::GetInstance().enabled()) {
+    std::ostringstream os;
+    os << "ScatteredPairwise" << algo_type::NAME;
+    s = os.str();
+  }
+
+  auto trace = TimeTrace{me, s};
+
+  trace.tick(COMMUNICATION);
+  std::copy(
+      begin + me * blocksize,
+      begin + me * blocksize + blocksize,
+      &rbuf[0] + me * blocksize);
+
+  auto commAlgo = algo_type{comm};
+
+  for (int r = 0; r < nr; ++r) {
+    auto sendto   = commAlgo.sendRank(r);
+    auto recvfrom = commAlgo.recvRank(r);
+
+    if (sendto == me) {
+      sendto = MPI_PROC_NULL;
+    }
+    if (recvfrom == me) {
+      recvfrom = MPI_PROC_NULL;
+    }
+    if (sendto == MPI_PROC_NULL && recvfrom == MPI_PROC_NULL) {
+      continue;
+    }
+
+    P(me << " sendto " << sendto);
+    P(me << " recvfrom " << recvfrom);
+
+    A2A_ASSERT_RETURNS(
+        MPI_Sendrecv(
+            std::next(begin, sendto * blocksize),
+            static_cast<int>(blocksize),
+            mpi_datatype,
+            sendto,
+            100,
+            std::next(&(rbuf[0]), recvfrom * blocksize),
+            static_cast<int>(blocksize),
+            mpi_datatype,
+            recvfrom,
+            100,
+            comm,
+            MPI_STATUS_IGNORE),
+        MPI_SUCCESS);
+  }
+
+  trace.tock(COMMUNICATION);
+
+  trace.tick(MERGE);
+
+  std::vector<std::pair<InputIt, InputIt>> chunks;
+  chunks.reserve(nr);
+
+  auto range = a2a::range(0, nr * blocksize, blocksize);
+
+  std::transform(
+      std::begin(range),
+      std::end(range),
+      std::back_inserter(chunks),
+      [buf = rbuf.get(), blocksize](auto offset) {
+        auto f = std::next(buf, offset);
+        auto l = std::next(f, blocksize);
+        return std::make_pair(f, l);
+      });
+
+  op(chunks, out);
+
+  trace.tock(MERGE);
+  A2A_ASSERT(std::is_sorted(out, out + nr * blocksize));
+}
+
 template <class InputIt, class OutputIt, class Op>
 inline void MpiAlltoAll(
     InputIt begin, OutputIt out, int blocksize, MPI_Comm comm, Op&& op)
@@ -902,8 +815,11 @@ inline void MpiAlltoAll(
   op(chunks, out);
 
   trace.tock(MERGE);
+
+  A2A_ASSERT(std::is_sorted(out, out + nr * blocksize));
 }
 
+#if 0
 template <class InputIt, class OutputIt, class Op, size_t NReqs = 1>
 inline void scatteredPairwiseWaitany(
     InputIt begin, OutputIt out, int blocksize, MPI_Comm comm, Op&& /*op*/)
@@ -1080,5 +996,6 @@ inline void scatteredPairwiseWaitany(
 #endif
   trace.tock(MERGE);
 }
+#endif
 }  // namespace a2a
 #endif
