@@ -17,8 +17,8 @@
 #include <Bruck.h>
 #include <Constants.h>
 #include <Debug.h>
-#include <Factor.h>
 #include <Mpi.h>
+#include <NumericRange.h>
 #include <Trace.h>
 
 namespace a2a {
