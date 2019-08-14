@@ -21,10 +21,10 @@
 # Job options
 #SBATCH --partition=<<CLASS>>
 #Number of nodes and MPI tasks per node:
+#SBATCH --ntasks=<<NUM_TASKS>>
 #SBATCH --nodes=<<NUM_NODES>>
-#SBATCH --ntasks-per-node=<<NUM_PROCS>>
 #SBATCH --ntasks-per-core=1
-#SBATCH --cpus-per-task=1
+#SBATCH --ntasks-per-node=<<NUM_PROCS>>
 
 #Important
 module load slurm_setup

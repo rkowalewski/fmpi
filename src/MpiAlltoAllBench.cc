@@ -41,7 +41,7 @@ constexpr size_t minblocksize = 1 << 7;
 // constexpr size_t minblocksize = 32768 * 2;
 /* If maxblocksiz == 0, this means that we use the capacity per node and scale
  * the minblocksize in successive steps */
-constexpr size_t maxblocksize = 1 << 10;
+constexpr size_t maxblocksize = 1 << 17;
 /* constexpr size_t maxblocksize = runtime argument */
 
 // This are approximately 25 GB
