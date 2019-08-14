@@ -5,55 +5,111 @@ library(ggplot2)
 library(RColorBrewer)
 library(tikzDevice)
 library(extrafont)
+suppressMessages(library(readr))
+suppressMessages(library(ggforce))
+suppressMessages(library(tidyverse))
 
+print.gg_multiple <- function(x, page, ...) {
+  # Get total number of pages
+  page_tot <- ggforce::n_pages(repair_facet(x))
 
+  # Get and check the page number to be drawn
+  if (!missing(page)) {
+    page_2_draw <- page
+  } else {
+    page_2_draw <- 1:page_tot
+  }
 
-plotLineChart <- function(data, pxlab, group_by, plabels) {
-    # The errorbars overlapped, so use position_dodge to move them horizontally
-    pd <- position_dodge(0.1) # move them .05 to the left and right
+  # Prevent issue with repair_facet when page = NULL
+  x$facet$params$page <- page_2_draw
 
-    ggplot(data, aes(x=factor(nnodes), y=Tmedian, colour=Algo, group=Algo)) +
-    geom_errorbar(aes(ymin=time-se, ymax=time+se), colour="black", width=.1, position=pd) +
-    geom_line(position=pd) +
-    geom_point(position=pd, size=1, shape=21, fill="white") + # 21 is filled circle
-    xlab(pxlab) +
-    ylab("Median Time (s)") +
-    # scale_colour_brewer(palette="Paired", name="Tasks / Threads") +     # Legend label, use darker colors
-    scale_colour_brewer(palette="Paired", name="Algorithm"     # Legend label, use darker colors
-                     #,breaks=Algo
-                     ) +
-                     #l=40) +                    # Use darker colors, lightness=40
-    #ggtitle("The Effect of Vitamin C on\nTooth Growth in Guinea Pigs") +
-    expand_limits(y=0) +                        # Expand y range
-    #scale_y_continuous(breaks=0:50:5) +         # Set tick every 4
-    theme_bw() +
-    # we can plot the legend into the plot,
-    # or outside the plot (comment it out)
-    theme(legend.justification=c(1, 0),
-        # Position legend in top right
-          legend.position=c(1,0))
-          #text=element_text(family="Linux Biolinum"))
-    # use fc-lists to see a list of available fonts...
+  # Begin multiple page ploting
+  n_page_2_draw <- length(page_2_draw)
 
+  # Draw all pages
+  for (p in seq_along(page_2_draw)) {
+    x$facet$params$page <- page_2_draw[p]
+    ggplot2:::print.ggplot(x = repair_facet(x), ...)
+
+  }
+
+  # Prevent ggforce from droping multiple pages value
+  x$facet$params$page <- page_2_draw
+}
+
+# Fix for ggforce facet_wrap_paginate
+repair_facet <- function(x) {
+  if (class(x$facet)[1] == 'FacetWrapPaginate' &&
+      !'nrow' %in% names(x$facet$params)) {
+    x$facet$params$nrow <- x$facet$params$max_row
+  }
+  x
 }
 
 args = commandArgs(trailingOnly=TRUE)
 
-if (length(args)< 2) {
-    stop("Usage: ./plots.R <infile> <infile...>", call.=FALSE)
+if (length(args)< 1) {
+    stop("Usage: ./plots.R <infile> <outfile...>", call.=FALSE)
 }
 
 csv <- args[1]
-out <- args[2]
 
 data <- read.csv(file=csv, header=TRUE, sep=",")
+#head(data)
 
-p <- ggplot(data=data, aes(x=factor(Nodes), y=Tmedian, group=Algo, colour=Algo)) +
-    geom_line() +
-    geom_point() +
-    ggtitle(paste("Blocksize ", data[1,5]))
 
-ggsave(out, plot=p);
 
-#write.table(csv.data, file=stdout(), row.names=FALSE, col.names=TRUE, sep=",")
+sel <- "ScatteredPairwiseWaitsomeFlatHandshake"
+
+
+patterns <-
+c("ScatteredPairwiseWaitsomeFlatHandshake16" = "ScatteredRing16",
+  "ScatteredPairwiseOneFactor" = "OneFactor",
+  "ScatteredPairwiseFlatHandshake" = "Ring",
+  "ScatteredPairwiseWaitsomeFlatHandshake4" = "ScatteredRing4"
+)
+
+
+selected <- data %>% filter(
+                            Algo == "ScatteredPairwiseOneFactor"
+                            | Algo == "ScatteredPairwiseFlatHandshake"
+                            | Algo == paste(sel, 16, sep="")
+                            | Algo == paste(sel, 4, sep="")
+                            | Algo == "AlltoAll"
+                            ) %>%
+                        arrange(Blocksize, Procs, Ttotal_median) %>%
+                        mutate(Algo = str_replace_all(Algo, patterns))
+
+
+#cbPalette <- c("#999999", "#E69F00", "#56B4E9", "#009E73", "#F0E442", "#0072B2", "#D55E00", "#CC79A7")
+
+# The errorbars overlapped, so use position_dodge to move them horizontally
+pd <- position_dodge(0.1) # move them .05 to the left and right
+
+# bars won't be dodged!
+pdf("multiple_plot.pdf",paper="a4")
+
+mylimit <- function(x) {
+    limits <- c(0, max(x) + .2)
+    limits
+}
+
+p <- ggplot(selected, aes(x=factor(Nodes), y=Ttotal_speedup, colour=Algo, group=Algo)) +
+    #geom_errorbar(aes(ymin=Ttotal_med_lowerCI, ymax=Ttotal_med_upperCI), colour="black", width=.1, position=pd) +
+    geom_line(position=pd) +
+    geom_point(position=pd, size=2) +
+    theme_bw() +
+    # To use for line and point colors, add
+    scale_colour_brewer(type="qal", palette="Paired") +
+    scale_y_continuous(breaks=seq(0, 2, by=.2),  limits=mylimit)+
+    #facet_zoom(xy = Nodes <= 32, horizontal=FALSE)
+    facet_wrap_paginate( ~Blocksize, ncol=1, nrow=3, scales="free_y", page=NULL)
+
+
+# Here we add our special class
+class(p) <- c('gg_multiple', class(p))
+
+#print(p, page=2)
+print(p)
+dev.off()
 

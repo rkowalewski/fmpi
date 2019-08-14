@@ -29,7 +29,7 @@ do
         filename="$dir/${res%.csv}.${procs}.$blocksize.csv"
         echo $head > $filename
         grep "^.*$blocksize,[A-Za-z]\+.*${procs}\$" $myf >> $filename
-      done < <(distinct_values "NF" "$myf")
+      done < <(distinct_values "3" "$myf")
     done < <(distinct_values "5" "$myf")
   fi
 done

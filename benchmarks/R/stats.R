@@ -2,52 +2,77 @@
 
 suppressMessages(library(readr))
 suppressMessages(library(dplyr))
-#library(ggplot2)
-#library(RColorBrewer)
-#library(tikzDevice)
-#library(extrafont)
+suppressMessages(library(DescTools))
 
-
-#args = commandArgs(trailingOnly=TRUE)
-#
-#if (length(args)< 2) {
-#    stop("Usage: ./stats.R <infile>", call.=FALSE)
-#}
-
-#csv.data <- read.csv(f, header=TRUE, strip.white=TRUE)
 f <- file("stdin")
 df.in <- read_csv(paste(collapse = "\n", readLines(f)), col_names=TRUE, col_types="iii?iciddd")
 close(f)
 
+ci <- function(x, prob = .95) {
+  n <- sum(!is.na(x))
+  sd_x <- sd(x, na.rm = TRUE)
+  z_t <- qt(1 - (1 - prob) / 2, df = n - 1)
+  z_t * sd_x / sqrt(n)
+}
+
+lower <- function(x, prob = 0.95) {
+  mean(x, na.rm = TRUE) - ci(x, prob)
+}
+
+upper <- function(x, prob = 0.95) {
+  mean(x, na.rm = TRUE) + ci(x, prob)
+}
+
+medianCI <- function(x, prob=.95) {
+    MedianCI(x,
+         conf.level = 0.95,
+         na.rm = TRUE,
+         method = "exact",
+         R = 10000)
+}
+
+
+ci_prob <- .95
+
 df.stats <- df.in %>%
     group_by(Nodes, Procs, Round, NBytes, Blocksize, Algo) %>%
-    summarize(
-              N = sum(!is.na(Ttotal)),
-              Tmedian = median(Ttotal, na.rm = TRUE),
-              Tmean = mean(Ttotal, na.rm = TRUE),
-              Tmin = min(Ttotal, na.rm = TRUE),
-              Tmax = max(Ttotal, na.rm = TRUE),
-              minRank = Rank[which.min(Ttotal)],
-              maxRank = Rank[which.max(Ttotal)],
-              sd = sd(Ttotal, na.rm = TRUE),
-              Tcomm = median(Tcomm, na.rm = TRUE),
-              Tmerge = median(Tmerge, na.rm = TRUE)
-    ) %>%
+    summarise_at(vars(Ttotal, Tcomm, Tmerge),
+                  list(
+                     N = ~sum(!is.na(.)),
+                     ~mean(., na.rm = TRUE),
+                     ~median(., na.rm = TRUE),
+                     ~min(., na.rm = TRUE),
+                     minR = ~Rank[which.min(.)],
+                     ~max(., na.rm = TRUE),
+                     maxR = ~Rank[which.max(.)],
+                     ~sd(., na.rm = TRUE),
+                     se=~sd(., na.rm = TRUE)/sqrt(sum(!is.na(.))),
+                     avg_ci=~ci(., ci_prob),
+                     med_lowerCI=~medianCI(., ci_prob)[2],
+                     med_upperCI=~medianCI(., ci_prob)[3]
+                  )
+                ) %>%
     # add the speedup
-    mutate(speedup = Tmedian[Algo == "AlltoAll"] / Tmedian) %>%
-    arrange(Tmedian, .by_group = TRUE)
+    mutate(
+           Ttotal_speedup = Ttotal_median[Algo == "AlltoAll"] / Ttotal_median,
+           Tcomm_speedup = Tcomm_median[Algo == "AlltoAll"] / Tcomm_median
+          ) %>%
+    # Sort by the fastest in each group
+    arrange(Ttotal_median, .by_group = TRUE)
 
 
-
-# Standard Error
-df.stats$se <- df.stats$sd / sqrt(df.stats$N)
-# CI Interval
-ciInterval <- .95
-ciMult <- qt(ciInterval/2 + .5, df.stats$N-1)
-# Sum
-df.stats$ci <- df.stats$se * ciMult
-
+minThreshold <- 1024
+mediumThreshold <- 16384
+df.stats$Cat <- cut(df.stats$Blocksize, c(0,minThreshold,mediumThreshold,Inf), c("small", "medium", "large"))
 df.stats$PPN <- df.stats$Procs / df.stats$Nodes
+
+df.stats <- df.stats %>%
+    select(Nodes, Procs, PPN, Round, NBytes, Blocksize, Cat, Algo,
+           Ttotal_speedup, Ttotal_median,
+           Ttotal_min, Ttotal_max,
+           Ttotal_med_lowerCI,Ttotal_med_upperCI,
+           everything())
+
 
 cat(format_csv(df.stats))
 
