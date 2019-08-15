@@ -37,11 +37,11 @@ constexpr int nwarmup = 0;
 constexpr int niters  = 1;
 #endif
 
-constexpr size_t minblocksize = 1 << 7;
+constexpr size_t minblocksize = 32;
 // constexpr size_t minblocksize = 32768 * 2;
 /* If maxblocksiz == 0, this means that we use the capacity per node and scale
  * the minblocksize in successive steps */
-constexpr size_t maxblocksize = 1 << 17;
+constexpr size_t maxblocksize = 128;
 /* constexpr size_t maxblocksize = runtime argument */
 
 // This are approximately 25 GB
@@ -51,7 +51,7 @@ constexpr size_t capacity_per_node = 16 * GB;
 // The container where we store our
 using value_t = int;
 // using container_t = std::unique_ptr<value_t[]>;
-using container_t = a2a::MpiMemory<value_t>;
+using container_t = a2a::SharedMpiMemory<value_t>;
 using iterator_t  = typename container_t::pointer;
 
 using benchmark_t = std::function<void(
@@ -274,7 +274,7 @@ int main(int argc, char* argv[])
 
       // container_t data, out, correct;
       auto data = container_t(commCtx, nels);
-      auto out = container_t(commCtx, nels);
+      auto out  = container_t(commCtx, nels);
 #ifndef NDEBUG
       auto correct = container_t(commCtx, nels);
 #endif

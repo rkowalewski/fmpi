@@ -29,6 +29,102 @@ struct mpi_datatype<int> {
     return MPI_INT;
   }
 };
+
+template <>
+struct mpi_datatype<char> {
+  static MPI_Datatype type()
+  {
+    return MPI_CHAR;
+  }
+};
+
+template <>
+struct mpi_datatype<unsigned char> {
+  static MPI_Datatype type()
+  {
+    return MPI_UNSIGNED_CHAR;
+  }
+};
+
+template <>
+struct mpi_datatype<short> {
+  static MPI_Datatype type()
+  {
+    return MPI_SHORT;
+  }
+};
+
+template <>
+struct mpi_datatype<unsigned short> {
+  static MPI_Datatype type()
+  {
+    return MPI_UNSIGNED_SHORT;
+  }
+};
+
+template <>
+struct mpi_datatype<unsigned int> {
+  static MPI_Datatype type()
+  {
+    return MPI_UNSIGNED;
+  }
+};
+
+template <>
+struct mpi_datatype<long> {
+  static MPI_Datatype type()
+  {
+    return MPI_LONG;
+  }
+};
+
+template <>
+struct mpi_datatype<unsigned long> {
+  static MPI_Datatype type()
+  {
+    return MPI_UNSIGNED_LONG;
+  }
+};
+
+template <>
+struct mpi_datatype<long long> {
+  static MPI_Datatype type()
+  {
+    return MPI_LONG_LONG;
+  }
+};
+
+template <>
+struct mpi_datatype<unsigned long long> {
+  static MPI_Datatype type()
+  {
+    return MPI_UNSIGNED_LONG_LONG;
+  }
+};
+
+template <>
+struct mpi_datatype<float> {
+  static MPI_Datatype type()
+  {
+    return MPI_FLOAT;
+  }
+};
+
+template <>
+struct mpi_datatype<double> {
+  static MPI_Datatype type()
+  {
+    return MPI_DOUBLE;
+  }
+};
+
+template <>
+struct mpi_datatype<long double> {
+  static MPI_Datatype type()
+  {
+    return MPI_LONG_DOUBLE;
+  }
+};
 }  // namespace detail
 
 template <class T>
@@ -95,10 +191,106 @@ struct MpiCommCtx {
     A2A_ASSERT_RETURNS(MPI_Comm_free(&comm), MPI_SUCCESS);
     A2A_ASSERT_RETURNS(MPI_Comm_free(&sharedComm), MPI_SUCCESS);
   }
+};
 
- private:
-  void _allocate()
+template <class T>
+struct SharedMpiMemory {
+  using pointer = T*;
+
+  mpi::size_type    nbytes{};
+  mpi::size_type    disp_unit{};
+  pointer           baseptr{};
+  MpiCommCtx const* ctx{};
+
+  MPI_Win win{MPI_WIN_NULL};
+  /// base pointers of all partners
+  simple_vector<pointer> basePtrsShared{};
+
+  SharedMpiMemory() = default;
+
+  SharedMpiMemory(MpiCommCtx const& _ctx, size_t _nels)
+    : nbytes(_nels * sizeof(T))
+    , disp_unit(sizeof(T))
+    , ctx(&_ctx)
+    , basePtrsShared(ctx->nrShared)
   {
+    MPI_Info info = MPI_INFO_NULL;
+
+    A2A_ASSERT(basePtrsShared.size() > 0);
+
+    MPI_Info_create(&info);
+
+    size_t min, max;
+
+    auto mpi_type = mpi::mpi_datatype<size_t>::type();
+    MPI_Allreduce(&nbytes, &min, 1, mpi_type, MPI_MIN, ctx->comm);
+    MPI_Allreduce(&nbytes, &max, 1, mpi_type, MPI_MAX, ctx->comm);
+
+    MPI_Info_set(info, "same_disp_unit", "true");
+
+    if (min == max) {
+      MPI_Info_set(info, "same_size", "true");
+    }
+
+    MPI_Info_set(info, "alloc_shared_noncontig", "true");
+
+    A2A_ASSERT_RETURNS(
+        MPI_Win_allocate_shared(
+            nbytes,
+            disp_unit,
+            info,
+            ctx->sharedComm,
+            &basePtrsShared[ctx->meShared],
+            &win),
+        MPI_SUCCESS);
+
+    baseptr = basePtrsShared[ctx->meShared];
+
+    for (mpi::rank_t r = 0; r < ctx->nrShared; ++r) {
+      if (r == ctx->meShared) continue;
+
+      mpi::size_type sz;
+      int            disp;
+
+      A2A_ASSERT_RETURNS(
+          MPI_Win_shared_query(win, r, &sz, &disp, &basePtrsShared[r]),
+          MPI_SUCCESS);
+      A2A_ASSERT(static_cast<mpi::size_type>(disp) == disp_unit);
+      A2A_ASSERT(nbytes == sz);
+    }
+
+    A2A_ASSERT_RETURNS(MPI_Info_free(&info), MPI_SUCCESS);
+  }
+
+  SharedMpiMemory& operator=(SharedMpiMemory const& other) = delete;
+  SharedMpiMemory(SharedMpiMemory const& other)            = delete;
+
+  SharedMpiMemory& operator=(SharedMpiMemory&& other) noexcept
+  {
+    if (win != MPI_WIN_NULL) {
+      A2A_ASSERT_RETURNS(MPI_Win_free(&win), MPI_SUCCESS);
+    }
+
+    nbytes         = other.nbytes;
+    disp_unit      = other.disp_unit;
+    baseptr        = other.baseptr;
+    basePtrsShared = std::move(other.basePtrsShared);
+
+    win = std::move(other.win);
+    return *this;
+  }
+
+  SharedMpiMemory(SharedMpiMemory&& other) noexcept
+  {
+    *this = std::move(other);
+  }
+
+  ~SharedMpiMemory()
+  {
+    if (win != MPI_WIN_NULL) {
+      A2A_ASSERT_RETURNS(MPI_Win_free(&win), MPI_SUCCESS);
+    }
+    baseptr = nullptr;
   }
 };
 
@@ -106,26 +298,25 @@ template <class T>
 struct MpiMemory {
   using pointer = T*;
 
-  mpi::size_type nbytes{};
-  mpi::size_type disp_unit{};
+  mpi::size_type    nbytes{};
+  mpi::size_type    disp_unit{};
+  MpiCommCtx const* ctx;
 
   pointer baseptr{};
 
   MPI_Win win{MPI_WIN_NULL};
-  MPI_Win sharedWin{MPI_WIN_NULL};
-  /// base pointers of all partners
-  simple_vector<mpi::pointer_type> basePtrsShared;
 
   MpiMemory() = default;
 
-  MpiMemory(MpiCommCtx const& ctx, size_t nels)
-    : nbytes(nels * sizeof(T))
+  MpiMemory(MpiCommCtx const& _ctx, size_t _nels)
+    : nbytes(_nels * sizeof(T))
     , disp_unit(sizeof(T))
+    , ctx(&_ctx)
   {
     // world window
     A2A_ASSERT_RETURNS(
         MPI_Win_allocate(
-            nbytes, disp_unit, MPI_INFO_NULL, ctx.comm, &baseptr, &win),
+            nbytes, disp_unit, MPI_INFO_NULL, ctx->comm, &baseptr, &win),
         MPI_SUCCESS);
   }
 
@@ -134,18 +325,15 @@ struct MpiMemory {
 
   MpiMemory& operator=(MpiMemory&& other) noexcept
   {
-    if (nbytes > 0) {
-      MPI_Win_free(&win);
-      MPI_Win_free(&sharedWin);
+    if (win != MPI_WIN_NULL) {
+      A2A_ASSERT_RETURNS(MPI_Win_free(&win), MPI_SUCCESS);
     }
 
-    nbytes         = other.nbytes;
-    disp_unit      = other.disp_unit;
-    baseptr        = other.baseptr;
-    basePtrsShared = std::move(other.basePtrsShared);
+    nbytes    = other.nbytes;
+    disp_unit = other.disp_unit;
+    baseptr   = other.baseptr;
 
-    win       = std::move(other.win);
-    sharedWin = std::move(other.sharedWin);
+    win = std::move(other.win);
     return *this;
   }
 
@@ -156,8 +344,8 @@ struct MpiMemory {
 
   ~MpiMemory()
   {
-    if (nbytes > 0) {
-      MPI_Win_free(&win);
+    if (win != MPI_WIN_NULL) {
+      A2A_ASSERT_RETURNS(MPI_Win_free(&win), MPI_SUCCESS);
     }
     baseptr   = nullptr;
     nbytes    = 0;
