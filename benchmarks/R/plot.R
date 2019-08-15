@@ -57,7 +57,9 @@ csv <- args[1]
 data <- read.csv(file=csv, header=TRUE, sep=",")
 #head(data)
 
-
+plotName <- paste(
+                  sub(pattern = "(.*)\\..*$", replacement = "\\1", basename(csv)),
+                  ".pdf", sep="")
 
 sel <- "ScatteredPairwiseWaitsomeFlatHandshake"
 
@@ -87,7 +89,7 @@ selected <- data %>% filter(
 pd <- position_dodge(0.1) # move them .05 to the left and right
 
 # bars won't be dodged!
-pdf("multiple_plot.pdf",paper="a4")
+pdf(plotName,paper="a4")
 
 mylimit <- function(x) {
     limits <- c(0, max(x) + .2)
