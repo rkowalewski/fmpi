@@ -3,7 +3,9 @@
 
 #include <cstdlib>
 
-#include <mpi.h>
+#include <Mpi.h>
+
+#include <Math.h>
 
 namespace a2a {
 
@@ -15,9 +17,16 @@ template <
     class OutputIt,
     class Op,
     size_t NReqs = 2>
-inline void scatteredPairwiseWaitsome(
-    InputIt begin, OutputIt out, int blocksize, MPI_Comm comm, Op&& op)
+inline void all2allShmem(
+    InputIt begin, OutputIt out, int blocksize, MPI_Comm comm, MPI_Win, Op&& op)
 {
+  mpi::rank_t nr, me;
+
+  MPI_Comm_size(comm, &nr);
+  MPI_Comm_rank(comm, &me);
+  A2A_ASSERT(a2a::isPow2(static_cast<unsigned>(nr)));
+
+
 }
 }  // namespace a2a
 

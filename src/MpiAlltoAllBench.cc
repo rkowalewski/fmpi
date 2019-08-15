@@ -16,7 +16,6 @@
 #include <Debug.h>
 #include <Random.h>
 #include <Timer.h>
-#include <Types.h>
 
 #include <MPISynchronizedBarrier.h>
 #include <MpiAlltoAllBench.h>
@@ -51,7 +50,7 @@ constexpr size_t capacity_per_node = 16 * GB;
 // The container where we store our
 using value_t = int;
 // using container_t = std::unique_ptr<value_t[]>;
-using container_t = a2a::SharedMpiMemory<value_t>;
+using container_t = mpi::SharedMpiMemory<value_t>;
 using iterator_t  = typename container_t::pointer;
 
 using benchmark_t = std::function<void(
@@ -159,7 +158,7 @@ int main(int argc, char* argv[])
   MPI_Init(&argc, &argv);
 
   {
-    a2a::MpiCommCtx commCtx{MPI_COMM_WORLD};
+    mpi::MpiCommCtx commCtx{MPI_COMM_WORLD};
     me = commCtx.me;
     nr = commCtx.nr;
 

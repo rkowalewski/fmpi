@@ -11,7 +11,6 @@
 #include <Math.h>
 #include <Mpi.h>
 #include <Trace.h>
-#include <Types.h>
 
 namespace a2a {
 
@@ -80,7 +79,7 @@ inline void bruck(
       }
     }
 
-    auto reqs = a2a::sendrecv(
+    auto reqs = mpi::sendrecv(
         sendbuf,
         blocksize * count,
         sendto,
@@ -202,7 +201,7 @@ inline void bruck_mod(
     }
 
     // b) exchange
-    auto reqs = a2a::sendrecv(
+    auto reqs = mpi::sendrecv(
         sendbuf,
         blocksize * count,
         sendto,
