@@ -4,6 +4,7 @@
 #include <mpi.h>
 
 #include <array>
+#include <tuple>
 #include <type_traits>
 
 #include <Debug.h>
@@ -12,8 +13,9 @@
 
 namespace mpi {
 
-using rank_t    = int;
-using size_type = MPI_Aint;
+using rank_t          = int;
+using size_type       = MPI_Aint;
+using difference_type = int;
 
 namespace detail {
 template <class T>
@@ -141,17 +143,8 @@ struct mpi_datatype {
   }
 };
 
-struct MpiCommCtx {
-  MPI_Comm    comm{MPI_COMM_NULL};
-  mpi::rank_t nr{};
-  mpi::rank_t me{};
-  // MPI_Group   world_group{MPI_GROUP_NULL};
-
-  MPI_Comm    sharedComm{MPI_COMM_NULL};
-  mpi::rank_t nrShared{};
-  mpi::rank_t meShared{};
-  // MPI_Group   shared_group{MPI_GROUP_NULL};
-
+class MpiCommCtx {
+ public:
   MpiCommCtx() = default;
 
   MpiCommCtx(MPI_Comm const& _worldComm)
@@ -160,12 +153,13 @@ struct MpiCommCtx {
     A2A_ASSERT_RETURNS(MPI_Initialized(&initialized), MPI_SUCCESS);
     A2A_ASSERT(initialized == 1);
 
-    A2A_ASSERT_RETURNS(MPI_Comm_dup(_worldComm, &comm), MPI_SUCCESS);
+    A2A_ASSERT_RETURNS(MPI_Comm_dup(_worldComm, &m_comm), MPI_SUCCESS);
     // A2A_ASSERT_RETURNS(MPI_Comm_group(comm, &world_group), MPI_SUCCESS);
 
-    A2A_ASSERT_RETURNS(MPI_Comm_size(comm, &nr), MPI_SUCCESS);
-    A2A_ASSERT_RETURNS(MPI_Comm_rank(comm, &me), MPI_SUCCESS);
+    A2A_ASSERT_RETURNS(MPI_Comm_size(m_comm, &m_size), MPI_SUCCESS);
+    A2A_ASSERT_RETURNS(MPI_Comm_rank(m_comm, &m_rank), MPI_SUCCESS);
 
+#if 0
     // split world into shared memory communicator
     A2A_ASSERT_RETURNS(
         MPI_Comm_split_type(
@@ -177,51 +171,123 @@ struct MpiCommCtx {
     //    MPI_Comm_group(sharedComm, &shared_group), MPI_SUCCESS);
     A2A_ASSERT_RETURNS(MPI_Comm_size(sharedComm, &nrShared), MPI_SUCCESS);
     A2A_ASSERT_RETURNS(MPI_Comm_rank(sharedComm, &meShared), MPI_SUCCESS);
+#endif
   }
+
+  constexpr auto rank() const noexcept
+  {
+    return m_rank;
+  }
+
+  constexpr auto size() const noexcept
+  {
+    return m_size;
+  }
+
+  constexpr auto const& mpiComm() const noexcept
+  {
+    return m_comm;
+  }
+
+  MpiCommCtx(MpiCommCtx&&) noexcept = default;
+  MpiCommCtx& operator=(MpiCommCtx&&) noexcept = default;
 
   ~MpiCommCtx()
   {
-    A2A_ASSERT_RETURNS(MPI_Comm_free(&comm), MPI_SUCCESS);
-    A2A_ASSERT_RETURNS(MPI_Comm_free(&sharedComm), MPI_SUCCESS);
+    A2A_ASSERT_RETURNS(MPI_Comm_free(&m_comm), MPI_SUCCESS);
+    // A2A_ASSERT_RETURNS(MPI_Comm_free(&m_sharedComm), MPI_SUCCESS);
   }
+
+ private:
+  MPI_Comm    m_comm{MPI_COMM_NULL};
+  mpi::rank_t m_size{};
+  mpi::rank_t m_rank{};
 };
 
 template <class T>
-struct SharedMpiMemory {
-  using pointer = T*;
+inline auto mpiAllReduceMinMax(MpiCommCtx const& ctx, T value)
+{
+  auto mpi_type = mpi::mpi_datatype<T>::type();
 
-  mpi::size_type    nbytes{};
-  mpi::size_type    disp_unit{};
-  pointer           baseptr{};
-  MpiCommCtx const* ctx{};
+  T min, max;
 
-  MPI_Win win{MPI_WIN_NULL};
-  /// base pointers of all partners
-  tlx::SimpleVector<pointer, tlx::SimpleVectorMode::NoInitNoDestroy>
-      basePtrsShared{};
+  A2A_ASSERT_RETURNS(
+      MPI_Allreduce(&value, &min, 1, mpi_type, MPI_MIN, ctx.mpiComm()),
+      MPI_SUCCESS);
+  A2A_ASSERT_RETURNS(
+      MPI_Allreduce(&value, &max, 1, mpi_type, MPI_MAX, ctx.mpiComm()),
+      MPI_SUCCESS);
 
-  SharedMpiMemory() = default;
+  return std::make_pair(min, max);
+}
 
-  SharedMpiMemory(MpiCommCtx const& _ctx, size_t _nels)
-    : nbytes(_nels * sizeof(T))
-    , disp_unit(sizeof(T))
-    , ctx(&_ctx)
-    , basePtrsShared(ctx->nrShared)
+namespace detail {
+struct MemorySegmentBase {
+  size_type         m_nbytes{};
+  difference_type   m_disp_unit{};
+  MPI_Win           m_win{MPI_WIN_NULL};
+  MpiCommCtx const* m_ctx;
+
+  MemorySegmentBase() = default;
+
+  MemorySegmentBase(MpiCommCtx const& ctx, size_t nbytes, size_t disp_unit)
+    : m_nbytes(nbytes)
+    , m_disp_unit(disp_unit)
+    , m_ctx(&ctx)
+  {
+  }
+
+  ~MemorySegmentBase()
+  {
+    if (m_win != MPI_WIN_NULL) {
+      MPI_Win_free(&m_win);
+    }
+  }
+
+  MemorySegmentBase(MemorySegmentBase const&) = delete;
+  MemorySegmentBase& operator=(MemorySegmentBase const&) = delete;
+
+  MemorySegmentBase(MemorySegmentBase&& other) noexcept
+  {
+    *this = std::move(other);
+  }
+
+  MemorySegmentBase& operator=(MemorySegmentBase&& other) noexcept
+  {
+    std::swap(m_win, other.m_win);
+    std::swap(m_nbytes, other.m_nbytes);
+    std::swap(m_disp_unit, other.m_disp_unit);
+    std::swap(m_ctx, other.m_ctx);
+    return *this;
+  }
+};
+}  // namespace detail
+
+template <class T>
+class ShmSegment : private detail::MemorySegmentBase {
+  using detail::MemorySegmentBase::MemorySegmentBase;
+
+  template <class _T>
+  using simple_vector =
+      tlx::SimpleVector<_T, tlx::SimpleVectorMode::NoInitNoDestroy>;
+
+ public:
+  using pointer       = T*;
+  using const_pointer = T const*;
+
+  ShmSegment() = default;
+
+  ShmSegment(MpiCommCtx const& ctx, size_t nels)
+    : MemorySegmentBase(ctx, nels * sizeof(T), sizeof(T))
+    , m_baseptrs(m_ctx->size())
   {
     MPI_Info info = MPI_INFO_NULL;
 
-    A2A_ASSERT(basePtrsShared.size() > 0);
-
     MPI_Info_create(&info);
-
-    size_t min, max;
-
-    auto mpi_type = mpi::mpi_datatype<size_t>::type();
-    MPI_Allreduce(&nbytes, &min, 1, mpi_type, MPI_MIN, ctx->comm);
-    MPI_Allreduce(&nbytes, &max, 1, mpi_type, MPI_MAX, ctx->comm);
-
     MPI_Info_set(info, "same_disp_unit", "true");
 
+    size_t min, max;
+    std::tie(min, max) = mpiAllReduceMinMax(m_ctx->mpiComm(), m_nbytes);
     if (min == max) {
       MPI_Info_set(info, "same_size", "true");
     }
@@ -230,121 +296,144 @@ struct SharedMpiMemory {
 
     A2A_ASSERT_RETURNS(
         MPI_Win_allocate_shared(
-            nbytes,
-            disp_unit,
+            m_nbytes,
+            m_disp_unit,
             info,
-            ctx->sharedComm,
-            &basePtrsShared[ctx->meShared],
-            &win),
+            m_ctx->mpiComm(),
+            &m_baseptrs[m_ctx->rank()],
+            &m_win),
         MPI_SUCCESS);
 
-    baseptr = basePtrsShared[ctx->meShared];
+    auto me = m_ctx->rank();
 
-    for (mpi::rank_t r = 0; r < ctx->nrShared; ++r) {
-      if (r == ctx->meShared) continue;
-
-      mpi::size_type sz;
-      int            disp;
+    auto queryShmPtrs = [this](auto idx) {
+      size_type       sz;
+      difference_type disp;
 
       A2A_ASSERT_RETURNS(
-          MPI_Win_shared_query(win, r, &sz, &disp, &basePtrsShared[r]),
+          MPI_Win_shared_query(m_win, idx, &sz, &disp, &m_baseptrs[idx]),
           MPI_SUCCESS);
-      A2A_ASSERT(static_cast<mpi::size_type>(disp) == disp_unit);
-      A2A_ASSERT(nbytes == sz);
+      A2A_ASSERT(disp == m_disp_unit);
+      A2A_ASSERT(m_nbytes == sz);
+    };
+
+    for (mpi::rank_t r = 0; r < me; ++r) {
+      queryShmPtrs(r);
+    }
+
+    for (mpi::rank_t r = me + 1; r < m_ctx->size(); ++r) {
+      queryShmPtrs(r);
     }
 
     A2A_ASSERT_RETURNS(MPI_Info_free(&info), MPI_SUCCESS);
   }
 
-  SharedMpiMemory& operator=(SharedMpiMemory const& other) = delete;
-  SharedMpiMemory(SharedMpiMemory const& other)            = delete;
-
-  SharedMpiMemory& operator=(SharedMpiMemory&& other) noexcept
+  ShmSegment& operator=(ShmSegment&& other) noexcept
   {
-    if (win != MPI_WIN_NULL) {
-      A2A_ASSERT_RETURNS(MPI_Win_free(&win), MPI_SUCCESS);
-    }
+    MemorySegmentBase::operator=(std::move(other));
 
-    nbytes         = other.nbytes;
-    disp_unit      = other.disp_unit;
-    baseptr        = other.baseptr;
-    basePtrsShared = std::move(other.basePtrsShared);
+    m_baseptrs = std::move(other.m_baseptrs);
 
-    win = std::move(other.win);
     return *this;
   }
 
-  SharedMpiMemory(SharedMpiMemory&& other) noexcept
+  ShmSegment(ShmSegment&& other) noexcept
   {
     *this = std::move(other);
   }
 
-  ~SharedMpiMemory()
+  pointer base() noexcept
   {
-    if (win != MPI_WIN_NULL) {
-      A2A_ASSERT_RETURNS(MPI_Win_free(&win), MPI_SUCCESS);
-    }
-    baseptr = nullptr;
+    return m_baseptrs[m_ctx->rank()];
   }
+
+  const_pointer base() const noexcept
+  {
+    return m_baseptrs[m_ctx->rank()];
+  }
+
+  pointer base(rank_t rank) noexcept
+  {
+    return m_baseptrs[rank];
+  }
+
+  const_pointer base(rank_t rank) const noexcept
+  {
+    return m_baseptrs[rank];
+  }
+
+ private:
+  /// base pointers of all partners
+  simple_vector<pointer> m_baseptrs{};
 };
 
 template <class T>
-struct MpiMemory {
-  using pointer = T*;
+struct GlobalSegment : private detail::MemorySegmentBase {
+  using detail::MemorySegmentBase::MemorySegmentBase;
 
-  mpi::size_type    nbytes{};
-  mpi::size_type    disp_unit{};
-  MpiCommCtx const* ctx;
+ public:
+  using pointer       = T*;
+  using const_pointer = T const*;
 
-  pointer baseptr{};
+  GlobalSegment() = default;
 
-  MPI_Win win{MPI_WIN_NULL};
-
-  MpiMemory() = default;
-
-  MpiMemory(MpiCommCtx const& _ctx, size_t _nels)
-    : nbytes(_nels * sizeof(T))
-    , disp_unit(sizeof(T))
-    , ctx(&_ctx)
+  GlobalSegment(MpiCommCtx const& ctx, size_t nels)
+    : MemorySegmentBase(ctx, nels * sizeof(T), sizeof(T))
   {
+    MPI_Info info = MPI_INFO_NULL;
+
+    MPI_Info_create(&info);
+
+    MPI_Info_create(&info);
+    MPI_Info_set(info, "same_disp_unit", "true");
+
+    size_t min, max;
+    std::tie(min, max) = mpiAllReduceMinMax(m_ctx->mpiComm(), m_nbytes);
+    if (min == max) {
+      MPI_Info_set(info, "same_size", "true");
+    }
+
     // world window
     A2A_ASSERT_RETURNS(
         MPI_Win_allocate(
-            nbytes, disp_unit, MPI_INFO_NULL, ctx->comm, &baseptr, &win),
+            m_nbytes,
+            m_disp_unit,
+            MPI_INFO_NULL,
+            m_ctx->mpiComm(),
+            &m_baseptr,
+            &m_win),
         MPI_SUCCESS);
   }
 
-  MpiMemory& operator=(MpiMemory const& other) = delete;
-  MpiMemory(MpiMemory const& other)            = delete;
+  GlobalSegment& operator=(GlobalSegment const& other) = delete;
+  GlobalSegment(GlobalSegment const& other)            = delete;
 
-  MpiMemory& operator=(MpiMemory&& other) noexcept
+  GlobalSegment& operator=(GlobalSegment&& other) noexcept
   {
-    if (win != MPI_WIN_NULL) {
-      A2A_ASSERT_RETURNS(MPI_Win_free(&win), MPI_SUCCESS);
-    }
+    MemorySegmentBase::operator=(std::move(other));
 
-    nbytes    = other.nbytes;
-    disp_unit = other.disp_unit;
-    baseptr   = other.baseptr;
+    m_baseptr = std::move(other.m_baseptr);
 
-    win = std::move(other.win);
     return *this;
   }
 
-  MpiMemory(MpiMemory&& other) noexcept
+  GlobalSegment(GlobalSegment&& other) noexcept
   {
     *this = std::move(other);
   }
 
-  ~MpiMemory()
+  pointer base() noexcept
   {
-    if (win != MPI_WIN_NULL) {
-      A2A_ASSERT_RETURNS(MPI_Win_free(&win), MPI_SUCCESS);
-    }
-    baseptr   = nullptr;
-    nbytes    = 0;
-    disp_unit = 0;
+    return m_baseptr;
   }
+
+  const_pointer base() const noexcept
+  {
+    return m_baseptr;
+  }
+
+ private:
+  pointer m_baseptr;
 };
 
 constexpr size_t REQ_SEND = 0;

@@ -50,11 +50,15 @@ constexpr size_t capacity_per_node = 16 * GB;
 // The container where we store our
 using value_t = int;
 // using container_t = std::unique_ptr<value_t[]>;
-using container_t = mpi::SharedMpiMemory<value_t>;
+using container_t = mpi::ShmSegment<value_t>;
 using iterator_t  = typename container_t::pointer;
 
 using benchmark_t = std::function<void(
-    iterator_t, iterator_t, int, MPI_Comm, merge_t<iterator_t, iterator_t>)>;
+    iterator_t,
+    iterator_t,
+    int,
+    mpi::MpiCommCtx const&,
+    merge_t<iterator_t, iterator_t>)>;
 
 std::array<std::pair<std::string, benchmark_t>, 9> algos = {
     std::make_pair(
@@ -153,14 +157,12 @@ std::array<std::pair<std::string, benchmark_t>, 9> algos = {
 
 int main(int argc, char* argv[])
 {
-  int me, nr;
-
   MPI_Init(&argc, &argv);
 
   {
     mpi::MpiCommCtx commCtx{MPI_COMM_WORLD};
-    me = commCtx.me;
-    nr = commCtx.nr;
+    auto            me = commCtx.rank();
+    auto            nr = commCtx.size();
 
     if (argc < 2) {
       if (me == 0) {
@@ -251,7 +253,7 @@ int main(int argc, char* argv[])
 
     // calibrate clock
     auto clock           = SynchronizedClock{};
-    bool is_clock_synced = clock.Init(commCtx.comm);
+    bool is_clock_synced = clock.Init(commCtx.mpiComm());
     A2A_ASSERT(is_clock_synced);
 
     for (size_t blocksize = minblocksize, step = 0; step <= nsteps;
@@ -288,17 +290,17 @@ int main(int argc, char* argv[])
 #ifdef NDEBUG
             // generate some randome values
             std::generate(
-                std::next(data.baseptr, block * sendcount),
-                std::next(data.baseptr, (block + 1) * sendcount),
+                std::next(data.base(), block * sendcount),
+                std::next(data.base(), (block + 1) * sendcount),
                 [&]() { return distribution(generator); });
             // sort it
             std::sort(
-                std::next(data.baseptr, block * sendcount),
-                std::next(data.baseptr, (block + 1) * sendcount));
+                std::next(data.base(), block * sendcount),
+                std::next(data.base(), (block + 1) * sendcount));
 #else
             std::iota(
-                std::next(data.baseptr, block * sendcount),
-                std::next(data.baseptr, (block + 1) * sendcount),
+                std::next(data.base(), block * sendcount),
+                std::next(data.base(), (block + 1) * sendcount),
                 block * sendcount + (me * nels));
 #endif
           }
@@ -306,8 +308,8 @@ int main(int argc, char* argv[])
 
         for (std::size_t block = 0; block < std::size_t(nr); ++block) {
           A2A_ASSERT(std::is_sorted(
-              std::next(data.baseptr, block * sendcount),
-              std::next(data.baseptr, (block + 1) * sendcount)));
+              std::next(data.base(), block * sendcount),
+              std::next(data.base(), (block + 1) * sendcount)));
         }
 
         auto merger = [nels](
@@ -327,13 +329,13 @@ int main(int argc, char* argv[])
         // with our own algorithms
 #ifndef NDEBUG
         a2a::MpiAlltoAll(
-            data.baseptr,
-            correct.baseptr,
+            data.base(),
+            correct.base(),
             static_cast<int>(sendcount),
-            commCtx.comm,
+            commCtx.mpiComm(),
             merger);
-        A2A_ASSERT(std::is_sorted(
-            correct.baseptr, std::next(correct.baseptr, nels)));
+        A2A_ASSERT(
+            std::is_sorted(correct.base(), std::next(correct.base(), nels)));
 #endif
 
         Params p{};
@@ -357,15 +359,15 @@ int main(int argc, char* argv[])
             continue;
           }
 
-          auto barrier = clock.Barrier(commCtx.comm);
-          A2A_ASSERT(barrier.Success(commCtx.comm));
+          auto barrier = clock.Barrier(commCtx.mpiComm());
+          A2A_ASSERT(barrier.Success(commCtx.mpiComm()));
 
           auto t = run_algorithm(
               algo.second,
-              data.baseptr,
-              out.baseptr,
+              data.base(),
+              out.base(),
               static_cast<int>(sendcount),
-              commCtx.comm,
+              commCtx,
               merger);
 
           // printVector(&(out[0]), &(out[nels]), me);
@@ -373,9 +375,7 @@ int main(int argc, char* argv[])
           P(me << " finished Algorithm " << algo.first
                << ", size: " << blocksize << "...\n");
           A2A_ASSERT(std::equal(
-              correct.baseptr,
-              std::next(correct.baseptr, nels),
-              out.baseptr));
+              correct.base(), std::next(correct.base(), nels), out.base()));
 
           P(me << " finished Validation " << algo.first
                << ", size: " << blocksize << "...\n");
@@ -398,9 +398,9 @@ int main(int argc, char* argv[])
       }
       // synchronize before advancing to the next stage
       P(me << " reaching barrier, going to next iteration");
-      MPI_Barrier(commCtx.comm);
+      MPI_Barrier(commCtx.mpiComm());
     }
-    MPI_Barrier(commCtx.comm);
+    MPI_Barrier(commCtx.mpiComm());
   }
 
   MPI_Finalize();

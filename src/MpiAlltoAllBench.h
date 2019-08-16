@@ -1,6 +1,5 @@
 #ifndef MPI_ALLTOALL_BENCH_H__INCLUDED
 #define MPI_ALLTOALL_BENCH_H__INCLUDED
-#include <mpi.h>
 
 #include <algorithm>
 #include <array>
@@ -9,6 +8,7 @@
 #include <utility>
 #include <vector>
 
+#include <Mpi.h>
 #include <Timer.h>
 #include <Trace.h>
 
@@ -37,17 +37,17 @@ void printMeasurementHeader(std::ostream& os);
 void printMeasurementCsvLine(
     std::ostream&                      os,
     Params                             m,
-    const std::string&                        algorithm,
+    const std::string&                 algorithm,
     std::tuple<double, double, double> times);
 
 template <class InputIt, class OutputIt, class CommAlgo, class Merger>
 auto run_algorithm(
-    CommAlgo&& f,
-    InputIt    begin,
-    OutputIt   out,
-    int        blocksize,
-    MPI_Comm   comm,
-    Merger&&   op)
+    CommAlgo&&             f,
+    InputIt                begin,
+    OutputIt               out,
+    int                    blocksize,
+    mpi::MpiCommCtx const& comm,
+    Merger&&               op)
 {
   auto start = ChronoClockNow();
   f(begin, out, blocksize, comm, std::forward<Merger>(op));

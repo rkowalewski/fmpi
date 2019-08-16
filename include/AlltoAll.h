@@ -131,6 +131,7 @@ class CommState {
   buffer_t m_buffer{};
 };
 
+#if 0
 class A2ACommBase {
  public:
   using rank_t = int32_t;
@@ -159,71 +160,77 @@ class A2ACommBase {
   std::uint32_t m_nr{};
   rank_t        m_me{MPI_PROC_NULL};
 };
+#endif
 
-class FlatHandshake : public detail::A2ACommBase {
-  using base_t = detail::A2ACommBase;
+using rank_t = mpi::rank_t;
 
+class FlatHandshake {
  public:
   static constexpr const char* NAME = "FlatHandshake";
-  using base_t::base_t;
 
-  constexpr rank_t sendRank(rank_t phase) const noexcept
+  constexpr mpi::rank_t sendRank(
+      mpi::MpiCommCtx const& comm, mpi::rank_t phase) const noexcept
   {
-    return isPow2(size()) ? hypercube(phase)
-                          : mod(me() + phase, static_cast<rank_t>(size()));
+    return isPow2<unsigned>(comm.size())
+               ? hypercube(comm, phase)
+               : mod(comm.rank() + phase, comm.size());
   }
 
-  constexpr rank_t recvRank(rank_t phase) const noexcept
+  constexpr mpi::rank_t recvRank(
+      mpi::MpiCommCtx const& comm, mpi::rank_t phase) const noexcept
   {
-    return isPow2(size()) ? hypercube(phase)
-                          : mod(me() - phase, static_cast<rank_t>(size()));
+    return isPow2<unsigned>(comm.size())
+               ? hypercube(comm, phase)
+               : mod(comm.rank() - phase, comm.size());
   }
 
  private:
-  constexpr rank_t hypercube(rank_t phase) const noexcept
+  constexpr rank_t hypercube(mpi::MpiCommCtx const& comm, rank_t phase) const
+      noexcept
   {
-    A2A_ASSERT(isPow2(size()));
-    return me() ^ phase;
+    A2A_ASSERT(isPow2<unsigned>(comm.size()));
+    return comm.rank() ^ phase;
   }
 };
 
-class OneFactor : public detail::A2ACommBase {
-  using base_t = detail::A2ACommBase;
-
+class OneFactor {
  public:
   static constexpr const char* NAME = "OneFactor";
 
-  using base_t::base_t;
-
-  constexpr rank_t sendRank(rank_t phase) const noexcept
+  constexpr rank_t sendRank(mpi::MpiCommCtx const& comm, rank_t phase) const
+      noexcept
   {
-    return size() % 2 ? factor_odd(phase) : factor_even(phase);
+    return comm.size() % 2 ? factor_odd(comm, phase)
+                           : factor_even(comm, phase);
   }
 
-  constexpr rank_t recvRank(rank_t phase) const noexcept
+  constexpr rank_t recvRank(mpi::MpiCommCtx const& comm, rank_t phase) const
+      noexcept
   {
-    return sendRank(phase);
+    return sendRank(comm, phase);
   }
 
  private:
-  constexpr rank_t factor_even(rank_t phase) const noexcept
+  constexpr rank_t factor_even(
+      mpi::MpiCommCtx const& comm, rank_t phase) const noexcept
   {
-    rank_t idle = mod<rank_t>(size() * phase / 2, size() - 1);
+    rank_t idle = mod(comm.size() * phase / 2, comm.size() - 1);
 
-    if (me() == static_cast<rank_t>(size()) - 1) {
+    if (comm.rank() == comm.size() - 1) {
       return idle;
     }
 
-    if (me() == idle) {
-      return size() - 1;
+    if (comm.rank() == idle) {
+      return comm.size() - 1;
     }
 
-    return mod(phase - me(), static_cast<rank_t>(size()) - 1);
+    return mod(phase - comm.rank(), comm.size() - 1);
   }
 
-  constexpr rank_t factor_odd(rank_t phase) const noexcept
+  constexpr rank_t factor_odd(mpi::MpiCommCtx const& comm, rank_t phase) const
+      noexcept
   {
-    return mod(phase - me(), static_cast<rank_t>(size()));
+    return mod(phase - comm.rank(), comm.size());
   }
 };
 
@@ -236,8 +243,6 @@ template <>
 struct selectAlgorithm<AllToAllAlgorithm::ONE_FACTOR> {
   using type = OneFactor;
 };
-
-using rank_t = typename A2ACommBase::rank_t;
 
 template <class Schedule, class ReqIdx, class BufAlloc, class CommOp>
 inline auto enqueueMpiOps(
@@ -285,7 +290,11 @@ template <
     class Op,
     size_t NReqs = 2>
 inline void scatteredPairwiseWaitsome(
-    InputIt begin, OutputIt out, int blocksize, MPI_Comm comm, Op&& op)
+    InputIt                begin,
+    OutputIt               out,
+    int                    blocksize,
+    mpi::MpiCommCtx const& ctx,
+    Op&&                   op)
 {
   // Tuning Parameters:
 
@@ -302,13 +311,12 @@ inline void scatteredPairwiseWaitsome(
   static_assert(
       utilization_threshold, "at least two concurrent receives required");
 
-  int me, nr;
-  MPI_Comm_rank(comm, &me);
-  MPI_Comm_size(comm, &nr);
-
   using algo_type   = typename detail::selectAlgorithm<algo>::type;
   using value_type  = typename std::iterator_traits<InputIt>::value_type;
   auto mpi_datatype = mpi::mpi_datatype<value_type>::type();
+
+  auto const nr = ctx.size();
+  auto const me = ctx.rank();
 
   std::string s;
 
@@ -318,7 +326,7 @@ inline void scatteredPairwiseWaitsome(
     s = os.str();
   }
 
-  auto trace = TimeTrace{me, s};
+  auto trace = TimeTrace{ctx.rank(), s};
 
   P(me << " running algorithm " << s << ", blocksize: " << blocksize);
 
@@ -326,8 +334,6 @@ inline void scatteredPairwiseWaitsome(
 
   std::array<MPI_Request, 2 * NReqs> reqs{};
   std::uninitialized_fill(std::begin(reqs), std::end(reqs), MPI_REQUEST_NULL);
-
-  auto commAlgo = algo_type{comm};
 
   auto const totalExchanges = static_cast<size_t>(nr - 1);
   auto const totalReqs      = 2 * totalExchanges;
@@ -342,27 +348,29 @@ inline void scatteredPairwiseWaitsome(
 
   std::size_t nsreqs = 0, nrreqs = 0, sphase = 0, rphase = 0;
 
-  auto rschedule = [&commAlgo](auto phase) {
-    return commAlgo.recvRank(phase);
+  auto rschedule = [&ctx](auto phase) {
+    algo_type commAlgo{};
+    return commAlgo.recvRank(ctx, phase);
   };
 
   auto rbufAlloc = [&commState](auto /*peer*/, auto reqIdx) {
     return commState.receive_allocate(reqIdx);
   };
 
-  auto receiveOp = [reqs = &reqs[0], blocksize, mpi_datatype, comm, me](
-                       auto* buf, auto peer, auto reqIdx) {
-    P(me << " receiving from " << peer << " reqIdx " << reqIdx);
+  auto receiveOp =
+      [reqs = &reqs[0], blocksize, mpi_datatype, comm = ctx.mpiComm(), me](
+          auto* buf, auto peer, auto reqIdx) {
+        P(me << " receiving from " << peer << " reqIdx " << reqIdx);
 
-    return MPI_Irecv(
-        buf,
-        blocksize,
-        mpi_datatype,
-        peer,
-        100,
-        comm,
-        std::next(reqs, reqIdx));
-  };
+        return MPI_Irecv(
+            buf,
+            blocksize,
+            mpi_datatype,
+            peer,
+            100,
+            comm,
+            std::next(reqs, reqIdx));
+      };
 
   rphase = detail::enqueueMpiOps(
       rphase,
@@ -375,26 +383,28 @@ inline void scatteredPairwiseWaitsome(
 
   nrreqs += reqsInFlight;
 
-  auto sschedule = [&commAlgo](auto phase) {
-    return commAlgo.sendRank(phase);
+  auto sschedule = [&ctx](auto phase) {
+    algo_type commAlgo{};
+    return commAlgo.sendRank(ctx, phase);
   };
 
   auto sbufAlloc = [begin, blocksize](auto peer, auto /*reqIdx*/) {
     return &*std::next(begin, peer * blocksize);
   };
 
-  auto sendOp = [reqs = &reqs[0], blocksize, mpi_datatype, comm, me](
-                    auto* buf, auto peer, auto reqIdx) {
-    P(me << " sending to " << peer << " reqIdx " << reqIdx);
-    return MPI_Isend(
-        buf,
-        blocksize,
-        mpi_datatype,
-        peer,
-        100,
-        comm,
-        std::next(reqs, reqIdx));
-  };
+  auto sendOp =
+      [reqs = &reqs[0], blocksize, mpi_datatype, comm = ctx.mpiComm(), me](
+          auto* buf, auto peer, auto reqIdx) {
+        P(me << " sending to " << peer << " reqIdx " << reqIdx);
+        return MPI_Isend(
+            buf,
+            blocksize,
+            mpi_datatype,
+            peer,
+            100,
+            comm,
+            std::next(reqs, reqIdx));
+      };
 
   sphase = detail::enqueueMpiOps(
       sphase,
@@ -676,11 +686,14 @@ inline void scatteredPairwiseWaitsome(
 
 template <AllToAllAlgorithm algo, class InputIt, class OutputIt, class Op>
 inline void scatteredPairwise(
-    InputIt begin, OutputIt out, int blocksize, MPI_Comm comm, Op&& op)
+    InputIt                begin,
+    OutputIt               out,
+    int                    blocksize,
+    mpi::MpiCommCtx const& ctx,
+    Op&&                   op)
 {
-  int me, nr;
-  MPI_Comm_rank(comm, &me);
-  MPI_Comm_size(comm, &nr);
+  auto nr = ctx.size();
+  auto me = ctx.rank();
 
   using algo_type  = typename detail::selectAlgorithm<algo>::type;
   using value_type = typename std::iterator_traits<InputIt>::value_type;
@@ -704,11 +717,11 @@ inline void scatteredPairwise(
       begin + me * blocksize + blocksize,
       &rbuf[0] + me * blocksize);
 
-  auto commAlgo = algo_type{comm};
+  auto commAlgo = algo_type{};
 
   for (int r = 0; r < nr; ++r) {
-    auto sendto   = commAlgo.sendRank(r);
-    auto recvfrom = commAlgo.recvRank(r);
+    auto sendto   = commAlgo.sendRank(ctx, r);
+    auto recvfrom = commAlgo.recvRank(ctx, r);
 
     if (sendto == me) {
       sendto = MPI_PROC_NULL;
@@ -735,7 +748,7 @@ inline void scatteredPairwise(
             mpi_datatype,
             recvfrom,
             100,
-            comm,
+            ctx.mpiComm(),
             MPI_STATUS_IGNORE),
         MPI_SUCCESS);
   }
@@ -767,14 +780,17 @@ inline void scatteredPairwise(
 
 template <class InputIt, class OutputIt, class Op>
 inline void MpiAlltoAll(
-    InputIt begin, OutputIt out, int blocksize, MPI_Comm comm, Op&& op)
+    InputIt                begin,
+    OutputIt               out,
+    int                    blocksize,
+    mpi::MpiCommCtx const& ctx,
+    Op&&                   op)
 {
   using value_type  = typename std::iterator_traits<InputIt>::value_type;
   auto mpi_datatype = mpi::mpi_datatype<value_type>::type();
 
-  int nr, me;
-  MPI_Comm_size(comm, &nr);
-  MPI_Comm_rank(comm, &me);
+  auto nr = ctx.size();
+  auto me = ctx.rank();
 
   auto trace = TimeTrace{me, "AlltoAll"};
 
@@ -790,7 +806,7 @@ inline void MpiAlltoAll(
           &rbuf[0],
           blocksize,
           mpi_datatype,
-          comm),
+          ctx.mpiComm()),
       MPI_SUCCESS);
 
   trace.tock(COMMUNICATION);
