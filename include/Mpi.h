@@ -147,31 +147,17 @@ class MpiCommCtx {
  public:
   MpiCommCtx() = default;
 
-  MpiCommCtx(MPI_Comm const& _worldComm)
+  MpiCommCtx(MPI_Comm const& base)
   {
     int initialized;
     A2A_ASSERT_RETURNS(MPI_Initialized(&initialized), MPI_SUCCESS);
     A2A_ASSERT(initialized == 1);
 
-    A2A_ASSERT_RETURNS(MPI_Comm_dup(_worldComm, &m_comm), MPI_SUCCESS);
+    A2A_ASSERT_RETURNS(MPI_Comm_dup(base, &m_comm), MPI_SUCCESS);
     // A2A_ASSERT_RETURNS(MPI_Comm_group(comm, &world_group), MPI_SUCCESS);
 
     A2A_ASSERT_RETURNS(MPI_Comm_size(m_comm, &m_size), MPI_SUCCESS);
     A2A_ASSERT_RETURNS(MPI_Comm_rank(m_comm, &m_rank), MPI_SUCCESS);
-
-#if 0
-    // split world into shared memory communicator
-    A2A_ASSERT_RETURNS(
-        MPI_Comm_split_type(
-            comm, MPI_COMM_TYPE_SHARED, 0, MPI_INFO_NULL, &sharedComm),
-        MPI_SUCCESS);
-
-    // setup shared memory infos
-    // A2A_ASSERT_RETURNS(
-    //    MPI_Comm_group(sharedComm, &shared_group), MPI_SUCCESS);
-    A2A_ASSERT_RETURNS(MPI_Comm_size(sharedComm, &nrShared), MPI_SUCCESS);
-    A2A_ASSERT_RETURNS(MPI_Comm_rank(sharedComm, &meShared), MPI_SUCCESS);
-#endif
   }
 
   constexpr auto rank() const noexcept
@@ -195,7 +181,6 @@ class MpiCommCtx {
   ~MpiCommCtx()
   {
     A2A_ASSERT_RETURNS(MPI_Comm_free(&m_comm), MPI_SUCCESS);
-    // A2A_ASSERT_RETURNS(MPI_Comm_free(&m_sharedComm), MPI_SUCCESS);
   }
 
  private:
@@ -203,6 +188,22 @@ class MpiCommCtx {
   mpi::rank_t m_size{};
   mpi::rank_t m_rank{};
 };
+
+auto splitSharedComm(MpiCommCtx const& baseComm)
+{
+  MPI_Comm sharedComm;
+  // split world into shared memory communicator
+  A2A_ASSERT_RETURNS(
+      MPI_Comm_split_type(
+          baseComm.mpiComm(),
+          MPI_COMM_TYPE_SHARED,
+          0,
+          MPI_INFO_NULL,
+          &sharedComm),
+      MPI_SUCCESS);
+
+  return MpiCommCtx{sharedComm};
+}
 
 template <class T>
 inline auto mpiAllReduceMinMax(MpiCommCtx const& ctx, T value)

@@ -16,6 +16,7 @@
 #include <Debug.h>
 #include <Random.h>
 #include <Timer.h>
+#include <rtlx.h>
 
 #include <MPISynchronizedBarrier.h>
 #include <MpiAlltoAllBench.h>
@@ -159,251 +160,249 @@ int main(int argc, char* argv[])
 {
   MPI_Init(&argc, &argv);
 
-  {
-    mpi::MpiCommCtx commCtx{MPI_COMM_WORLD};
-    auto            me = commCtx.rank();
-    auto            nr = commCtx.size();
+  auto finalizer = rtlx::scope_exit([]() { MPI_Finalize(); });
 
-    if (argc < 2) {
+  mpi::MpiCommCtx worldCtx{MPI_COMM_WORLD};
+
+  auto        sharedCommCtx = mpi::splitSharedComm(worldCtx);
+  auto const& commCtx       = sharedCommCtx;
+
+  auto me = commCtx.rank();
+  auto nr = commCtx.size();
+
+  if (argc < 2) {
+    if (me == 0) {
+      std::cout << "usage: " << argv[0] << " [number of nodes] <algorithm>\n";
+    }
+    MPI_Finalize();
+    return 1;
+  }
+
+  auto nhosts = std::atoi(argv[1]);
+
+  std::vector<std::pair<std::string, benchmark_t>> selected_algos;
+
+  if (argc == 3) {
+    std::string selected_algo = argv[2];
+
+    auto algo = std::find_if(
+        std::begin(algos), std::end(algos), [selected_algo](auto const& p) {
+          return p.first == selected_algo;
+        });
+
+    if (algo == std::end(algos)) {
       if (me == 0) {
-        std::cout << "usage: " << argv[0]
-                  << " [number of nodes] <algorithm>\n";
+        std::cout << "invalid algorithm\n";
       }
+
       MPI_Finalize();
       return 1;
     }
 
-    auto nhosts = std::atoi(argv[1]);
-
-    std::vector<std::pair<std::string, benchmark_t>> selected_algos;
-
-    if (argc == 3) {
-      std::string selected_algo = argv[2];
-
-      auto algo = std::find_if(
-          std::begin(algos), std::end(algos), [selected_algo](auto const& p) {
-            return p.first == selected_algo;
-          });
-
-      if (algo == std::end(algos)) {
-        if (me == 0) {
-          std::cout << "invalid algorithm\n";
-        }
-
-        MPI_Finalize();
-        return 1;
-      }
-
-      selected_algos.push_back(*algo);
-    }
-    else {
-      std::copy(
-          std::begin(algos),
-          std::end(algos),
-          std::back_inserter(selected_algos));
-    }
-
-    if (me == 0) {
-      print_env();
-    }
-
-    // We have to half the capacity because we do not in-place all to all
-    // We again half by the number of processors
-    // const size_t number_nodes = nr / 28;
-    A2A_ASSERT((nr % nhosts) == 0);
-
-    // We divide by two because we have in and out buffers
-    // Then we divide by the number of PEs per node
-    // Then we divide again divide by number of PEs to obtain the largest
-    // blocksize.
-#ifdef NDEBUG
-    auto         procs_per_node = nr / nhosts;
-    const size_t maxprocsize    = capacity_per_node / (2 * procs_per_node);
-#else
-    const size_t maxprocsize = minblocksize;
-#endif
-
-    // We have to divide the maximum capacity per proc by the number of PE
-    // to get the largest possible block size
-    const size_t _maxblocksize =
-        (maxblocksize == 0) ? maxprocsize / nr : maxblocksize;
-
-    std::size_t nsteps = std::ceil(std::log2(_maxblocksize)) -
-                         std::ceil(std::log2(minblocksize));
-
-    if (nsteps <= 0) {
-      nsteps = 1;
-    }
-
-    nsteps = std::min<std::size_t>(nsteps, 20);
-
-    if (me == 0) {
-      std::cout << "++ number of blocksize steps: " << nsteps << "\n";
-      std::cout << "++ minblocksize: " << minblocksize << "\n";
-      std::cout << "++ maxlocksize: " << _maxblocksize << "\n";
-    }
-
-    P(me << " nsteps: " << nsteps);
-
-    A2A_ASSERT(minblocksize >= sizeof(value_t));
-
-    if (me == 0) {
-      printMeasurementHeader(std::cout);
-    }
-
-    // calibrate clock
-    auto clock           = SynchronizedClock{};
-    bool is_clock_synced = clock.Init(commCtx.mpiComm());
-    A2A_ASSERT(is_clock_synced);
-
-    for (size_t blocksize = minblocksize, step = 0; step <= nsteps;
-         blocksize *= 2, ++step) {
-      // each process sends sencount to all other PEs
-      auto sendcount = blocksize / sizeof(value_t);
-
-      if (me == 0) {
-        P("sendcount: " << sendcount);
-      }
-
-      A2A_ASSERT(blocksize % sizeof(value_t) == 0);
-
-      // Required by good old 32-bit MPI
-      A2A_ASSERT(
-          sendcount > 0 && sendcount < std::numeric_limits<int>::max());
-
-      auto nels = sendcount * nr;
-
-      // container_t data, out, correct;
-      auto data = container_t(commCtx, nels);
-      auto out  = container_t(commCtx, nels);
-#ifndef NDEBUG
-      auto correct = container_t(commCtx, nels);
-#endif
-
-      for (int it = 0; it < niters + nwarmup; ++it) {
-#pragma omp parallel
-        {
-          std::mt19937_64 generator(random_seed_seq::get_instance());
-          std::uniform_int_distribution<value_t> distribution(-1E6, 1E6);
-#pragma omp for
-          for (std::size_t block = 0; block < std::size_t(nr); ++block) {
-#ifdef NDEBUG
-            // generate some randome values
-            std::generate(
-                std::next(data.base(), block * sendcount),
-                std::next(data.base(), (block + 1) * sendcount),
-                [&]() { return distribution(generator); });
-            // sort it
-            std::sort(
-                std::next(data.base(), block * sendcount),
-                std::next(data.base(), (block + 1) * sendcount));
-#else
-            std::iota(
-                std::next(data.base(), block * sendcount),
-                std::next(data.base(), (block + 1) * sendcount),
-                block * sendcount + (me * nels));
-#endif
-          }
-        }
-
-        for (std::size_t block = 0; block < std::size_t(nr); ++block) {
-          A2A_ASSERT(std::is_sorted(
-              std::next(data.base(), block * sendcount),
-              std::next(data.base(), (block + 1) * sendcount)));
-        }
-
-        auto merger = [nels](
-                          std::vector<std::pair<iterator_t, iterator_t>> seqs,
-                          iterator_t res) {
-          // parallel merge does not support inplace merging
-          // nels must be the number of elements in all sequences
-          __gnu_parallel::multiway_merge(
-              std::begin(seqs),
-              std::end(seqs),
-              res,
-              nels,
-              std::less<value_t>{});
-        };
-
-        // first we want to obtain the correct result which we can verify then
-        // with our own algorithms
-#ifndef NDEBUG
-        a2a::MpiAlltoAll(
-            data.base(),
-            correct.base(),
-            static_cast<int>(sendcount),
-            commCtx.mpiComm(),
-            merger);
-        A2A_ASSERT(
-            std::is_sorted(correct.base(), std::next(correct.base(), nels)));
-#endif
-
-        Params p{};
-        p.nhosts    = nhosts;
-        p.nprocs    = nr;
-        p.me        = me;
-        p.step      = step + 1;
-        p.nbytes    = nels * nr * sizeof(value_t);
-        p.blocksize = blocksize;
-
-        for (auto const& algo : selected_algos) {
-          P("running algorithm: " << algo.first);
-
-          // We always want to guarantee that all processors start at the same
-          // time, so this is a real barrier
-
-          auto isHypercube =
-              algo.first.find("Hypercube") != std::string::npos;
-
-          if (isHypercube && !a2a::isPow2(static_cast<unsigned>(nr))) {
-            continue;
-          }
-
-          auto barrier = clock.Barrier(commCtx.mpiComm());
-          A2A_ASSERT(barrier.Success(commCtx.mpiComm()));
-
-          auto t = run_algorithm(
-              algo.second,
-              data.base(),
-              out.base(),
-              static_cast<int>(sendcount),
-              commCtx,
-              merger);
-
-          // printVector(&(out[0]), &(out[nels]), me);
-
-          P(me << " finished Algorithm " << algo.first
-               << ", size: " << blocksize << "...\n");
-          A2A_ASSERT(std::equal(
-              correct.base(), std::next(correct.base(), nels), out.base()));
-
-          P(me << " finished Validation " << algo.first
-               << ", size: " << blocksize << "...\n");
-
-          // measurements[algo.first].emplace_back(t);
-          if (it >= nwarmup) {
-            auto trace = a2a::TimeTrace{me, algo.first};
-
-            printMeasurementCsvLine(
-                std::cout,
-                p,
-                algo.first,
-                std::make_tuple(
-                    t,
-                    trace.lookup(a2a::MERGE),
-                    trace.lookup(a2a::COMMUNICATION)));
-            trace.clear();
-          }
-        }
-      }
-      // synchronize before advancing to the next stage
-      P(me << " reaching barrier, going to next iteration");
-      MPI_Barrier(commCtx.mpiComm());
-    }
-    MPI_Barrier(commCtx.mpiComm());
+    selected_algos.push_back(*algo);
+  }
+  else {
+    std::copy(
+        std::begin(algos),
+        std::end(algos),
+        std::back_inserter(selected_algos));
   }
 
-  MPI_Finalize();
+  if (me == 0) {
+    print_env();
+  }
+
+  // We have to half the capacity because we do not in-place all to all
+  // We again half by the number of processors
+  // const size_t number_nodes = nr / 28;
+  A2A_ASSERT((nr % nhosts) == 0);
+
+  // We divide by two because we have in and out buffers
+  // Then we divide by the number of PEs per node
+  // Then we divide again divide by number of PEs to obtain the largest
+  // blocksize.
+#ifdef NDEBUG
+  auto         procs_per_node = nr / nhosts;
+  const size_t maxprocsize    = capacity_per_node / (2 * procs_per_node);
+#else
+  const size_t maxprocsize = minblocksize;
+#endif
+
+  // We have to divide the maximum capacity per proc by the number of PE
+  // to get the largest possible block size
+  const size_t _maxblocksize =
+      (maxblocksize == 0) ? maxprocsize / nr : maxblocksize;
+
+  std::size_t nsteps = std::ceil(std::log2(_maxblocksize)) -
+                       std::ceil(std::log2(minblocksize));
+
+  if (nsteps <= 0) {
+    nsteps = 1;
+  }
+
+  nsteps = std::min<std::size_t>(nsteps, 20);
+
+  if (me == 0) {
+    std::cout << "++ number of blocksize steps: " << nsteps << "\n";
+    std::cout << "++ minblocksize: " << minblocksize << "\n";
+    std::cout << "++ maxlocksize: " << _maxblocksize << "\n";
+  }
+
+  P(me << " nsteps: " << nsteps);
+
+  A2A_ASSERT(minblocksize >= sizeof(value_t));
+
+  if (me == 0) {
+    printMeasurementHeader(std::cout);
+  }
+
+  // calibrate clock
+  auto clock           = SynchronizedClock{};
+  bool is_clock_synced = clock.Init(commCtx.mpiComm());
+  A2A_ASSERT(is_clock_synced);
+
+  for (size_t blocksize = minblocksize, step = 0; step <= nsteps;
+       blocksize *= 2, ++step) {
+    // each process sends sencount to all other PEs
+    auto sendcount = blocksize / sizeof(value_t);
+
+    if (me == 0) {
+      P("sendcount: " << sendcount);
+    }
+
+    A2A_ASSERT(blocksize % sizeof(value_t) == 0);
+
+    // Required by good old 32-bit MPI
+    A2A_ASSERT(sendcount > 0 && sendcount < std::numeric_limits<int>::max());
+
+    auto nels = sendcount * nr;
+
+    // container_t data, out, correct;
+    auto data = container_t(commCtx, nels);
+    auto out  = container_t(commCtx, nels);
+#ifndef NDEBUG
+    auto correct = container_t(commCtx, nels);
+#endif
+
+    for (int it = 0; it < niters + nwarmup; ++it) {
+#pragma omp parallel
+      {
+        std::mt19937_64 generator(random_seed_seq::get_instance());
+        std::uniform_int_distribution<value_t> distribution(-1E6, 1E6);
+#pragma omp for
+        for (std::size_t block = 0; block < std::size_t(nr); ++block) {
+#ifdef NDEBUG
+          // generate some randome values
+          std::generate(
+              std::next(data.base(), block * sendcount),
+              std::next(data.base(), (block + 1) * sendcount),
+              [&]() { return distribution(generator); });
+          // sort it
+          std::sort(
+              std::next(data.base(), block * sendcount),
+              std::next(data.base(), (block + 1) * sendcount));
+#else
+          std::iota(
+              std::next(data.base(), block * sendcount),
+              std::next(data.base(), (block + 1) * sendcount),
+              block * sendcount + (me * nels));
+#endif
+        }
+      }
+
+      for (std::size_t block = 0; block < std::size_t(nr); ++block) {
+        A2A_ASSERT(std::is_sorted(
+            std::next(data.base(), block * sendcount),
+            std::next(data.base(), (block + 1) * sendcount)));
+      }
+
+      auto merger = [nels](
+                        std::vector<std::pair<iterator_t, iterator_t>> seqs,
+                        iterator_t                                     res) {
+        // parallel merge does not support inplace merging
+        // nels must be the number of elements in all sequences
+        __gnu_parallel::multiway_merge(
+            std::begin(seqs),
+            std::end(seqs),
+            res,
+            nels,
+            std::less<value_t>{});
+      };
+
+      // first we want to obtain the correct result which we can verify then
+      // with our own algorithms
+#ifndef NDEBUG
+      a2a::MpiAlltoAll(
+          data.base(),
+          correct.base(),
+          static_cast<int>(sendcount),
+          commCtx.mpiComm(),
+          merger);
+      A2A_ASSERT(
+          std::is_sorted(correct.base(), std::next(correct.base(), nels)));
+#endif
+
+      Params p{};
+      p.nhosts    = nhosts;
+      p.nprocs    = nr;
+      p.me        = me;
+      p.step      = step + 1;
+      p.nbytes    = nels * nr * sizeof(value_t);
+      p.blocksize = blocksize;
+
+      for (auto const& algo : selected_algos) {
+        P("running algorithm: " << algo.first);
+
+        // We always want to guarantee that all processors start at the same
+        // time, so this is a real barrier
+
+        auto isHypercube = algo.first.find("Hypercube") != std::string::npos;
+
+        if (isHypercube && !a2a::isPow2(static_cast<unsigned>(nr))) {
+          continue;
+        }
+
+        auto barrier = clock.Barrier(commCtx.mpiComm());
+        A2A_ASSERT(barrier.Success(commCtx.mpiComm()));
+
+        auto t = run_algorithm(
+            algo.second,
+            data.base(),
+            out.base(),
+            static_cast<int>(sendcount),
+            commCtx,
+            merger);
+
+        // printVector(&(out[0]), &(out[nels]), me);
+
+        P(me << " finished Algorithm " << algo.first
+             << ", size: " << blocksize << "...\n");
+        A2A_ASSERT(std::equal(
+            correct.base(), std::next(correct.base(), nels), out.base()));
+
+        P(me << " finished Validation " << algo.first
+             << ", size: " << blocksize << "...\n");
+
+        // measurements[algo.first].emplace_back(t);
+        if (it >= nwarmup) {
+          auto trace = a2a::TimeTrace{me, algo.first};
+
+          printMeasurementCsvLine(
+              std::cout,
+              p,
+              algo.first,
+              std::make_tuple(
+                  t,
+                  trace.lookup(a2a::MERGE),
+                  trace.lookup(a2a::COMMUNICATION)));
+          trace.clear();
+        }
+      }
+    }
+    // synchronize before advancing to the next stage
+    P(me << " reaching barrier, going to next iteration");
+    MPI_Barrier(commCtx.mpiComm());
+  }
 
   return 0;
 }
