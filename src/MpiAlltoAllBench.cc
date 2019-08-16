@@ -15,6 +15,7 @@
 #include <AlltoAll.h>
 #include <Debug.h>
 #include <Random.h>
+#include <SharedMemory.h>
 #include <Timer.h>
 #include <rtlx.h>
 
@@ -54,14 +55,14 @@ using value_t = int;
 using container_t = mpi::ShmSegment<value_t>;
 using iterator_t  = typename container_t::pointer;
 
-using benchmark_t = std::function<void(
+using twoSidedA2A_t = std::function<void(
     iterator_t,
     iterator_t,
     int,
     mpi::MpiCommCtx const&,
     merge_t<iterator_t, iterator_t>)>;
 
-std::array<std::pair<std::string, benchmark_t>, 9> algos = {
+std::array<std::pair<std::string, twoSidedA2A_t>, 9> TWO_SIDED = {
     std::make_pair(
         "AlltoAll",
         a2a::MpiAlltoAll<
@@ -156,6 +157,17 @@ std::array<std::pair<std::string, benchmark_t>, 9> algos = {
 #endif
 };
 
+using oneSidedA2A_t = std::function<void(
+    mpi::ShmSegment<value_t> const&,
+    mpi::ShmSegment<value_t>&,
+    int,
+    merge_t<iterator_t, iterator_t>)>;
+
+std::array<std::pair<std::string, oneSidedA2A_t>, 1> ONE_SIDED = {
+    std::make_pair(
+        "All2AllMorton",
+        a2a::all2allMorton<value_t, merge_t<iterator_t, iterator_t>>)};
+
 int main(int argc, char* argv[])
 {
   MPI_Init(&argc, &argv);
@@ -180,17 +192,17 @@ int main(int argc, char* argv[])
 
   auto nhosts = std::atoi(argv[1]);
 
-  std::vector<std::pair<std::string, benchmark_t>> selected_algos;
+  std::vector<std::pair<std::string, twoSidedA2A_t>> twoSidedAlgos;
 
   if (argc == 3) {
     std::string selected_algo = argv[2];
 
     auto algo = std::find_if(
-        std::begin(algos), std::end(algos), [selected_algo](auto const& p) {
-          return p.first == selected_algo;
-        });
+        std::begin(TWO_SIDED),
+        std::end(TWO_SIDED),
+        [selected_algo](auto const& p) { return p.first == selected_algo; });
 
-    if (algo == std::end(algos)) {
+    if (algo == std::end(TWO_SIDED)) {
       if (me == 0) {
         std::cout << "invalid algorithm\n";
       }
@@ -199,13 +211,13 @@ int main(int argc, char* argv[])
       return 1;
     }
 
-    selected_algos.push_back(*algo);
+    twoSidedAlgos.push_back(*algo);
   }
   else {
     std::copy(
-        std::begin(algos),
-        std::end(algos),
-        std::back_inserter(selected_algos));
+        std::begin(TWO_SIDED),
+        std::end(TWO_SIDED),
+        std::back_inserter(twoSidedAlgos));
   }
 
   if (me == 0) {
@@ -350,7 +362,7 @@ int main(int argc, char* argv[])
       p.nbytes    = nels * nr * sizeof(value_t);
       p.blocksize = blocksize;
 
-      for (auto const& algo : selected_algos) {
+      for (auto const& algo : twoSidedAlgos) {
         P("running algorithm: " << algo.first);
 
         // We always want to guarantee that all processors start at the same
@@ -373,17 +385,38 @@ int main(int argc, char* argv[])
             commCtx,
             merger);
 
-        // printVector(&(out[0]), &(out[nels]), me);
-
-        P(me << " finished Algorithm " << algo.first
-             << ", size: " << blocksize << "...\n");
         A2A_ASSERT(std::equal(
             correct.base(), std::next(correct.base(), nels), out.base()));
 
-        P(me << " finished Validation " << algo.first
-             << ", size: " << blocksize << "...\n");
-
         // measurements[algo.first].emplace_back(t);
+        if (it >= nwarmup) {
+          auto trace = a2a::TimeTrace{me, algo.first};
+
+          printMeasurementCsvLine(
+              std::cout,
+              p,
+              algo.first,
+              std::make_tuple(
+                  t,
+                  trace.lookup(a2a::MERGE),
+                  trace.lookup(a2a::COMMUNICATION)));
+          trace.clear();
+        }
+      }
+
+      for (auto const& algo : ONE_SIDED) {
+        P("running algorithm: " << algo.first);
+
+        auto barrier = clock.Barrier(commCtx.mpiComm());
+        A2A_ASSERT(barrier.Success(commCtx.mpiComm()));
+
+        auto t = ChronoClockNow();
+        algo.second(data, out, static_cast<int>(sendcount), merger);
+        t = ChronoClockNow() - t;
+
+        A2A_ASSERT(std::equal(
+            correct.base(), std::next(correct.base(), nels), out.base()));
+
         if (it >= nwarmup) {
           auto trace = a2a::TimeTrace{me, algo.first};
 

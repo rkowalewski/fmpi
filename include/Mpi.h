@@ -149,15 +149,19 @@ class MpiCommCtx {
 
   MpiCommCtx(MPI_Comm const& base)
   {
-    int initialized;
-    A2A_ASSERT_RETURNS(MPI_Initialized(&initialized), MPI_SUCCESS);
-    A2A_ASSERT(initialized == 1);
-
     A2A_ASSERT_RETURNS(MPI_Comm_dup(base, &m_comm), MPI_SUCCESS);
-    // A2A_ASSERT_RETURNS(MPI_Comm_group(comm, &world_group), MPI_SUCCESS);
+    _initialize();
+  }
 
-    A2A_ASSERT_RETURNS(MPI_Comm_size(m_comm, &m_size), MPI_SUCCESS);
-    A2A_ASSERT_RETURNS(MPI_Comm_rank(m_comm, &m_rank), MPI_SUCCESS);
+  MpiCommCtx(MPI_Comm&& base)
+  {
+    if (base == MPI_COMM_WORLD) {
+      A2A_ASSERT_RETURNS(MPI_Comm_dup(base, &m_comm), MPI_SUCCESS);
+    }
+    else {
+      m_comm = std::move(base);
+    }
+    _initialize();
   }
 
   constexpr auto rank() const noexcept
@@ -175,12 +179,33 @@ class MpiCommCtx {
     return m_comm;
   }
 
-  MpiCommCtx(MpiCommCtx&&) noexcept = default;
-  MpiCommCtx& operator=(MpiCommCtx&&) noexcept = default;
+  MpiCommCtx(MpiCommCtx&& other) noexcept
+  {
+    *this = std::move(other);
+  }
+
+  MpiCommCtx& operator=(MpiCommCtx&& other) noexcept
+  {
+    std::swap(m_comm, other.m_comm);
+    std::swap(m_size, other.m_size);
+    std::swap(m_rank, other.m_rank);
+
+    other.m_comm = MPI_COMM_NULL;
+    return *this;
+  }
 
   ~MpiCommCtx()
   {
-    A2A_ASSERT_RETURNS(MPI_Comm_free(&m_comm), MPI_SUCCESS);
+    if (m_comm != MPI_COMM_NULL && m_comm != MPI_COMM_WORLD) {
+      A2A_ASSERT_RETURNS(MPI_Comm_free(&m_comm), MPI_SUCCESS);
+    }
+  }
+
+ private:
+  void _initialize()
+  {
+    A2A_ASSERT_RETURNS(MPI_Comm_size(m_comm, &m_size), MPI_SUCCESS);
+    A2A_ASSERT_RETURNS(MPI_Comm_rank(m_comm, &m_rank), MPI_SUCCESS);
   }
 
  private:
@@ -202,7 +227,7 @@ auto splitSharedComm(MpiCommCtx const& baseComm)
           &sharedComm),
       MPI_SUCCESS);
 
-  return MpiCommCtx{sharedComm};
+  return MpiCommCtx{std::move(sharedComm)};
 }
 
 template <class T>
@@ -261,12 +286,25 @@ struct MemorySegmentBase {
     std::swap(m_ctx, other.m_ctx);
     return *this;
   }
+
+ public:
+  constexpr MpiCommCtx const& ctx() const noexcept
+  {
+    return *m_ctx;
+  }
+
+  constexpr MPI_Win const& win() const noexcept
+  {
+    return m_win;
+  }
 };
 }  // namespace detail
 
 template <class T>
 class ShmSegment : private detail::MemorySegmentBase {
-  using detail::MemorySegmentBase::MemorySegmentBase;
+  using base_t = detail::MemorySegmentBase;
+
+  using base_t::MemorySegmentBase;
 
   template <class _T>
   using simple_vector =
@@ -362,6 +400,9 @@ class ShmSegment : private detail::MemorySegmentBase {
   {
     return m_baseptrs[rank];
   }
+
+  using base_t::ctx;
+  using base_t::win;
 
  private:
   /// base pointers of all partners

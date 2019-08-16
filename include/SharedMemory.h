@@ -5,28 +5,26 @@
 
 #include <Mpi.h>
 
+#include <morton.h>
+
 #include <Math.h>
 
 namespace a2a {
 
 enum class AllToAllAlgorithm;
 
-template <
-    AllToAllAlgorithm algo,
-    class InputIt,
-    class OutputIt,
-    class Op,
-    size_t NReqs = 2>
-inline void all2allShmem(
-    InputIt begin, OutputIt out, int blocksize, MPI_Comm comm, MPI_Win, Op&& op)
+template <class T, class Op>
+inline void all2allMorton(
+    mpi::ShmSegment<T> const& from,
+    mpi::ShmSegment<T>&       to,
+    int                       blocksize,
+    Op&&                      op)
 {
-  mpi::rank_t nr, me;
+  A2A_ASSERT(from.ctx().mpiComm() == to.ctx().mpiComm());
+  A2A_ASSERT(isPow2(static_cast<unsigned>(from.ctx().size())));
 
-  MPI_Comm_size(comm, &nr);
-  MPI_Comm_rank(comm, &me);
-  A2A_ASSERT(a2a::isPow2(static_cast<unsigned>(nr)));
-
-
+  (void)op;
+  (void)blocksize;
 }
 }  // namespace a2a
 
