@@ -30,13 +30,8 @@ constexpr size_t KB = 1 << 10;
 constexpr size_t MB = 1 << 20;
 constexpr size_t GB = 1 << 30;
 
-#ifdef NDEBUG
-constexpr size_t nwarmup = 1;
-constexpr size_t niters  = 10;
-#else
-constexpr int nwarmup = 0;
-constexpr int niters  = 1;
-#endif
+constexpr int nwarmup = 1;
+constexpr int niters  = 10;
 
 constexpr size_t minblocksize = 32;
 // constexpr size_t minblocksize = 32768 * 2;
@@ -385,8 +380,10 @@ int main(int argc, char* argv[])
             commCtx,
             merger);
 
+#ifndef NDEBUG
         A2A_ASSERT(std::equal(
             correct.base(), std::next(correct.base(), nels), out.base()));
+#endif
 
         // measurements[algo.first].emplace_back(t);
         if (it >= nwarmup) {
@@ -414,8 +411,10 @@ int main(int argc, char* argv[])
         algo.second(data, out, static_cast<int>(sendcount), merger);
         t = ChronoClockNow() - t;
 
+#ifndef NDEBUG
         A2A_ASSERT(std::equal(
             correct.base(), std::next(correct.base(), nels), out.base()));
+#endif
 
         if (it >= nwarmup) {
           auto trace = a2a::TimeTrace{me, algo.first};

@@ -38,15 +38,16 @@ inline void all2allMorton(
   // But we need a square as well.
   A2A_ASSERT((static_cast<unsigned>(std::log2(nr)) % 2 == 0) || nr == 2);
 
-  std::size_t firstC = me * nr;
-  std::size_t lastC  = firstC + nr;
+  std::size_t firstChunk = me * nr;
+  std::size_t lastChunk  = firstChunk + nr;
 
   using simple_vector =
       tlx::SimpleVector<value_type, tlx::SimpleVectorMode::NoInitNoDestroy>;
 
-  for (std::size_t c = firstC; c < lastC; ++c) {
+  //#pragma omp parallel
+  for (std::size_t chunk = firstChunk; chunk < lastChunk; ++chunk) {
     std::pair<uint_fast32_t, uint_fast32_t> coords{};
-    libmorton::morton2D_64_decode(c, coords.second, coords.first);
+    libmorton::morton2D_64_decode(chunk, coords.second, coords.first);
 
     mpi::rank_t          srcRank, dstRank;
     mpi::difference_type srcOffset, dstOffset;
@@ -70,6 +71,8 @@ inline void all2allMorton(
 
   auto range = a2a::range(0, nr * blocksize, blocksize);
 
+  // TODO: This barrier can be eliminate if we signal destination ranks after
+  // we finished the copy
   MPI_Barrier(from.ctx().mpiComm());
 
   std::transform(
