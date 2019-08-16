@@ -103,7 +103,6 @@ message(STATUS "Run: ${MPIEXEC} ${MPIEXEC_NUMPROC_FLAG} ${MPIEXEC_MAX_NUMPROCS} 
 
 # You should usually split this into folders, but this is a simple example
 
-add_subdirectory(external/tlx)
 
 if(NOT CMAKE_DEBUG_POSTFIX)
   set(CMAKE_DEBUG_POSTFIX d)
@@ -126,19 +125,23 @@ add_executable(MpiAlltoAllBench src/MpiAlltoAllBench.cc src/MpiAlltoAllBench.h s
 set_target_properties(MpiAlltoAllBench PROPERTIES DEBUG_POSTFIX ".${CMAKE_DEBUG_POSTFIX}")
 
 add_dependencies(MpiAlltoAllBench GitVersion)
-target_include_directories(MpiAlltoAllBench PUBLIC include external/tlx)
-target_include_directories(MpiAlltoAllBench PUBLIC src)
+target_include_directories(MpiAlltoAllBench PUBLIC include src)
 
 # Make sure you link your targets with this command. It can also link libraries and
 # even flags, so linking a target that does not exist will not give a configure-time error.
 target_link_libraries(MpiAlltoAllBench PUBLIC OpenMP::OpenMP_CXX MPI::MPI_CXX MPISynchronizedBarrier)
 # link tlx
 target_compile_options(MpiAlltoAllBench PRIVATE ${OpenMP_CXX_FLAGS})
+
+# Add tlx
+add_subdirectory(external/tlx)
 target_link_libraries(MpiAlltoAllBench PUBLIC tlx)
 
+# Add libmorton
+add_subdirectory(external/libmorton)
+target_link_libraries(MpiAlltoAllBench PUBLIC Morton)
 
 add_executable(factor_serial src/factor_serial.cc)
-
 
 if (ENABLE_LOGGING)
     target_compile_definitions (MpiAlltoAllBench PRIVATE A2A_ENABLE_LOGGING)
