@@ -10,7 +10,7 @@
 #SBATCH --mail-type=END
 #SBATCH --mail-user=roger.kowalewski@ifi.lmu.de
 # Wall clock limit:
-#SBATCH --time=00:30:00
+#SBATCH --time=<<WCLIMIT>>
 #SBATCH --no-requeue
 #Setup of execution environment
 #SBATCH --export=NONE
@@ -19,7 +19,7 @@
 # For benchmarking disable dynamic frequency scaling
 #SBATCH --ear=off
 # Job options
-#SBATCH --partition=test
+#SBATCH --partition=<<CLASS>>
 #Number of nodes and MPI tasks per node:
 #SBATCH --ntasks=<<NUM_TASKS>>
 #SBATCH --nodes=<<NUM_NODES>>
@@ -31,4 +31,4 @@ module load slurm_setup
 
 export A2A_ENABLE_TRACE=1
 
-mpiexec -n $SLURM_NTASKS ./build.impi/MpiAlltoAllBench.d $SLURM_JOB_NUM_NODES
+mpiexec -n "$((<<NUM_NODES>> * <<NUM_PROCS>>))" ./build.impi/MpiAlltoAllBench $SLURM_JOB_NUM_NODES
