@@ -29,6 +29,17 @@ inline void all2allMorton(
   auto nr = from.ctx().size();
   auto me = from.ctx().rank();
 
+  std::string s;
+  if (TraceStore::GetInstance().enabled()) {
+    std::ostringstream os;
+    os << "All2AllMorton";
+    s = os.str();
+  }
+
+  auto trace = TimeTrace{me, s};
+  trace.tick(COMMUNICATION);
+
+
   A2A_ASSERT(from.ctx().mpiComm() == to.ctx().mpiComm());
   A2A_ASSERT(isPow2(static_cast<unsigned>(nr)));
 
@@ -64,6 +75,9 @@ inline void all2allMorton(
     std::copy(srcAddr, srcAddr + blocksize, dstAddr);
   }
 
+  trace.tock(COMMUNICATION);
+
+  trace.tick(MERGE);
   simple_vector rbuf(nr * blocksize);
 
   std::vector<std::pair<iterator, iterator>> chunks;
@@ -88,6 +102,8 @@ inline void all2allMorton(
   op(chunks, rbuf.data());
 
   std::move(rbuf.data(), rbuf.data() + nr * blocksize, to.base());
+
+  trace.tock(MERGE);
 
   A2A_ASSERT(std::is_sorted(to.base(), to.base() + nr * blocksize));
 }
