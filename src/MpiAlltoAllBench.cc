@@ -30,8 +30,13 @@ constexpr size_t KB = 1 << 10;
 constexpr size_t MB = 1 << 20;
 constexpr size_t GB = 1 << 30;
 
+#ifdef NDEBUG
 constexpr int nwarmup = 1;
 constexpr int niters  = 10;
+#else
+constexpr int nwarmup = 0;
+constexpr int niters  = 1;
+#endif
 
 constexpr size_t minblocksize = 32;
 // constexpr size_t minblocksize = 32768 * 2;
