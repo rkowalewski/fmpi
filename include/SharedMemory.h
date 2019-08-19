@@ -29,6 +29,10 @@ inline void all2allMorton(
   auto nr = from.ctx().size();
   auto me = from.ctx().rank();
 
+  char          rflag;
+  const char    sflag      = 1;
+  constexpr int notify_tag = 201;
+
   std::string s;
   if (TraceStore::GetInstance().enabled()) {
     std::ostringstream os;
@@ -39,9 +43,34 @@ inline void all2allMorton(
   auto trace = TimeTrace{me, s};
   trace.tick(COMMUNICATION);
 
-
   A2A_ASSERT(from.ctx().mpiComm() == to.ctx().mpiComm());
   A2A_ASSERT(isPow2(static_cast<unsigned>(nr)));
+
+  // post asynchron receives
+  //std::size_t supporters = nr / 2;
+
+  constexpr int maxReqs = 32;
+
+  std::array<MPI_Request, maxReqs> reqs;
+  std::uninitialized_fill(std::begin(reqs), std::end(reqs), MPI_REQUEST_NULL);
+
+  std::size_t nreq = 0;
+  for (mpi::rank_t src = 0; src < nr; src += (nr / 2)) {
+    if (src != me) {
+      A2A_ASSERT_RETURNS(
+          MPI_Irecv(
+              &rflag,
+              0,
+              MPI_BYTE,
+              src,
+              notify_tag,
+              from.ctx().mpiComm(),
+              &reqs[nreq]),
+          MPI_SUCCESS);
+
+      ++nreq;
+    }
+  }
 
   // eventually we should allocate a small buffer with MPI
 
@@ -73,6 +102,16 @@ inline void all2allMorton(
     auto dstAddr = std::next(to.base(dstRank), dstOffset * blocksize);
 
     std::copy(srcAddr, srcAddr + blocksize, dstAddr);
+
+    auto colFiniMask       = nr / 2 - 1;
+    bool col_copy_finished = ((srcRank & colFiniMask) == colFiniMask);
+
+    if (col_copy_finished && dstRank != me) {
+      A2A_ASSERT_RETURNS(
+          MPI_Send(
+              &sflag, 0, MPI_BYTE, dstRank, notify_tag, from.ctx().mpiComm()),
+          MPI_SUCCESS);
+    }
   }
 
   trace.tock(COMMUNICATION);
@@ -85,9 +124,28 @@ inline void all2allMorton(
 
   auto range = a2a::range(0, nr * blocksize, blocksize);
 
-  // TODO: This barrier can be eliminate if we signal destination ranks after
-  // we finished the copy
-  MPI_Barrier(from.ctx().mpiComm());
+  // TODO: This barrier can be eliminate if we signal destination ranks
+  // after we finished the copy
+  // MPI_Barrier(from.ctx().mpiComm());
+
+#if 0
+  int nCompleted = 0;
+
+  std::array<MPI_Request, maxReqs> creqs = {MPI_REQUEST_NULL};
+
+  while (nCompleted < nreq) {
+    int nc;
+    A2A_ASSERT_RETURNS(
+        MPI_Waitsome(nreq, reqs, &nc, &(creqs[0]), MPI_STATUSES_IGNORE),
+        MPI_SUCCESS);
+
+    nCompleted += nc;
+
+    if (nCompleted > 1) {
+
+    }
+  }
+#endif
 
   std::transform(
       std::begin(range),
@@ -98,6 +156,8 @@ inline void all2allMorton(
         auto l = std::next(f, blocksize);
         return std::make_pair(f, l);
       });
+
+  MPI_Waitall(nreq, &reqs[0], MPI_STATUSES_IGNORE);
 
   op(chunks, rbuf.data());
 

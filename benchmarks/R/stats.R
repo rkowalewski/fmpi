@@ -69,6 +69,7 @@ df.stats$PPN <- df.stats$Procs / df.stats$Nodes
 df.stats <- df.stats %>%
     select(Nodes, Procs, PPN, Round, NBytes, Blocksize, Cat, Algo,
            Ttotal_speedup, Ttotal_median,
+           Tcomm_median, Tmerge_median,
            Ttotal_min, Ttotal_max,
            Ttotal_med_lowerCI,Ttotal_med_upperCI,
            everything())
