@@ -42,40 +42,42 @@ inline void all2allMorton(
   auto trace = TimeTrace{me, s};
   trace.tick(COMMUNICATION);
 
-
   A2A_ASSERT(from.ctx().mpiComm() == to.ctx().mpiComm());
   A2A_ASSERT(isPow2(static_cast<unsigned>(nr)));
 
-  auto const log2 = tlx::integer_log2_floor(static_cast<unsigned>(nr));
+  unsigned const log2 = tlx::integer_log2_floor(static_cast<unsigned>(nr));
   // We want to guarantee that we do not only have a power of 2.
   // But we need a square as well.
-  //A2A_ASSERT((log2 % 2 == 0) || (nr == 2));
+  // A2A_ASSERT((log2 % 2 == 0) || (nr == 2));
 
   char          rflag;
   const char    sflag      = 1;
   constexpr int notify_tag = 201;
 
   // post asynchron receives
-  //std::size_t supporters = nr / 2;
+  // std::size_t supporters = nr / 2;
 
   constexpr int maxReqs = 32;
 
   std::array<MPI_Request, maxReqs> reqs;
   std::uninitialized_fill(std::begin(reqs), std::end(reqs), MPI_REQUEST_NULL);
 
-  std::size_t nreq = 0;
-  auto const ystride = (log2 % 2) ? log2 - 1 : log2;
+  auto mask = std::numeric_limits<decltype(log2)>::max() << 1;
 
+  // round down to next even number
+  auto const ystride = log2 & mask;
+
+  std::size_t nreq = 0;
   for (mpi::rank_t y = 0; y < nr; y += ystride) {
     auto const x = me;
 
-    auto const p = libmorton::morton2D_64_encode(x,y);
+    auto const p = libmorton::morton2D_64_encode(x, y);
 
     auto const src = p / nr;
 
-    P(me << " point (" << y << "," << x << "), recv from: " << src );
+    P(me << " point (" << y << "," << x << "), recv from: " << src);
 
-    if (src != me) {
+    if (static_cast<mpi::rank_t>(src) != me) {
       A2A_ASSERT_RETURNS(
           MPI_Irecv(
               &rflag,
@@ -93,7 +95,6 @@ inline void all2allMorton(
 
   // eventually we should allocate a small buffer with MPI
 
-
   std::size_t firstChunk = me * nr;
   std::size_t lastChunk  = firstChunk + nr;
 
@@ -101,7 +102,7 @@ inline void all2allMorton(
       tlx::SimpleVector<value_type, tlx::SimpleVectorMode::NoInitNoDestroy>;
 
   std::vector<std::pair<iterator, iterator>> chunks(ystride);
-  simple_vector rbuf(nr * blocksize);
+  simple_vector                              rbuf(nr * blocksize);
 
   //#pragma omp parallel
   for (std::size_t chunk = firstChunk; chunk < lastChunk; ++chunk) {
@@ -118,30 +119,36 @@ inline void all2allMorton(
     std::tie(dstRank, dstOffset) = coords;
 
     auto srcAddr = std::next(from.base(srcRank), srcOffset * blocksize);
-    auto dstAddr = std::next(to.base(dstRank), dstOffset * blocksize);
+    // auto dstAddr = std::next(to.base(dstRank), dstOffset * blocksize);
+    auto dstAddr =
+        std::next(rbuf.begin(), srcOffset * ystride * blocksize + srcRank);
 
-    std::memcpy(dstAddr, srcAddr, blocksize * sizeof(value_type));
+    // std::memcpy(dstAddr, srcAddr, blocksize * sizeof(value_type));
+    std::copy(srcAddr, srcAddr + blocksize, dstAddr);
 
     auto const colFiniMask       = ystride - 1;
-    bool col_copy_finished = ((srcRank & colFiniMask) == colFiniMask);
+    bool       col_copy_finished = ((srcRank & colFiniMask) == colFiniMask);
 
     if (col_copy_finished && dstRank != me) {
+      P(me << " point (" << srcRank << "," << srcOffset
+           << "), send to: " << dstRank);
 
-      P(me << " point (" << srcRank << "," << srcOffset << "), send to: " << dstRank);
-
-      auto range = a2a::range(srcRank - colFiniMask, srcRank);
+      auto range = a2a::range<unsigned>(srcRank - colFiniMask, srcRank);
 
       std::transform(
           std::begin(range),
           std::end(range),
           std::begin(chunks),
-          [buf = to.base(), blocksize](auto offset) {
+          [buf = rbuf.begin(), blocksize](auto offset) {
             auto f = std::next(buf, offset);
             auto l = std::next(f, blocksize);
             return std::make_pair(f, l);
           });
 
-      op(chunks, rbuf.data());
+      auto mergeDst =
+          std::next(to.base(dstRank), (srcRank - colFiniMask) * blocksize);
+
+      op(chunks, mergeDst);
 
       A2A_ASSERT_RETURNS(
           MPI_Send(
@@ -150,17 +157,15 @@ inline void all2allMorton(
     }
   }
 
-      A2A_ASSERT_RETURNS(
-  MPI_Waitall(nreq, &reqs[0], MPI_STATUSES_IGNORE),
-          MPI_SUCCESS);
+  A2A_ASSERT_RETURNS(
+      MPI_Waitall(nreq, &reqs[0], MPI_STATUSES_IGNORE), MPI_SUCCESS);
 
   trace.tock(COMMUNICATION);
 
   trace.tick(MERGE);
 
-  chunks.resize(nr);
-
-  auto range = a2a::range(0, nr * blocksize, blocksize);
+  auto range =
+      a2a::range<unsigned>(0, nr * blocksize, ystride * blocksize);
 
   // TODO: This barrier can be eliminate if we signal destination ranks
   // after we finished the copy
@@ -188,15 +193,14 @@ inline void all2allMorton(
   std::transform(
       std::begin(range),
       std::end(range),
-      std::back_inserter(chunks),
+      std::begin(chunks),
       [buf = to.base(), blocksize](auto offset) {
         auto f = std::next(buf, offset);
         auto l = std::next(f, blocksize);
         return std::make_pair(f, l);
       });
 
-
-  op(chunks, rbuf.data());
+  op(chunks, rbuf.begin());
 
   std::move(rbuf.data(), rbuf.data() + nr * blocksize, to.base());
 
