@@ -333,7 +333,7 @@ class ShmSegment : private detail::MemorySegmentBase {
     }
 #endif
 
-    MPI_Info_set(info, "alloc_shared_noncontig", "true");
+    //MPI_Info_set(info, "alloc_shared_noncontig", "true");
 
     A2A_ASSERT_RETURNS(
         MPI_Win_allocate_shared(

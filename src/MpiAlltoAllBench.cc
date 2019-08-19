@@ -338,7 +338,8 @@ int main(int argc, char* argv[])
             std::end(seqs),
             res,
             nels,
-            std::less<value_t>{});
+            std::less<value_t>{},
+            __gnu_parallel::sequential_tag{});
       };
 
       // first we want to obtain the correct result which we can verify then
