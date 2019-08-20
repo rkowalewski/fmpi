@@ -62,10 +62,10 @@ inline void all2allMorton(
   std::array<MPI_Request, maxReqs> reqs;
   std::uninitialized_fill(std::begin(reqs), std::end(reqs), MPI_REQUEST_NULL);
 
-  auto mask = std::numeric_limits<decltype(log2)>::max() << 1;
+  //auto mask = std::numeric_limits<decltype(log2)>::max() << 1;
 
   // round down to next even number
-  auto const ystride = log2 & mask;
+  auto const ystride = (log2 % 2) ? log2 - 1 : log2;
 
   std::size_t nreq = 0;
   for (mpi::rank_t y = 0; y < nr; y += ystride) {
@@ -120,40 +120,52 @@ inline void all2allMorton(
 
     auto srcAddr = std::next(from.base(srcRank), srcOffset * blocksize);
     // auto dstAddr = std::next(to.base(dstRank), dstOffset * blocksize);
+    auto offs = (srcRank % ystride)  * blocksize;
+    auto block = (srcOffset % ystride) * ystride * blocksize;
+    auto dstOffs = block + offs;
     auto dstAddr =
-        std::next(rbuf.begin(), srcOffset * ystride * blocksize + srcRank);
+        std::next(rbuf.begin(), dstOffs);
 
+    P(me << " copy to offset: " << dstOffs);
     // std::memcpy(dstAddr, srcAddr, blocksize * sizeof(value_type));
     std::copy(srcAddr, srcAddr + blocksize, dstAddr);
+
 
     auto const colFiniMask       = ystride - 1;
     bool       col_copy_finished = ((srcRank & colFiniMask) == colFiniMask);
 
-    if (col_copy_finished && dstRank != me) {
-      P(me << " point (" << srcRank << "," << srcOffset
-           << "), send to: " << dstRank);
-
-      auto range = a2a::range<unsigned>(srcRank - colFiniMask, srcRank);
+    if (col_copy_finished) {
+      auto firstC = (srcRank - colFiniMask) % ystride;
+      auto lastC = firstC + ystride;
+      auto range = a2a::range<unsigned>(firstC, lastC);
 
       std::transform(
           std::begin(range),
           std::end(range),
           std::begin(chunks),
-          [buf = rbuf.begin(), blocksize](auto offset) {
-            auto f = std::next(buf, offset);
-            auto l = std::next(f, blocksize);
+          [buf = rbuf.begin(), chunksize = blocksize, me, block](auto offset) {
+            auto f = std::next(buf, block + offset * chunksize);
+            auto l = std::next(f, chunksize);
+            P(me << " merging chunk: (" << offset * chunksize << ", " << offset * chunksize + chunksize << ")");
             return std::make_pair(f, l);
           });
 
       auto mergeDst =
           std::next(to.base(dstRank), (srcRank - colFiniMask) * blocksize);
 
+      P(me << " merging to offset: " << (srcRank - colFiniMask) * blocksize);
+
       op(chunks, mergeDst);
+
+if (dstRank != me) {
+      P(me << " point (" << srcRank << "," << srcOffset
+           << "), send to: " << dstRank);
 
       A2A_ASSERT_RETURNS(
           MPI_Send(
               &sflag, 0, MPI_BYTE, dstRank, notify_tag, from.ctx().mpiComm()),
           MPI_SUCCESS);
+}
     }
   }
 
@@ -163,9 +175,6 @@ inline void all2allMorton(
   trace.tock(COMMUNICATION);
 
   trace.tick(MERGE);
-
-  auto range =
-      a2a::range<unsigned>(0, nr * blocksize, ystride * blocksize);
 
   // TODO: This barrier can be eliminate if we signal destination ranks
   // after we finished the copy
@@ -189,14 +198,20 @@ inline void all2allMorton(
     }
   }
 #endif
+  auto range =
+      a2a::range<unsigned>(0, nr * blocksize, ystride * blocksize);
 
   std::transform(
       std::begin(range),
       std::end(range),
       std::begin(chunks),
-      [buf = to.base(), blocksize](auto offset) {
+      [buf = to.base(), chunksize = ystride * blocksize, me](auto offset) {
         auto f = std::next(buf, offset);
-        auto l = std::next(f, blocksize);
+        auto l = std::next(f, chunksize);
+
+        A2A_ASSERT(std::is_sorted(f, l));
+
+        P(me << " merging chunk: (" << offset  << ", " << offset  + chunksize << ")");
         return std::make_pair(f, l);
       });
 
