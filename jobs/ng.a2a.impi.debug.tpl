@@ -31,4 +31,10 @@ module load slurm_setup
 
 export A2A_ENABLE_TRACE=1
 
-mpiexec -n $SLURM_NTASKS ./build.impi/MpiAlltoAllBench.d $SLURM_JOB_NUM_NODES
+if [ "<<NUM_NODES>>" == "1" ]
+then
+  mpiexec -genv I_MPI_DEBUG=4 -n $SLURM_NTASKS ./build.impi/MpiAlltoAllBench.d $SLURM_JOB_NUM_NODES
+else
+  mpiexec -n $SLURM_NTASKS ./build.impi/MpiAlltoAllBench.d $SLURM_JOB_NUM_NODES
+fi
+
