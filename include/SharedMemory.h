@@ -27,6 +27,10 @@ inline void all2allMorton(
   using value_type = T;
   using iterator   = typename mpi::ShmSegment<T>::pointer;
 
+  using unsigned_rank_t = typename std::make_unsigned<mpi::rank_t>::type;
+  using unsigned_diff_t =
+      typename std::make_unsigned<mpi::difference_type>::type;
+
   using morton_coords_t = std::pair<uint_fast32_t, uint_fast32_t>;
 
   auto nr = from.ctx().size();
@@ -45,7 +49,7 @@ inline void all2allMorton(
   A2A_ASSERT(from.ctx().mpiComm() == to.ctx().mpiComm());
   A2A_ASSERT(isPow2(static_cast<unsigned>(nr)));
 
-  unsigned const log2 = tlx::integer_log2_floor(static_cast<unsigned>(nr));
+  auto const log2 = tlx::integer_log2_floor(static_cast<unsigned_rank_t>(nr));
   // We want to guarantee that we do not only have a power of 2.
   // But we need a square as well.
   // A2A_ASSERT((log2 % 2 == 0) || (nr == 2));
@@ -64,8 +68,17 @@ inline void all2allMorton(
 
   // auto mask = std::numeric_limits<decltype(log2)>::max() << 1;
 
+  auto maxRank = std::numeric_limits<unsigned_rank_t>::max();
+
   // round down to next even number
-  auto const ystride = (log2 % 2) ? log2 - 1 : log2;
+  unsigned_rank_t mask = 0x1;
+  auto  ystride = log2 & ~mask;
+  // round up to next even number
+  auto  xstride = ystride;
+
+  if (log2 & mask) {
+    xstride *= 2;
+  }
 
   std::size_t nreq = 0;
   for (mpi::rank_t y = 0; y < nr; y += ystride) {
@@ -101,7 +114,7 @@ inline void all2allMorton(
   using simple_vector =
       tlx::SimpleVector<value_type, tlx::SimpleVectorMode::NoInitNoDestroy>;
 
-  std::vector<std::pair<iterator, iterator>> chunks(ystride);
+  std::vector<std::pair<iterator, iterator>> chunks(nr / ystride);
   simple_vector                              rbuf(nr * blocksize);
 
   //#pragma omp parallel
@@ -109,9 +122,6 @@ inline void all2allMorton(
     morton_coords_t coords{};
     libmorton::morton2D_64_decode(chunk, coords.second, coords.first);
 
-    using unsigned_rank_t = typename std::make_unsigned<mpi::rank_t>::type;
-    using unsigned_diff_t =
-        typename std::make_unsigned<mpi::difference_type>::type;
 
     unsigned_rank_t srcRank, dstRank;
     unsigned_diff_t srcOffset, dstOffset;
@@ -123,9 +133,10 @@ inline void all2allMorton(
     std::tie(dstRank, dstOffset) = coords;
 
     auto srcAddr = std::next(from.base(srcRank), srcOffset * blocksize);
-    auto mask    = ystride - 1;
-    auto col     = srcOffset & mask;
-    auto row     = srcRank & mask;
+    auto ymask    = ystride - 1;
+    auto xmask    = xstride - 1;
+    auto col     = srcOffset & xmask;
+    auto row     = srcRank & ymask;
 
     auto block     = col * ystride * blocksize;
     auto blockOffs = row * blocksize;
@@ -137,8 +148,8 @@ inline void all2allMorton(
     // std::memcpy(dstAddr, srcAddr, blocksize * sizeof(value_type));
     std::copy(srcAddr, srcAddr + blocksize, dstAddr);
 
-    if (row == mask) {
-      auto range = a2a::range<unsigned>(row - mask, row + 1);
+    if (row == ymask) {
+      auto range = a2a::range<unsigned>(row - ymask, row + 1);
 
       std::transform(
           std::begin(range),
@@ -154,9 +165,7 @@ inline void all2allMorton(
             return std::make_pair(f, l);
           });
 
-      auto shift     = tlx::integer_log2_floor(ystride);
-      auto blockMask = std::numeric_limits<decltype(ystride)>::max() << shift;
-      auto mergeBlock = (srcRank & blockMask);
+      auto mergeBlock = (srcRank & ~ymask);
       auto mergeDst   = std::next(to.base(dstRank), mergeBlock * blocksize);
 
       P(me << " merging to offset: " << mergeBlock * blocksize);
