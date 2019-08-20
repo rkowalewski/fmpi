@@ -138,11 +138,7 @@ inline void all2allMorton(
     std::copy(srcAddr, srcAddr + blocksize, dstAddr);
 
     if (row == mask) {
-      auto shift     = tlx::integer_log2_floor(ystride);
-      auto blockMask = std::numeric_limits<decltype(ystride)>::max() << shift;
-      auto firstC    = srcRank & blockMask;
-      auto lastC     = firstC + ystride;
-      auto range     = a2a::range<unsigned>(firstC, lastC);
+      auto range = a2a::range<unsigned>(row, row + ystride);
 
       std::transform(
           std::begin(range),
@@ -151,16 +147,19 @@ inline void all2allMorton(
           [buf = rbuf.begin(), chunksize = blocksize, me, block](
               auto offset) {
             auto offs = block + offset * chunksize;
-            auto f = std::next(buf, offs);
-            auto l = std::next(f, chunksize);
-            P(me << " merging chunk: (" << offs << ", "
-                 << offs + chunksize << ")");
+            auto f    = std::next(buf, offs);
+            auto l    = std::next(f, chunksize);
+            P(me << " merging chunk: (" << offs << ", " << offs + chunksize
+                 << ")");
             return std::make_pair(f, l);
           });
 
-      auto mergeDst = std::next(to.base(dstRank), firstC * blocksize);
+      auto shift     = tlx::integer_log2_floor(ystride);
+      auto blockMask = std::numeric_limits<decltype(ystride)>::max() << shift;
+      auto mergeBlock = (srcRank & blockMask);
+      auto mergeDst   = std::next(to.base(dstRank), mergeBlock * blocksize);
 
-      P(me << " merging to offset: " << firstC * blocksize);
+      P(me << " merging to offset: " << mergeBlock * blocksize);
 
       op(chunks, mergeDst);
 
