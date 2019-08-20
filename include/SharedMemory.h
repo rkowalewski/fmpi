@@ -138,7 +138,7 @@ inline void all2allMorton(
     std::copy(srcAddr, srcAddr + blocksize, dstAddr);
 
     if (row == mask) {
-      auto range = a2a::range<unsigned>(row, row + ystride);
+      auto range = a2a::range<unsigned>(row - mask, row + 1);
 
       std::transform(
           std::begin(range),
