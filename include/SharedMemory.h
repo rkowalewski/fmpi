@@ -149,7 +149,7 @@ inline void all2allMorton(
             auto offs = block + offset * chunksize;
             auto f    = std::next(buf, offs);
             auto l    = std::next(f, chunksize);
-            P(me << " merging chunk: (" << offs << ", " << offs + chunksize
+            P(me << " merging block: " << block << ", chunk: (" << offs << ", " << offs + chunksize
                  << ")");
             return std::make_pair(f, l);
           });
