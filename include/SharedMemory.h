@@ -140,7 +140,7 @@ inline void all2allMorton(
     if (row == mask) {
       auto shift     = tlx::integer_log2_floor(ystride);
       auto blockMask = std::numeric_limits<decltype(ystride)>::max() << shift;
-      auto firstC    = static_cast<unsigned>(srcRank) & blockMask;
+      auto firstC    = srcRank & blockMask;
       auto lastC     = firstC + ystride;
       auto range     = a2a::range<unsigned>(firstC, lastC);
 
@@ -150,10 +150,11 @@ inline void all2allMorton(
           std::begin(chunks),
           [buf = rbuf.begin(), chunksize = blocksize, me, block](
               auto offset) {
-            auto f = std::next(buf, block + offset * chunksize);
+            auto offs = block + offset * chunksize;
+            auto f = std::next(buf, offs);
             auto l = std::next(f, chunksize);
-            P(me << " merging chunk: (" << offset * chunksize << ", "
-                 << offset * chunksize + chunksize << ")");
+            P(me << " merging chunk: (" << offs << ", "
+                 << offs + chunksize << ")");
             return std::make_pair(f, l);
           });
 
