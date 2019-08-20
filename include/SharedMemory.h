@@ -62,7 +62,7 @@ inline void all2allMorton(
   std::array<MPI_Request, maxReqs> reqs;
   std::uninitialized_fill(std::begin(reqs), std::end(reqs), MPI_REQUEST_NULL);
 
-  //auto mask = std::numeric_limits<decltype(log2)>::max() << 1;
+  // auto mask = std::numeric_limits<decltype(log2)>::max() << 1;
 
   // round down to next even number
   auto const ystride = (log2 % 2) ? log2 - 1 : log2;
@@ -109,8 +109,12 @@ inline void all2allMorton(
     morton_coords_t coords{};
     libmorton::morton2D_64_decode(chunk, coords.second, coords.first);
 
-    mpi::rank_t          srcRank, dstRank;
-    mpi::difference_type srcOffset, dstOffset;
+    using unsigned_rank_t = typename std::make_unsigned<mpi::rank_t>::type;
+    using unsigned_diff_t =
+        typename std::make_unsigned<mpi::difference_type>::type;
+
+    unsigned_rank_t srcRank, dstRank;
+    unsigned_diff_t srcOffset, dstOffset;
 
     std::tie(srcRank, srcOffset) = coords;
 
@@ -119,53 +123,60 @@ inline void all2allMorton(
     std::tie(dstRank, dstOffset) = coords;
 
     auto srcAddr = std::next(from.base(srcRank), srcOffset * blocksize);
-    // auto dstAddr = std::next(to.base(dstRank), dstOffset * blocksize);
-    auto offs = (srcRank % ystride)  * blocksize;
-    auto block = (srcOffset % ystride) * ystride * blocksize;
-    auto dstOffs = block + offs;
-    auto dstAddr =
-        std::next(rbuf.begin(), dstOffs);
+    auto mask    = ystride - 1;
+    auto col     = srcOffset & mask;
+    auto row     = srcRank & mask;
 
-    P(me << " copy to offset: " << dstOffs);
+    auto block     = col * ystride * blocksize;
+    auto blockOffs = row * blocksize;
+
+    auto dstAddr = std::next(rbuf.begin(), block + blockOffs);
+    // auto dstAddr = std::next(to.base(dstRank), dstOffset * blocksize);
+
+    P(me << " copy to offset: " << std::distance(rbuf.begin(), dstAddr));
     // std::memcpy(dstAddr, srcAddr, blocksize * sizeof(value_type));
     std::copy(srcAddr, srcAddr + blocksize, dstAddr);
 
-
-    auto const colFiniMask       = ystride - 1;
-    bool       col_copy_finished = ((srcRank & colFiniMask) == colFiniMask);
-
-    if (col_copy_finished) {
-      auto firstC = (srcRank - colFiniMask) % ystride;
-      auto lastC = firstC + ystride;
-      auto range = a2a::range<unsigned>(firstC, lastC);
+    if (row == mask) {
+      auto shift     = tlx::integer_log2_floor(ystride);
+      auto blockMask = std::numeric_limits<decltype(ystride)>::max() << shift;
+      auto firstC    = static_cast<unsigned>(srcRank) & blockMask;
+      auto lastC     = firstC + ystride;
+      auto range     = a2a::range<unsigned>(firstC, lastC);
 
       std::transform(
           std::begin(range),
           std::end(range),
           std::begin(chunks),
-          [buf = rbuf.begin(), chunksize = blocksize, me, block](auto offset) {
+          [buf = rbuf.begin(), chunksize = blocksize, me, block](
+              auto offset) {
             auto f = std::next(buf, block + offset * chunksize);
             auto l = std::next(f, chunksize);
-            P(me << " merging chunk: (" << offset * chunksize << ", " << offset * chunksize + chunksize << ")");
+            P(me << " merging chunk: (" << offset * chunksize << ", "
+                 << offset * chunksize + chunksize << ")");
             return std::make_pair(f, l);
           });
 
-      auto mergeDst =
-          std::next(to.base(dstRank), (srcRank - colFiniMask) * blocksize);
+      auto mergeDst = std::next(to.base(dstRank), firstC * blocksize);
 
-      P(me << " merging to offset: " << (srcRank - colFiniMask) * blocksize);
+      P(me << " merging to offset: " << firstC * blocksize);
 
       op(chunks, mergeDst);
 
-if (dstRank != me) {
-      P(me << " point (" << srcRank << "," << srcOffset
-           << "), send to: " << dstRank);
+      if (static_cast<mpi::rank_t>(dstRank) != me) {
+        P(me << " point (" << srcRank << "," << srcOffset
+             << "), send to: " << dstRank);
 
-      A2A_ASSERT_RETURNS(
-          MPI_Send(
-              &sflag, 0, MPI_BYTE, dstRank, notify_tag, from.ctx().mpiComm()),
-          MPI_SUCCESS);
-}
+        A2A_ASSERT_RETURNS(
+            MPI_Send(
+                &sflag,
+                0,
+                MPI_BYTE,
+                dstRank,
+                notify_tag,
+                from.ctx().mpiComm()),
+            MPI_SUCCESS);
+      }
     }
   }
 
@@ -198,8 +209,7 @@ if (dstRank != me) {
     }
   }
 #endif
-  auto range =
-      a2a::range<unsigned>(0, nr * blocksize, ystride * blocksize);
+  auto range = a2a::range<unsigned>(0, nr * blocksize, ystride * blocksize);
 
   std::transform(
       std::begin(range),
@@ -211,7 +221,8 @@ if (dstRank != me) {
 
         A2A_ASSERT(std::is_sorted(f, l));
 
-        P(me << " merging chunk: (" << offset  << ", " << offset  + chunksize << ")");
+        P(me << " merging chunk: (" << offset << ", " << offset + chunksize
+             << ")");
         return std::make_pair(f, l);
       });
 
