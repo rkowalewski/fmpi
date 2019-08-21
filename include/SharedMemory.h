@@ -70,6 +70,7 @@ inline void all2allMorton(
   auto xstride = ystride;
 
   if (log2 & mask) {
+    // odd power of 2
     xstride *= 2;
   }
 
@@ -111,9 +112,9 @@ inline void all2allMorton(
   simple_vector                              rbuf(nr * blocksize);
 
   //#pragma omp parallel
-  for (std::size_t chunk = firstChunk; chunk < lastChunk; ++chunk) {
+  for (std::size_t morton = firstChunk; morton < lastChunk; ++morton) {
     morton_coords_t coords{};
-    libmorton::morton2D_64_decode(chunk, coords.second, coords.first);
+    libmorton::morton2D_64_decode(morton, coords.second, coords.first);
 
     unsigned_rank_t srcRank, dstRank;
     unsigned_diff_t srcOffset, dstOffset;
@@ -133,12 +134,12 @@ inline void all2allMorton(
     auto block     = col * ystride * blocksize;
     auto blockOffs = row * blocksize;
 
-    auto dstAddr = std::next(rbuf.begin(), block + blockOffs);
+    auto buf = std::next(rbuf.begin(), block + blockOffs);
     // auto dstAddr = std::next(to.base(dstRank), dstOffset * blocksize);
 
-    P(me << " copy to offset: " << std::distance(rbuf.begin(), dstAddr));
+    P(me << " copy to offset: " << std::distance(rbuf.begin(), buf));
     // std::memcpy(dstAddr, srcAddr, blocksize * sizeof(value_type));
-    std::copy(srcAddr, srcAddr + blocksize, dstAddr);
+    std::copy(srcAddr, srcAddr + blocksize, buf);
 
     if (row == ymask) {
       auto range = a2a::range<unsigned>(row - ymask, row + 1);
@@ -155,14 +156,14 @@ inline void all2allMorton(
           });
 
       auto mergeBlock = (srcRank & ~ymask);
-      auto mergeDst   = std::next(to.base(dstRank), mergeBlock * blocksize);
+      auto dstAddr   = std::next(to.base(dstRank), mergeBlock * blocksize);
 
       P(me << " merging to offset: " << mergeBlock * blocksize);
 
       trace.tock(COMMUNICATION);
 
       trace.tick(MERGE);
-      op(chunks, mergeDst);
+      op(chunks, dstAddr);
       trace.tock(MERGE);
 
       trace.tick(COMMUNICATION);

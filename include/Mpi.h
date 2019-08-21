@@ -325,15 +325,13 @@ class ShmSegment : private detail::MemorySegmentBase {
     MPI_Info_create(&info);
     MPI_Info_set(info, "same_disp_unit", "true");
 
-#if 0
     size_t min, max;
     std::tie(min, max) = mpiAllReduceMinMax(m_ctx->mpiComm(), m_nbytes);
     if (min == max) {
       MPI_Info_set(info, "same_size", "true");
     }
-#endif
 
-    //MPI_Info_set(info, "alloc_shared_noncontig", "true");
+    MPI_Info_set(info, "alloc_shared_noncontig", "true");
 
     A2A_ASSERT_RETURNS(
         MPI_Win_allocate_shared(
