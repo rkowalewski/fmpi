@@ -156,7 +156,7 @@ inline void all2allMorton(
           });
 
       auto mergeBlock = (srcRank & ~ymask);
-      auto dstAddr   = std::next(to.base(dstRank), mergeBlock * blocksize);
+      auto dstAddr    = std::next(to.base(dstRank), mergeBlock * blocksize);
 
       P(me << " merging to offset: " << mergeBlock * blocksize);
 
@@ -216,6 +216,58 @@ inline void all2allMorton(
   trace.tock(MERGE);
 
   A2A_ASSERT(std::is_sorted(to.base(), to.base() + nr * blocksize));
+}
+
+template <class T, class Op>
+inline void all2allNaive(
+    mpi::ShmSegment<T> const& from,
+    mpi::ShmSegment<T>&       to,
+    int                       blocksize,
+    Op&&                      op)
+{
+  using value_type = T;
+  using iterator   = typename mpi::ShmSegment<T>::pointer;
+
+  auto nr = from.ctx().size();
+  auto me = from.ctx().rank();
+
+  auto rbuf = std::unique_ptr<value_type[]>(new value_type[nr * blocksize]);
+
+  auto trace = TimeTrace{me, "All2AllNaive"};
+
+  trace.tick(COMMUNICATION);
+
+  for (mpi::rank_t i = 0; i < nr; ++i) {
+    auto srcAddr = std::next(from.base(i), me * blocksize);
+    auto dstAddr = std::next(rbuf.get(), i * blocksize);
+
+    std::copy(srcAddr, std::next(srcAddr, blocksize), dstAddr);
+  }
+
+  trace.tock(COMMUNICATION);
+
+  trace.tick(MERGE);
+
+  std::vector<std::pair<iterator, iterator>> chunks;
+  chunks.reserve(nr);
+
+  auto range = a2a::range(0, nr * blocksize, blocksize);
+
+  std::transform(
+      std::begin(range),
+      std::end(range),
+      std::back_inserter(chunks),
+      [buf = rbuf.get(), blocksize](auto offset) {
+        auto f = std::next(buf, offset);
+        auto l = std::next(f, blocksize);
+        return std::make_pair(f, l);
+      });
+
+  op(chunks, to.base(me));
+
+  trace.tock(MERGE);
+
+  A2A_ASSERT(std::is_sorted(to.base(me), to.base(me) + nr * blocksize));
 }
 }  // namespace a2a
 

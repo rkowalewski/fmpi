@@ -163,7 +163,10 @@ using oneSidedA2A_t = std::function<void(
     int,
     merge_t<iterator_t, iterator_t>)>;
 
-std::array<std::pair<std::string, oneSidedA2A_t>, 1> ONE_SIDED = {
+std::array<std::pair<std::string, oneSidedA2A_t>, 2> ONE_SIDED = {
+    std::make_pair(
+        "All2AllNaive",
+        a2a::all2allNaive<value_t, merge_t<iterator_t, iterator_t>>),
     std::make_pair(
         "All2AllMorton",
         a2a::all2allMorton<value_t, merge_t<iterator_t, iterator_t>>)};

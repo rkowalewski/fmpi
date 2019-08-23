@@ -129,14 +129,15 @@ inline auto ndigits(int nr)
 void print_dot(
     std::vector<std::vector<RankPair>> tournament, const std::string& title)
 {
+  (void)title;
   auto n_ranks = tournament.size();
   auto nd      = ndigits(n_ranks);
   std::cout << "digraph G {\n";
-  std::cout << "graph [rankdir=LR]\n";
+  std::cout << "graph [rankdir=TB]\n";
   std::cout << "node [style=filled shape=circle]\n";
   std::cout << "edge [arrowhead=none]\n";
-  std::cout << "labelloc=t\n";
-  std::cout << "label=\"" << title << "\"\n";
+  //std::cout << "labelloc=t\n";
+  //std::cout << "label=\"" << title << "\"\n";
 
   for (std::size_t p = 0; p < n_ranks + 1; ++p) {
     std::cout << "subgraph p" << p << " {\n";
@@ -192,14 +193,15 @@ void print_dot(
 void print_dot_directed(
     std::vector<std::vector<RankPair>> tournament, const std::string& title)
 {
+  (void)title;
   auto n_ranks = tournament.size();
   auto nd      = ndigits(n_ranks);
   std::cout << "digraph G {\n";
-  std::cout << "graph [rankdir=LR]\n";
+  std::cout << "graph [rankdir=TB]\n";
   std::cout << "node [style=filled shape=circle]\n";
   std::cout << "edge [arrowsize=0.5]\n";
-  std::cout << "labelloc=t\n";
-  std::cout << "label=\"" << title << "\"\n";
+  //std::cout << "labelloc=t\n";
+  //std::cout << "label=\"" << title << "\"\n";
 
   for (std::size_t p = 0; p < n_ranks + 1; ++p) {
     std::cout << "subgraph p" << p << " {\n";
