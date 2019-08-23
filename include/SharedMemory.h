@@ -111,8 +111,11 @@ inline void all2allMorton(
   std::vector<std::pair<iterator, iterator>> chunks(nr / ystride);
   simple_vector                              rbuf(nr * blocksize);
 
+  trace.tock(COMMUNICATION);
+
   //#pragma omp parallel
   for (std::size_t morton = firstChunk; morton < lastChunk; ++morton) {
+    trace.tick(COMMUNICATION);
     morton_coords_t coords{};
     libmorton::morton2D_64_decode(morton, coords.second, coords.first);
 
@@ -141,9 +144,12 @@ inline void all2allMorton(
     // std::memcpy(dstAddr, srcAddr, blocksize * sizeof(value_type));
     std::copy(srcAddr, srcAddr + blocksize, buf);
 
+    trace.tock(COMMUNICATION);
+
     if (row == ymask) {
       auto range = a2a::range<unsigned>(row - ymask, row + 1);
 
+      trace.tick(MERGE);
       std::transform(
           std::begin(range),
           std::end(range),
@@ -160,9 +166,7 @@ inline void all2allMorton(
 
       P(me << " merging to offset: " << mergeBlock * blocksize);
 
-      trace.tock(COMMUNICATION);
 
-      trace.tick(MERGE);
       op(chunks, dstAddr);
       trace.tock(MERGE);
 
