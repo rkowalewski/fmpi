@@ -42,7 +42,7 @@ constexpr size_t minblocksize = (1 << 7);
 // constexpr size_t minblocksize = 32768 * 2;
 /* If maxblocksiz == 0, this means that we use the capacity per node and scale
  * the minblocksize in successive steps */
-constexpr size_t maxblocksize = (1 << 17);
+constexpr size_t maxblocksize = 0;
 /* constexpr size_t maxblocksize = runtime argument */
 
 // This are approximately 25 GB
@@ -163,13 +163,16 @@ using oneSidedA2A_t = std::function<void(
     int,
     merge_t<iterator_t, iterator_t>)>;
 
-std::array<std::pair<std::string, oneSidedA2A_t>, 2> ONE_SIDED = {
+std::array<std::pair<std::string, oneSidedA2A_t>, 3> ONE_SIDED = {
     std::make_pair(
         "All2AllNaive",
         a2a::all2allNaive<value_t, merge_t<iterator_t, iterator_t>>),
     std::make_pair(
-        "All2AllMorton",
-        a2a::all2allMorton<value_t, merge_t<iterator_t, iterator_t>>)};
+        "All2AllMortonZSource",
+        a2a::all2allMortonZSource<value_t, merge_t<iterator_t, iterator_t>>),
+    std::make_pair(
+        "All2AllMortonZDest",
+        a2a::all2allMortonZDest<value_t, merge_t<iterator_t, iterator_t>>)};
 
 int main(int argc, char* argv[])
 {
@@ -342,7 +345,7 @@ int main(int argc, char* argv[])
             res,
             nels,
             std::less<value_t>{},
-            __gnu_parallel::sequential_tag{});
+            __gnu_parallel::parallel_tag{});
       };
 
       // first we want to obtain the correct result which we can verify then
