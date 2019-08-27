@@ -336,7 +336,8 @@ int main(int argc, char* argv[])
 
       auto merger = [nels](
                         std::vector<std::pair<iterator_t, iterator_t>> seqs,
-                        iterator_t                                     res) {
+                        iterator_t                                     res,
+                        std::uint16_t nthreads = 0) {
         // parallel merge does not support inplace merging
         // nels must be the number of elements in all sequences
         __gnu_parallel::multiway_merge(
@@ -345,7 +346,7 @@ int main(int argc, char* argv[])
             res,
             nels,
             std::less<value_t>{},
-            __gnu_parallel::parallel_tag{});
+            __gnu_parallel::parallel_tag{nthreads});
       };
 
       // first we want to obtain the correct result which we can verify then
