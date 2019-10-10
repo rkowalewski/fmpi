@@ -8,7 +8,7 @@
 #include <utility>
 #include <vector>
 
-#include <Mpi.h>
+#include <mpi/Mpi.h>
 #include <Timer.h>
 #include <Trace.h>
 

@@ -4,7 +4,7 @@
 #include <cstdlib>
 
 #include <Debug.h>
-#include <Mpi.h>
+#include <mpi/Mpi.h>
 
 #include <tlx/math/integer_log2.hpp>
 #include <tlx/simple_vector.hpp>

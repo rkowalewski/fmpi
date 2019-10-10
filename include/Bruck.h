@@ -9,7 +9,7 @@
 #include <Constants.h>
 #include <Debug.h>
 #include <Math.h>
-#include <Mpi.h>
+#include <mpi/PointToPoint.h>
 #include <Trace.h>
 
 namespace a2a {

@@ -24,8 +24,6 @@
 #include <Version.h>
 #include <parallel/algorithm>
 
-#define W(X) #X << "=" << (X) << ", "
-
 constexpr size_t KB = 1 << 10;
 constexpr size_t MB = 1 << 20;
 constexpr size_t GB = 1 << 30;

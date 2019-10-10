@@ -17,48 +17,52 @@
 #include <Bruck.h>
 #include <Constants.h>
 #include <Debug.h>
-#include <Mpi.h>
 #include <NumericRange.h>
+#include <Schedule.h>
 #include <Trace.h>
+#include <mpi/Mpi.h>
 
 namespace a2a {
-
-enum class AllToAllAlgorithm { FLAT_HANDSHAKE, ONE_FACTOR };
 
 namespace detail {
 
 template <class T, std::size_t NReqs>
 class CommState {
-  using buffer_t =
+  /// nongrowing vector without initialization
+  using simple_vector =
       tlx::SimpleVector<T, tlx::SimpleVectorMode::NoInitNoDestroy>;
 
-  using size_type  = typename buffer_t::size_type;
-  using iterator_t = typename buffer_t::iterator;
-  using chunk_t    = std::pair<iterator_t, iterator_t>;
+  using size_type     = typename simple_vector::size_type;
+  using iterator_type = typename simple_vector::iterator;
+  using iterator_pair = std::pair<iterator_type, iterator_type>;
 
   // Buffer for up to 2 * NReqs pending chunks
   static constexpr size_t MAX_FREE_CHUNKS      = 2 * NReqs;
   static constexpr size_t MAX_COMPLETED_CHUNKS = MAX_FREE_CHUNKS;
 
-  template <std::size_t N>
-  using chunks_storage_t =
-      std::vector<chunk_t, tlx::StackAllocator<chunk_t, N * sizeof(chunk_t)>>;
+  template <class _T, std::size_t N>
+  using stack_arena = tlx::StackArena<N * sizeof(_T)>;
+
+  template <class _T, std::size_t N>
+  using stack_allocator = tlx::StackAllocator<_T, N * sizeof(_T)>;
+
+  template <class _T, std::size_t N>
+  using stack_vector = std::vector<_T, stack_allocator<_T, N>>;
 
  public:
   explicit CommState(size_type blocksize)
     : m_completed(
           0,
-          chunk_t{},
-          typename chunks_storage_t<MAX_COMPLETED_CHUNKS>::allocator_type{
+          iterator_pair{},
+          stack_allocator<iterator_pair, MAX_COMPLETED_CHUNKS>{
               m_arena_completed})
-    , m_freelist(chunks_storage_t<MAX_FREE_CHUNKS>{
+    , m_freelist(stack_vector<iterator_pair, MAX_FREE_CHUNKS>{
           0,
-          chunk_t{},
-          typename chunks_storage_t<MAX_FREE_CHUNKS>::allocator_type{
-              m_arena_freelist}})
+          iterator_pair{},
+          stack_allocator<iterator_pair, MAX_FREE_CHUNKS>{m_arena_freelist}})
     , m_buffer(blocksize * MAX_FREE_CHUNKS)
   {
-    std::fill(std::begin(m_pending), std::end(m_pending), chunk_t{});
+    std::fill(std::begin(m_pending), std::end(m_pending), iterator_pair{});
 
     auto r = a2a::range<int>(MAX_FREE_CHUNKS - 1, -1, -1);
 
@@ -69,7 +73,7 @@ class CommState {
     }
   }
 
-  iterator_t receive_allocate(int key)
+  iterator_type receive_allocate(int key)
   {
     A2A_ASSERT(m_arena_freelist.size() > 0);
     A2A_ASSERT(0 <= key && std::size_t(key) < NReqs);
@@ -113,147 +117,37 @@ class CommState {
     return m_freelist.size();
   }
 
-  chunks_storage_t<MAX_COMPLETED_CHUNKS> const& completed_receives() const
-      noexcept
+  stack_vector<iterator_pair, MAX_COMPLETED_CHUNKS> const&
+  completed_receives() const noexcept
   {
     return m_completed;
   }
 
  private:
-  tlx::StackArena<MAX_COMPLETED_CHUNKS * sizeof(chunk_t)> m_arena_completed{};
-  chunks_storage_t<MAX_COMPLETED_CHUNKS>                  m_completed{};
+  stack_arena<iterator_pair, MAX_COMPLETED_CHUNKS>  m_arena_completed{};
+  stack_vector<iterator_pair, MAX_COMPLETED_CHUNKS> m_completed{};
 
-  tlx::StackArena<MAX_FREE_CHUNKS * sizeof(chunk_t)>     m_arena_freelist{};
-  std::stack<chunk_t, chunks_storage_t<MAX_FREE_CHUNKS>> m_freelist{};
+  stack_arena<iterator_pair, MAX_FREE_CHUNKS> m_arena_freelist{};
+  std::stack<iterator_pair, stack_vector<iterator_pair, MAX_FREE_CHUNKS>>
+      m_freelist{};
 
-  std::array<chunk_t, NReqs> m_pending{};
+  std::array<iterator_pair, NReqs> m_pending{};
 
-  buffer_t m_buffer{};
-};
-
-#if 0
-class A2ACommBase {
- public:
-  using rank_t = int32_t;
-
-  A2ACommBase() = default;
-  A2ACommBase(MPI_Comm comm)
-  {
-    A2A_ASSERT_RETURNS(MPI_Comm_rank(comm, &m_me), MPI_SUCCESS);
-    rank_t nr;
-    A2A_ASSERT_RETURNS(MPI_Comm_size(comm, &nr), MPI_SUCCESS);
-    A2A_ASSERT(nr > 0);
-    m_nr = nr;
-  }
-
-  constexpr unsigned size() const noexcept
-  {
-    return m_nr;
-  }
-
-  constexpr rank_t me() const noexcept
-  {
-    return m_me;
-  }
-
- private:
-  std::uint32_t m_nr{};
-  rank_t        m_me{MPI_PROC_NULL};
-};
-#endif
-
-using rank_t = mpi::rank_t;
-
-class FlatHandshake {
- public:
-  static constexpr const char* NAME = "FlatHandshake";
-
-  constexpr mpi::rank_t sendRank(
-      mpi::MpiCommCtx const& comm, mpi::rank_t phase) const noexcept
-  {
-    return isPow2<unsigned>(comm.size())
-               ? hypercube(comm, phase)
-               : mod(comm.rank() + phase, comm.size());
-  }
-
-  constexpr mpi::rank_t recvRank(
-      mpi::MpiCommCtx const& comm, mpi::rank_t phase) const noexcept
-  {
-    return isPow2<unsigned>(comm.size())
-               ? hypercube(comm, phase)
-               : mod(comm.rank() - phase, comm.size());
-  }
-
- private:
-  constexpr rank_t hypercube(mpi::MpiCommCtx const& comm, rank_t phase) const
-      noexcept
-  {
-    A2A_ASSERT(isPow2<unsigned>(comm.size()));
-    return comm.rank() ^ phase;
-  }
-};
-
-class OneFactor {
- public:
-  static constexpr const char* NAME = "OneFactor";
-
-  constexpr rank_t sendRank(mpi::MpiCommCtx const& comm, rank_t phase) const
-      noexcept
-  {
-    return comm.size() % 2 ? factor_odd(comm, phase)
-                           : factor_even(comm, phase);
-  }
-
-  constexpr rank_t recvRank(mpi::MpiCommCtx const& comm, rank_t phase) const
-      noexcept
-  {
-    return sendRank(comm, phase);
-  }
-
- private:
-  constexpr rank_t factor_even(
-      mpi::MpiCommCtx const& comm, rank_t phase) const noexcept
-  {
-    rank_t idle = mod(comm.size() * phase / 2, comm.size() - 1);
-
-    if (comm.rank() == comm.size() - 1) {
-      return idle;
-    }
-
-    if (comm.rank() == idle) {
-      return comm.size() - 1;
-    }
-
-    return mod(phase - comm.rank(), comm.size() - 1);
-  }
-
-  constexpr rank_t factor_odd(mpi::MpiCommCtx const& comm, rank_t phase) const
-      noexcept
-  {
-    return mod(phase - comm.rank(), comm.size());
-  }
-};
-
-template <AllToAllAlgorithm algo>
-struct selectAlgorithm {
-  using type = FlatHandshake;
-};
-
-template <>
-struct selectAlgorithm<AllToAllAlgorithm::ONE_FACTOR> {
-  using type = OneFactor;
+  simple_vector m_buffer{};
 };
 
 template <class Schedule, class ReqIdx, class BufAlloc, class CommOp>
 inline auto enqueueMpiOps(
-    rank_t const firstPhase,
-    rank_t const me,
-    rank_t const reqsInFlight,
-    Schedule&&   partner,
-    ReqIdx&&     reqIdx,
-    BufAlloc&&   bufAlloc,
-    CommOp&&     commOp)
+    mpi::rank_t const firstPhase,
+    mpi::rank_t const me,
+    mpi::rank_t const reqsInFlight,
+    Schedule&&        partner,
+    ReqIdx&&          reqIdx,
+    BufAlloc&&        bufAlloc,
+    CommOp&&          commOp)
 {
+  using mpi::rank_t;
+
   rank_t phase, nreqs;
 
   for (phase = firstPhase, nreqs = 0; nreqs < reqsInFlight; ++phase) {
@@ -313,7 +207,7 @@ inline void scatteredPairwiseWaitsome(
 
   using algo_type   = typename detail::selectAlgorithm<algo>::type;
   using value_type  = typename std::iterator_traits<InputIt>::value_type;
-  auto mpi_datatype = mpi::mpi_datatype<value_type>::type();
+  auto mpi_datatype = mpi::type_mapper<value_type>::type();
 
   auto const nr = ctx.size();
   auto const me = ctx.rank();
@@ -698,7 +592,7 @@ inline void scatteredPairwise(
   using algo_type  = typename detail::selectAlgorithm<algo>::type;
   using value_type = typename std::iterator_traits<InputIt>::value_type;
 
-  auto mpi_datatype = mpi::mpi_datatype<value_type>::type();
+  auto mpi_datatype = mpi::type_mapper<value_type>::type();
   auto rbuf = std::unique_ptr<value_type[]>(new value_type[nr * blocksize]);
 
   std::string s;
@@ -787,7 +681,7 @@ inline void MpiAlltoAll(
     Op&&                   op)
 {
   using value_type  = typename std::iterator_traits<InputIt>::value_type;
-  auto mpi_datatype = mpi::mpi_datatype<value_type>::type();
+  auto mpi_datatype = mpi::type_mapper<value_type>::type();
 
   auto nr = ctx.size();
   auto me = ctx.rank();
