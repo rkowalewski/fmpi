@@ -12,12 +12,14 @@
 #include <mpi.h>
 #include <omp.h>
 
-#include <AlltoAll.h>
+#include <fusion/AlltoAll.h>
+#include <fusion/SharedMemory.h>
+#include <fusion/rtlx.h>
+
 #include <Debug.h>
 #include <Random.h>
-#include <SharedMemory.h>
-#include <Timer.h>
-#include <rtlx.h>
+#include <timer/Timer.h>
+#include <timer/Trace.h>
 
 #include <MPISynchronizedBarrier.h>
 #include <MpiAlltoAllBench.h>

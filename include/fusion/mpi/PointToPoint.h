@@ -1,7 +1,7 @@
 #ifndef MPI__P2P_H
 #define MPI__P2P_H
 
-#include <mpi/Types.h>
+#include <fusion/mpi/Types.h>
 
 namespace mpi {
 

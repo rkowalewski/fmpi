@@ -3,8 +3,8 @@
 #include <mutex>
 
 #include <Debug.h>
-#include <Timer.h>
-#include <Trace.h>
+#include <timer/Timer.h>
+#include <timer/Trace.h>
 
 extern char **environ;
 

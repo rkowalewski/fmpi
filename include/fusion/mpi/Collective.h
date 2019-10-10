@@ -1,8 +1,8 @@
 #ifndef MPI__COLLECTIVE_H
 #define MPI__COLLECTIVE_H
 
-#include <mpi/Types.h>
-#include <mpi/Environment.h>
+#include <fusion/mpi/Types.h>
+#include <fusion/mpi/Environment.h>
 
 namespace mpi {
 

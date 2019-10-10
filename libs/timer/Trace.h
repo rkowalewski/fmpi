@@ -7,8 +7,6 @@
 #include <string>
 #include <unordered_map>
 
-#include <Timer.h>
-
 namespace a2a {
 
 class TimeTrace;

@@ -13,14 +13,15 @@
 #include <tlx/simple_vector.hpp>
 #include <tlx/stack_allocator.hpp>
 
-// Other AllToAll Algorithms
-#include <Bruck.h>
-#include <Constants.h>
 #include <Debug.h>
-#include <NumericRange.h>
-#include <Schedule.h>
-#include <Trace.h>
-#include <mpi/Mpi.h>
+#include <timer/Trace.h>
+
+// Other AllToAll Algorithms
+#include <fusion/Bruck.h>
+#include <fusion/Constants.h>
+#include <fusion/NumericRange.h>
+#include <fusion/Schedule.h>
+#include <fusion/mpi/Mpi.h>
 
 namespace a2a {
 

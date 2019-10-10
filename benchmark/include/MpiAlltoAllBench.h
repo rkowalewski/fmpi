@@ -8,9 +8,7 @@
 #include <utility>
 #include <vector>
 
-#include <mpi/Mpi.h>
-#include <Timer.h>
-#include <Trace.h>
+#include <fusion/mpi/Mpi.h>
 
 struct StringDoublePair : std::pair<std::string, double> {
   using std::pair<std::string, double>::pair;

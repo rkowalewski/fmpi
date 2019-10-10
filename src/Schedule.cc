@@ -1,6 +1,5 @@
-#include <Schedule.h>
-
-#include <Math.h>
+#include <fusion/Schedule.h>
+#include <fusion/Math.h>
 
 namespace a2a {
 

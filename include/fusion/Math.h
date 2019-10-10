@@ -2,6 +2,7 @@
 #define MATH_H
 
 #include <Debug.h>
+
 #include <type_traits>
 
 #include <climits>

@@ -1,4 +1,4 @@
-#include <mpi/Environment.h>
+#include <fusion/mpi/Environment.h>
 
 #include <Debug.h>
 

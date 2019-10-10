@@ -1,7 +1,7 @@
 #ifndef SCHEDULE_H
 #define SCHEDULE_H
 
-#include <mpi/Mpi.h>
+#include <fusion/mpi/Mpi.h>
 
 namespace a2a {
 

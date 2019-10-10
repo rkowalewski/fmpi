@@ -6,11 +6,13 @@
 #include <cmath>
 #include <memory>
 
-#include <Constants.h>
 #include <Debug.h>
-#include <Math.h>
-#include <mpi/PointToPoint.h>
-#include <Trace.h>
+
+#include <fusion/Constants.h>
+#include <fusion/Math.h>
+#include <fusion/mpi/PointToPoint.h>
+
+#include <timer/Trace.h>
 
 namespace a2a {
 

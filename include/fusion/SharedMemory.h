@@ -4,14 +4,14 @@
 #include <cstdlib>
 
 #include <Debug.h>
-#include <mpi/Mpi.h>
+
+#include <fusion/Math.h>
+#include <fusion/mpi/Mpi.h>
 
 #include <tlx/math/integer_log2.hpp>
 #include <tlx/simple_vector.hpp>
 
 #include <morton.h>
-
-#include <Math.h>
 
 namespace a2a {
 
