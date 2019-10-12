@@ -16,10 +16,10 @@
 #include <fusion/SharedMemory.h>
 #include <fusion/rtlx.h>
 
-#include <Debug.h>
+#include <rtlx/Debug.h>
+#include <rtlx/Timer.h>
+#include <rtlx/Trace.h>
 #include <Random.h>
-#include <timer/Timer.h>
-#include <timer/Trace.h>
 
 #include <MPISynchronizedBarrier.h>
 #include <MpiAlltoAllBench.h>
@@ -399,7 +399,7 @@ int main(int argc, char* argv[])
 #endif
 
         if (it >= nwarmup) {
-          auto trace = a2a::TimeTrace{me, algo.first};
+          auto trace = rtlx::TimeTrace{me, algo.first};
 
           printMeasurementCsvLine(
               std::cout,
@@ -419,9 +419,9 @@ int main(int argc, char* argv[])
         auto barrier = clock.Barrier(commCtx.mpiComm());
         A2A_ASSERT(barrier.Success(commCtx.mpiComm()));
 
-        auto t = ChronoClockNow();
+        auto t = rtlx::ChronoClockNow();
         algo.second(data, out, static_cast<int>(sendcount), merger);
-        t = ChronoClockNow() - t;
+        t = rtlx::ChronoClockNow() - t;
 
 #ifndef NDEBUG
         A2A_ASSERT(std::equal(
@@ -429,7 +429,7 @@ int main(int argc, char* argv[])
 #endif
 
         if (it >= nwarmup) {
-          auto trace = a2a::TimeTrace{me, algo.first};
+          auto trace = rtlx::TimeTrace{me, algo.first};
 
           printMeasurementCsvLine(
               std::cout,

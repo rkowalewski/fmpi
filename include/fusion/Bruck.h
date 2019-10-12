@@ -6,19 +6,22 @@
 #include <cmath>
 #include <memory>
 
-#include <Debug.h>
+#include <rtlx/Debug.h>
+#include <rtlx/Trace.h>
 
 #include <fusion/Constants.h>
 #include <fusion/Math.h>
 #include <fusion/mpi/PointToPoint.h>
 
-#include <timer/Trace.h>
-
 namespace a2a {
 
 template <class InputIt, class OutputIt, class Op>
 inline void bruck(
-    InputIt begin, OutputIt out, int blocksize, MPI_Comm comm, Op&& /*unused*/)
+    InputIt  begin,
+    OutputIt out,
+    int      blocksize,
+    MPI_Comm comm,
+    Op&& /*unused*/)
 {
   using rank_t = int;
   rank_t me, nr;
@@ -27,7 +30,7 @@ inline void bruck(
 
   using value_t = typename std::iterator_traits<InputIt>::value_type;
 
-  auto trace = TimeTrace{me, "Bruck"};
+  auto trace = rtlx::TimeTrace{me, "Bruck"};
   trace.tick(COMMUNICATION);
 
   // Phase 1: Process i rotates local elements by i blocks to the left in a
@@ -133,7 +136,11 @@ inline void bruck(
 
 template <class InputIt, class OutputIt, class Op>
 inline void bruck_mod(
-    InputIt begin, OutputIt out, int blocksize, MPI_Comm comm, Op&& /*unused*/)
+    InputIt  begin,
+    OutputIt out,
+    int      blocksize,
+    MPI_Comm comm,
+    Op&& /*unused*/)
 {
   using rank_t = int;
   rank_t me, nr;
@@ -142,7 +149,7 @@ inline void bruck_mod(
 
   using value_t = typename std::iterator_traits<InputIt>::value_type;
 
-  auto trace = TimeTrace{me, "Bruck_Mod"};
+  auto trace = rtlx::TimeTrace{me, "Bruck_Mod"};
   trace.tick(COMMUNICATION);
 
   auto nels = size_t(nr) * blocksize;

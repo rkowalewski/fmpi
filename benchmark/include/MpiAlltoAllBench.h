@@ -47,9 +47,9 @@ auto run_algorithm(
     mpi::MpiCommCtx const& comm,
     Merger&&               op)
 {
-  auto start = ChronoClockNow();
+  auto start = rtlx::ChronoClockNow();
   f(begin, out, blocksize, comm, std::forward<Merger>(op));
-  return ChronoClockNow() - start;
+  return rtlx::ChronoClockNow() - start;
 }
 
 template <class T>

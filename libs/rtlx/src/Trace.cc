@@ -2,13 +2,13 @@
 #include <iostream>
 #include <mutex>
 
-#include <Debug.h>
-#include <timer/Timer.h>
-#include <timer/Trace.h>
+#include <rtlx/Debug.h>
+#include <rtlx/Timer.h>
+#include <rtlx/Trace.h>
 
 extern char **environ;
 
-namespace a2a {
+namespace rtlx {
 
 bool TimeTrace::enabled() const noexcept
 {
@@ -32,7 +32,7 @@ std::string const &TimeTrace::context() const noexcept
   return m_context;
 }
 
-void TimeTrace::tick(const TraceStore::key_t& key)
+void TimeTrace::tick(const TraceStore::key_t &key)
 {
   if (enabled()) {
     A2A_ASSERT(m_cache.find(key) == std::end(m_cache));
@@ -40,7 +40,7 @@ void TimeTrace::tick(const TraceStore::key_t& key)
   }
 }
 
-void TimeTrace::tock(const TraceStore::key_t& key)
+void TimeTrace::tock(const TraceStore::key_t &key)
 {
   auto &store = TraceStore::GetInstance();
   if (store.enabled()) {
@@ -89,22 +89,10 @@ std::unordered_map<TraceStore::key_t, TraceStore::value_t> &TraceStore::get(
 
 static bool isTraceEnvironFlagEnabled()
 {
-  char *env_var_kv = *environ;
-
-  int i = 1;
-  for (; env_var_kv != nullptr; ++i) {
-    // Split into key and value:
-    char *      flag_name_cstr  = env_var_kv;
-    char *      flag_value_cstr = std::strstr(env_var_kv, "=");
-    auto         flag_name_len   = flag_value_cstr - flag_name_cstr;
-    std::string flag_name(flag_name_cstr, flag_name_cstr + flag_name_len);
-    std::string flag_value(flag_value_cstr + 1);
-
-    if ((std::strstr(flag_name.c_str(), "A2A_ENABLE_TRACE") != nullptr)) {
-      return flag_value == "1" || flag_value == "ON";
-    }
-
-    env_var_kv = *(environ + i);
+  // Split into key and value:
+  if (auto const *flag = std::getenv("A2A_ENABLE_TRACE")) {
+    std::string flag_value = flag;
+    return flag_value == "1" || flag_value == "ON";
   }
 
   return false;
@@ -134,4 +122,4 @@ bool TraceStore::enabled() const noexcept
 std::unique_ptr<TraceStore> TraceStore::m_instance{};
 
 std::once_flag TraceStore::m_onceFlag{};
-}  // namespace a2a
+}  // namespace rtlx

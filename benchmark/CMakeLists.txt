@@ -8,7 +8,7 @@ target_include_directories(mpiFusionBench PRIVATE include src)
 # Make sure you link your targets with this command. It can also link libraries and
 # even flags, so linking a target that does not exist will not give a configure-time error.
 target_link_libraries(mpiFusionBench PRIVATE OpenMP::OpenMP_CXX MPI::MPI_CXX
-    MPISynchronizedBarrier tlx Morton fusion_timer fusion_debug mpi_fusion)
+    MPISynchronizedBarrier tlx Morton rtlx fmpi)
 # link tlx
 target_compile_options(mpiFusionBench PRIVATE ${OpenMP_CXX_FLAGS})
 

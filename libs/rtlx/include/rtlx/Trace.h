@@ -7,7 +7,7 @@
 #include <string>
 #include <unordered_map>
 
-namespace a2a {
+namespace rtlx {
 
 class TimeTrace;
 
@@ -51,7 +51,7 @@ class TimeTrace {
   std::unordered_map<TraceStore::key_t, TraceStore::value_t> const &
   measurements() const;
 
-  TraceStore::value_t lookup(TraceStore::key_t const &key) const;
+  value_t lookup(TraceStore::key_t const &key) const;
 
   int                pid() const noexcept;
   std::string const &context() const noexcept;

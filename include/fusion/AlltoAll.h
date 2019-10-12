@@ -13,8 +13,8 @@
 #include <tlx/simple_vector.hpp>
 #include <tlx/stack_allocator.hpp>
 
-#include <Debug.h>
-#include <timer/Trace.h>
+#include <rtlx/Debug.h>
+#include <rtlx/Trace.h>
 
 // Other AllToAll Algorithms
 #include <fusion/Bruck.h>
@@ -215,13 +215,13 @@ inline void scatteredPairwiseWaitsome(
 
   std::string s;
 
-  if (TraceStore::GetInstance().enabled()) {
+  if (rtlx::TraceStore::GetInstance().enabled()) {
     std::ostringstream os;
     os << "ScatteredPairwiseWaitsome" << algo_type::NAME << NReqs;
     s = os.str();
   }
 
-  auto trace = TimeTrace{ctx.rank(), s};
+  auto trace = rtlx::TimeTrace{ctx.rank(), s};
 
   P(me << " running algorithm " << s << ", blocksize: " << blocksize);
 
@@ -598,13 +598,13 @@ inline void scatteredPairwise(
 
   std::string s;
 
-  if (TraceStore::GetInstance().enabled()) {
+  if (rtlx::TraceStore::GetInstance().enabled()) {
     std::ostringstream os;
     os << "ScatteredPairwise" << algo_type::NAME;
     s = os.str();
   }
 
-  auto trace = TimeTrace{me, s};
+  auto trace = rtlx::TimeTrace{me, s};
 
   trace.tick(COMMUNICATION);
   std::copy(
@@ -687,7 +687,7 @@ inline void MpiAlltoAll(
   auto nr = ctx.size();
   auto me = ctx.rank();
 
-  auto trace = TimeTrace{me, "AlltoAll"};
+  auto trace = rtlx::TimeTrace{me, "AlltoAll"};
 
   trace.tick(COMMUNICATION);
 
@@ -743,13 +743,13 @@ inline void scatteredPairwiseWaitany(
   auto mpi_datatype = mpi::mpi_datatype<value_type>::type();
 
   std::string s;
-  if (TraceStore::GetInstance().enabled()) {
+  if (rtlx::TraceStore::GetInstance().enabled()) {
     std::ostringstream os;
     os << "ScatteredPairwiseWaitany" << NReqs;
     s = os.str();
   }
 
-  auto trace = TimeTrace{me, s};
+  auto trace = rtlx::TimeTrace{me, s};
 
   trace.tick(COMMUNICATION);
 

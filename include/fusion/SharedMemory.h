@@ -3,7 +3,7 @@
 
 #include <cstdlib>
 
-#include <Debug.h>
+#include <rtlx/Debug.h>
 
 #include <fusion/Math.h>
 #include <fusion/mpi/Mpi.h>
@@ -37,13 +37,13 @@ inline void all2allMortonZSource(
   auto const me = from.ctx().rank();
 
   std::string s;
-  if (TraceStore::GetInstance().enabled()) {
+  if (rtlx::TraceStore::GetInstance().enabled()) {
     std::ostringstream os;
     os << "All2AllMortonZSource";
     s = os.str();
   }
 
-  auto trace = TimeTrace{me, s};
+  auto trace = rtlx::TimeTrace{me, s};
   trace.tick(COMMUNICATION);
 
   A2A_ASSERT(from.ctx().mpiComm() == to.ctx().mpiComm());
@@ -235,13 +235,13 @@ inline void all2allMortonZDest(
   auto const me = from.ctx().rank();
 
   std::string s;
-  if (TraceStore::GetInstance().enabled()) {
+  if (rtlx::TraceStore::GetInstance().enabled()) {
     std::ostringstream os;
     os << "All2AllMortonDest";
     s = os.str();
   }
 
-  auto trace = TimeTrace{me, s};
+  auto trace = rtlx::TimeTrace{me, s};
   trace.tick(COMMUNICATION);
 
   A2A_ASSERT(from.ctx().mpiComm() == to.ctx().mpiComm());
@@ -432,7 +432,7 @@ inline void all2allNaive(
 
   auto rbuf = std::unique_ptr<value_type[]>(new value_type[nr * blocksize]);
 
-  auto trace = TimeTrace{me, "All2AllNaive"};
+  auto trace = rtlx::TimeTrace{me, "All2AllNaive"};
 
   trace.tick(COMMUNICATION);
 
