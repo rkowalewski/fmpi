@@ -11,7 +11,7 @@
 
 #include <tlx/simple_vector.hpp>
 
-#include <fusion/mpi/Collective.h>
+#include <fmpi/mpi/Collective.h>
 
 namespace mpi {
 

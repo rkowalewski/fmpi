@@ -9,9 +9,9 @@
 #include <rtlx/Debug.h>
 #include <rtlx/Trace.h>
 
-#include <fusion/Constants.h>
-#include <fusion/Math.h>
-#include <fusion/mpi/PointToPoint.h>
+#include <fmpi/Constants.h>
+#include <fmpi/Math.h>
+#include <fmpi/mpi/PointToPoint.h>
 
 namespace a2a {
 

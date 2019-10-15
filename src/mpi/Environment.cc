@@ -1,4 +1,4 @@
-#include <fusion/mpi/Environment.h>
+#include <fmpi/mpi/Environment.h>
 
 #include <rtlx/Debug.h>
 

@@ -5,8 +5,8 @@
 
 #include <rtlx/Debug.h>
 
-#include <fusion/Math.h>
-#include <fusion/mpi/Mpi.h>
+#include <fmpi/Math.h>
+#include <fmpi/mpi/Mpi.h>
 
 #include <tlx/math/integer_log2.hpp>
 #include <tlx/simple_vector.hpp>

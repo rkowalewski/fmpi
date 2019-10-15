@@ -1,7 +1,7 @@
 #ifndef MPI__ENVIRONMENT_H
 #define MPI__ENVIRONMENT_H
 
-#include <fusion/mpi/Types.h>
+#include <fmpi/mpi/Types.h>
 
 namespace mpi {
 

@@ -17,11 +17,11 @@
 #include <rtlx/Trace.h>
 
 // Other AllToAll Algorithms
-#include <fusion/Bruck.h>
-#include <fusion/Constants.h>
-#include <fusion/NumericRange.h>
-#include <fusion/Schedule.h>
-#include <fusion/mpi/Mpi.h>
+#include <fmpi/Bruck.h>
+#include <fmpi/Constants.h>
+#include <fmpi/NumericRange.h>
+#include <fmpi/Schedule.h>
+#include <fmpi/mpi/Mpi.h>
 
 namespace a2a {
 

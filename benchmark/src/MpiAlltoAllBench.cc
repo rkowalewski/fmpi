@@ -12,9 +12,9 @@
 #include <mpi.h>
 #include <omp.h>
 
-#include <fusion/AlltoAll.h>
-#include <fusion/SharedMemory.h>
-#include <fusion/rtlx.h>
+#include <fmpi/AlltoAll.h>
+#include <fmpi/SharedMemory.h>
+#include <fmpi/rtlx.h>
 
 #include <rtlx/Debug.h>
 #include <rtlx/Timer.h>

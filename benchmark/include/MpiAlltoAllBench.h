@@ -8,7 +8,7 @@
 #include <utility>
 #include <vector>
 
-#include <fusion/mpi/Mpi.h>
+#include <fmpi/mpi/Mpi.h>
 
 struct StringDoublePair : std::pair<std::string, double> {
   using std::pair<std::string, double>::pair;

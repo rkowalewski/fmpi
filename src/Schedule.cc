@@ -1,5 +1,5 @@
-#include <fusion/Schedule.h>
-#include <fusion/Math.h>
+#include <fmpi/Schedule.h>
+#include <fmpi/Math.h>
 
 namespace a2a {
 
