@@ -16,7 +16,7 @@
 #include <Trace.h>
 #include <Types.h>
 
-namespace a2a {
+namespace fmpi {
 
 namespace detail {
 
@@ -30,7 +30,7 @@ inline void oneFactor_odd(
 
   assert(nr % 2);
 
-  auto steps = a2a::range(0, nr);
+  auto steps = fmpi::range(0, nr);
 
   auto trace = TimeTrace{me, "OneFactor"};
   trace.tick(COMMUNICATION);
@@ -45,7 +45,7 @@ inline void oneFactor_odd(
           out + me * blocksize);
     }
     else {
-      auto reqs = a2a::sendrecv(
+      auto reqs = fmpi::sendrecv(
           std::next(begin, partner * blocksize),
           blocksize,
           partner,
@@ -102,7 +102,7 @@ inline void oneFactor_even(
   for (int r = 0; r < nr - 1; ++r) {
     auto p = partner(r);
 
-    auto reqs = a2a::sendrecv(
+    auto reqs = fmpi::sendrecv(
         std::next(begin, p * blocksize),
         blocksize,
         p,
@@ -144,7 +144,7 @@ inline void oneFactor(
   std::vector<std::pair<InputIt, InputIt>> chunks;
   chunks.reserve(nr);
 
-  auto range = a2a::range(0, nr * blocksize, blocksize);
+  auto range = fmpi::range(0, nr * blocksize, blocksize);
 
 
   std::transform(
@@ -160,6 +160,6 @@ inline void oneFactor(
   op(chunks, out);
 }
 
-}  // namespace a2a
+}  // namespace fmpi
 
 #endif

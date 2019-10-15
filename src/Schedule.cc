@@ -1,7 +1,7 @@
 #include <fmpi/Schedule.h>
 #include <fmpi/Math.h>
 
-namespace a2a {
+namespace fmpi {
 
 mpi::rank_t FlatHandshake::sendRank(
     mpi::MpiCommCtx const& comm, mpi::rank_t phase) const noexcept
@@ -59,4 +59,4 @@ mpi::rank_t OneFactor::factor_odd(
 {
   return mod(phase - comm.rank(), comm.size());
 }
-}  // namespace a2a
+}  // namespace fmpi

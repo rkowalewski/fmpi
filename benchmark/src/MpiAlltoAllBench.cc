@@ -65,68 +65,68 @@ using twoSidedA2A_t = std::function<void(
 std::array<std::pair<std::string, twoSidedA2A_t>, 9> TWO_SIDED = {
     std::make_pair(
         "AlltoAll",
-        a2a::MpiAlltoAll<
+        fmpi::MpiAlltoAll<
             iterator_t,
             iterator_t,
             merge_t<iterator_t, iterator_t>>),
     std::make_pair(
         "ScatteredPairwiseFlatHandshake",
-        a2a::scatteredPairwise<
-            a2a::AllToAllAlgorithm::FLAT_HANDSHAKE,
+        fmpi::scatteredPairwise<
+            fmpi::AllToAllAlgorithm::FLAT_HANDSHAKE,
             iterator_t,
             iterator_t,
             merge_t<iterator_t, iterator_t>>),
     std::make_pair(
         "ScatteredPairwiseOneFactor",
-        a2a::scatteredPairwise<
-            a2a::AllToAllAlgorithm::ONE_FACTOR,
+        fmpi::scatteredPairwise<
+            fmpi::AllToAllAlgorithm::ONE_FACTOR,
             iterator_t,
             iterator_t,
             merge_t<iterator_t, iterator_t>>),
     std::make_pair(
         "ScatteredPairwiseWaitsomeFlatHandshake4",
-        a2a::scatteredPairwiseWaitsome<
-            a2a::AllToAllAlgorithm::FLAT_HANDSHAKE,
+        fmpi::scatteredPairwiseWaitsome<
+            fmpi::AllToAllAlgorithm::FLAT_HANDSHAKE,
             iterator_t,
             iterator_t,
             merge_t<iterator_t, iterator_t>,
             4>),
     std::make_pair(
         "ScatteredPairwiseWaitsomeFlatHandshake8",
-        a2a::scatteredPairwiseWaitsome<
-            a2a::AllToAllAlgorithm::FLAT_HANDSHAKE,
+        fmpi::scatteredPairwiseWaitsome<
+            fmpi::AllToAllAlgorithm::FLAT_HANDSHAKE,
             iterator_t,
             iterator_t,
             merge_t<iterator_t, iterator_t>,
             8>),
     std::make_pair(
         "ScatteredPairwiseWaitsomeFlatHandshake16",
-        a2a::scatteredPairwiseWaitsome<
-            a2a::AllToAllAlgorithm::FLAT_HANDSHAKE,
+        fmpi::scatteredPairwiseWaitsome<
+            fmpi::AllToAllAlgorithm::FLAT_HANDSHAKE,
             iterator_t,
             iterator_t,
             merge_t<iterator_t, iterator_t>,
             16>),
     std::make_pair(
         "ScatteredPairwiseWaitsomeOneFactor4",
-        a2a::scatteredPairwiseWaitsome<
-            a2a::AllToAllAlgorithm::ONE_FACTOR,
+        fmpi::scatteredPairwiseWaitsome<
+            fmpi::AllToAllAlgorithm::ONE_FACTOR,
             iterator_t,
             iterator_t,
             merge_t<iterator_t, iterator_t>,
             4>),
     std::make_pair(
         "ScatteredPairwiseWaitsomeOneFactor8",
-        a2a::scatteredPairwiseWaitsome<
-            a2a::AllToAllAlgorithm::ONE_FACTOR,
+        fmpi::scatteredPairwiseWaitsome<
+            fmpi::AllToAllAlgorithm::ONE_FACTOR,
             iterator_t,
             iterator_t,
             merge_t<iterator_t, iterator_t>,
             8>),
     std::make_pair(
         "ScatteredPairwiseWaitsomeOneFactor16",
-        a2a::scatteredPairwiseWaitsome<
-            a2a::AllToAllAlgorithm::ONE_FACTOR,
+        fmpi::scatteredPairwiseWaitsome<
+            fmpi::AllToAllAlgorithm::ONE_FACTOR,
             iterator_t,
             iterator_t,
             merge_t<iterator_t, iterator_t>,
@@ -134,26 +134,26 @@ std::array<std::pair<std::string, twoSidedA2A_t>, 9> TWO_SIDED = {
 #if 0
     std::make_pair(
         "ScatteredPairwiseWaitany16",
-        a2a::scatteredPairwiseWaitany<iterator_t, iterator_t, merge_t, 16>),
+        fmpi::scatteredPairwiseWaitany<iterator_t, iterator_t, merge_t, 16>),
     std::make_pair(
         "ScatteredPairwiseWaitany32",
-        a2a::scatteredPairwiseWaitany<iterator_t, iterator_t, merge_t, 32>),
+        fmpi::scatteredPairwiseWaitany<iterator_t, iterator_t, merge_t, 32>),
     std::make_pair(
         "ScatteredPairwiseWaitany64",
-        a2a::scatteredPairwiseWaitany<iterator_t, iterator_t, merge_t, 64>),
+        fmpi::scatteredPairwiseWaitany<iterator_t, iterator_t, merge_t, 64>),
     std::make_pair(
         "ScatteredPairwiseWaitany128",
-        a2a::scatteredPairwiseWaitany<iterator_t, iterator_t, merge_t, 128>),
+        fmpi::scatteredPairwiseWaitany<iterator_t, iterator_t, merge_t, 128>),
     // Hierarchical XOR Shift Hypercube, works only if #PEs is power of two
     std::make_pair(
-        "Hypercube", a2a::hypercube<iterator_t, iterator_t, merge_t>),
+        "Hypercube", fmpi::hypercube<iterator_t, iterator_t, merge_t>),
 #endif
 // Bruck Algorithms, first the original one, then a modified version which
 // omits the last local rotation step
 #if 0
-    std::make_pair("Bruck", a2a::bruck<iterator_t, iterator_t, merge_t>),
+    std::make_pair("Bruck", fmpi::bruck<iterator_t, iterator_t, merge_t>),
     std::make_pair(
-        "Bruck_Mod", a2a::bruck_mod<iterator_t, iterator_t, merge_t>)
+        "Bruck_Mod", fmpi::bruck_mod<iterator_t, iterator_t, merge_t>)
 #endif
 };
 
@@ -166,13 +166,13 @@ using oneSidedA2A_t = std::function<void(
 std::array<std::pair<std::string, oneSidedA2A_t>, 3> ONE_SIDED = {
     std::make_pair(
         "All2AllNaive",
-        a2a::all2allNaive<value_t, merge_t<iterator_t, iterator_t>>),
+        fmpi::all2allNaive<value_t, merge_t<iterator_t, iterator_t>>),
     std::make_pair(
         "All2AllMortonZSource",
-        a2a::all2allMortonZSource<value_t, merge_t<iterator_t, iterator_t>>),
+        fmpi::all2allMortonZSource<value_t, merge_t<iterator_t, iterator_t>>),
     std::make_pair(
         "All2AllMortonZDest",
-        a2a::all2allMortonZDest<value_t, merge_t<iterator_t, iterator_t>>)};
+        fmpi::all2allMortonZDest<value_t, merge_t<iterator_t, iterator_t>>)};
 
 int main(int argc, char* argv[])
 {
@@ -352,7 +352,7 @@ int main(int argc, char* argv[])
       // first we want to obtain the correct result which we can verify then
       // with our own algorithms
 #ifndef NDEBUG
-      a2a::MpiAlltoAll(
+      fmpi::MpiAlltoAll(
           data.base(),
           correct.base(),
           static_cast<int>(sendcount),
@@ -378,7 +378,7 @@ int main(int argc, char* argv[])
 
         auto isHypercube = algo.first.find("Hypercube") != std::string::npos;
 
-        if (isHypercube && !a2a::isPow2(static_cast<unsigned>(nr))) {
+        if (isHypercube && !fmpi::isPow2(static_cast<unsigned>(nr))) {
           continue;
         }
 
@@ -407,8 +407,8 @@ int main(int argc, char* argv[])
               algo.first,
               std::make_tuple(
                   t,
-                  trace.lookup(a2a::MERGE),
-                  trace.lookup(a2a::COMMUNICATION)));
+                  trace.lookup(fmpi::MERGE),
+                  trace.lookup(fmpi::COMMUNICATION)));
           trace.clear();
         }
       }
@@ -437,8 +437,8 @@ int main(int argc, char* argv[])
               algo.first,
               std::make_tuple(
                   t,
-                  trace.lookup(a2a::MERGE),
-                  trace.lookup(a2a::COMMUNICATION)));
+                  trace.lookup(fmpi::MERGE),
+                  trace.lookup(fmpi::COMMUNICATION)));
           trace.clear();
         }
       }

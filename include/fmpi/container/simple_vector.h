@@ -3,7 +3,7 @@
 
 #include <tlx/container/simple_vector.hpp>
 
-namespace a2a {
+namespace fmpi {
 template <class T>
 class SimpleVector
   : public tlx::SimpleVector<T, SimpleVectorMode::NoInitNoDestroy> {
@@ -35,5 +35,5 @@ class SimpleVector
   typename base_t::size_type m_nels{};
 };
 
-}  // namespace a2a
+}  // namespace fmpi
 #endif

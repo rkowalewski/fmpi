@@ -42,7 +42,7 @@
 #include <iostream>
 #include <stdexcept>
 
-namespace a2a {
+namespace fmpi {
 
 template <typename T>
 struct IncrementValue {
@@ -224,5 +224,5 @@ numeric_range<T, IncrementBy<T>> range(T from, T to, T delta)
       IncrementBy<T>(std::move(delta)),
       m_dir);
 }
-}  // namespace a2a
+}  // namespace fmpi
 #endif

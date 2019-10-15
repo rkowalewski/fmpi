@@ -3,7 +3,7 @@
 
 #include <fmpi/mpi/Mpi.h>
 
-namespace a2a {
+namespace fmpi {
 
 enum class AllToAllAlgorithm { FLAT_HANDSHAKE, ONE_FACTOR };
 
@@ -51,6 +51,6 @@ struct selectAlgorithm<AllToAllAlgorithm::ONE_FACTOR> {
   using type = OneFactor;
 };
 }  // namespace detail
-}  // namespace a2a
+}  // namespace fmpi
 
 #endif

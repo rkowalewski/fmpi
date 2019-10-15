@@ -23,7 +23,7 @@
 #include <fmpi/Schedule.h>
 #include <fmpi/mpi/Mpi.h>
 
-namespace a2a {
+namespace fmpi {
 
 namespace detail {
 
@@ -65,7 +65,7 @@ class CommState {
   {
     std::fill(std::begin(m_pending), std::end(m_pending), iterator_pair{});
 
-    auto r = a2a::range<int>(MAX_FREE_CHUNKS - 1, -1, -1);
+    auto r = fmpi::range<int>(MAX_FREE_CHUNKS - 1, -1, -1);
 
     for (auto const& block : r) {
       auto f = std::next(std::begin(m_buffer), block * blocksize);
@@ -338,7 +338,7 @@ inline void scatteredPairwiseWaitsome(
     trace.tick(MERGE);
 
     {
-      auto range = a2a::range(0, static_cast<int>(reqsInFlight));
+      auto range = fmpi::range(0, static_cast<int>(reqsInFlight));
 
       for (auto const& idx : range) {
         // mark everything as completed
@@ -655,7 +655,7 @@ inline void scatteredPairwise(
   std::vector<std::pair<InputIt, InputIt>> chunks;
   chunks.reserve(nr);
 
-  auto range = a2a::range(0, nr * blocksize, blocksize);
+  auto range = fmpi::range(0, nr * blocksize, blocksize);
 
   std::transform(
       std::begin(range),
@@ -711,7 +711,7 @@ inline void MpiAlltoAll(
   std::vector<std::pair<InputIt, InputIt>> chunks;
   chunks.reserve(nr);
 
-  auto range = a2a::range(0, nr * blocksize, blocksize);
+  auto range = fmpi::range(0, nr * blocksize, blocksize);
 
   std::transform(
       std::begin(range),
@@ -908,5 +908,5 @@ inline void scatteredPairwiseWaitany(
   trace.tock(MERGE);
 }
 #endif
-}  // namespace a2a
+}  // namespace fmpi
 #endif

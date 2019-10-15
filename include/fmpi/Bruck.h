@@ -13,7 +13,7 @@
 #include <fmpi/Math.h>
 #include <fmpi/mpi/PointToPoint.h>
 
-namespace a2a {
+namespace fmpi {
 
 template <class InputIt, class OutputIt, class Op>
 inline void bruck(
@@ -246,6 +246,6 @@ inline void bruck_mod(
   }
   trace.tock(COMMUNICATION);
 }
-}  // namespace a2a
+}  // namespace fmpi
 
 #endif

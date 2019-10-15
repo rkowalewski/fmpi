@@ -13,7 +13,7 @@
 
 #include <morton.h>
 
-namespace a2a {
+namespace fmpi {
 
 enum class AllToAllAlgorithm;
 
@@ -141,7 +141,7 @@ inline void all2allMortonZSource(
     trace.tock(COMMUNICATION);
 
     if (row == ymask) {
-      auto range = a2a::range<unsigned>(row - ymask, row + 1);
+      auto range = fmpi::range<unsigned>(row - ymask, row + 1);
 
       trace.tick(MERGE);
       std::transform(
@@ -191,7 +191,7 @@ inline void all2allMortonZSource(
 
   trace.tick(MERGE);
 
-  auto range = a2a::range<unsigned>(0, nr * blocksize, ystride * blocksize);
+  auto range = fmpi::range<unsigned>(0, nr * blocksize, ystride * blocksize);
 
   std::transform(
       std::begin(range),
@@ -345,7 +345,7 @@ inline void all2allMortonZDest(
 
   for (auto dstRank = firstY; dstRank < firstY + ystride; ++dstRank) {
     trace.tick(MERGE);
-    auto range = a2a::range<std::size_t>(0, xstride * blocksize, blocksize);
+    auto range = fmpi::range<std::size_t>(0, xstride * blocksize, blocksize);
 
     auto block = (dstRank % ystride) * xstride * blocksize;
 
@@ -391,7 +391,7 @@ inline void all2allMortonZDest(
   trace.tick(MERGE);
 
   auto stride = xstride * blocksize;
-  auto range  = a2a::range<unsigned>(0, nr * blocksize, stride);
+  auto range  = fmpi::range<unsigned>(0, nr * blocksize, stride);
 
   chunks.resize(std::min(xstride, ystride));
 
@@ -450,7 +450,7 @@ inline void all2allNaive(
   std::vector<std::pair<iterator, iterator>> chunks;
   chunks.reserve(nr);
 
-  auto range = a2a::range(0, nr * blocksize, blocksize);
+  auto range = fmpi::range(0, nr * blocksize, blocksize);
 
   std::transform(
       std::begin(range),
@@ -468,6 +468,6 @@ inline void all2allNaive(
 
   A2A_ASSERT(std::is_sorted(to.base(me), to.base(me) + nr * blocksize));
 }
-}  // namespace a2a
+}  // namespace fmpi
 
 #endif

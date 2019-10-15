@@ -7,7 +7,7 @@
 
 #include <climits>
 
-namespace a2a {
+namespace fmpi {
 
 template <class T>
 inline constexpr T mod(T a, T b)
@@ -37,6 +37,6 @@ inline constexpr auto abs(T v)
   return (v + mask) ^ mask;
 }
 
-}  // namespace a2a
+}  // namespace fmpi
 
 #endif
