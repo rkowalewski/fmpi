@@ -40,16 +40,8 @@ include(${CMAKE_SOURCE_DIR}/cmake/ClangTidy.cmake)
 add_subdirectory(external)
 add_subdirectory(libs)
 add_subdirectory(src)
+
+add_subdirectory(apps)
 add_subdirectory(benchmark)
 
-message(STATUS "Run: ${MPIEXEC} ${MPIEXEC_NUMPROC_FLAG} ${MPIEXEC_MAX_NUMPROCS} ${MPIEXEC_PREFLAGS} EXECUTABLE ${MPIEXEC_POSTFLAGS} ARGS")
 
-
-# This is a "default" library, and will match the *** variable setting.
-# Other common choices are STATIC, SHARED, and MODULE
-# Including header files here helps IDEs but is not required.
-# Output libname matches target name, with the usual extensions on your system
-
-# Link each target with other targets or add options, etc.
-
-add_executable(factor_serial src/factor_serial.cc)

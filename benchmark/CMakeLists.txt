@@ -33,3 +33,5 @@ add_custom_target(GitVersion
     -P ${CMAKE_SOURCE_DIR}/cmake/generate_version.cmake
 )
 
+message(STATUS "Run: ${MPIEXEC} ${MPIEXEC_NUMPROC_FLAG} ${MPIEXEC_MAX_NUMPROCS} ${MPIEXEC_PREFLAGS} EXECUTABLE ${MPIEXEC_POSTFLAGS} ARGS")
+
