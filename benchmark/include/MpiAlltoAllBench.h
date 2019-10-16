@@ -73,6 +73,4 @@ auto medianReduce(T myMedian, int root, MPI_Comm comm)
   return T{};
 }
 
-void print_env();
-
 #endif

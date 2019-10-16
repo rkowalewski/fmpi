@@ -227,10 +227,6 @@ int main(int argc, char* argv[])
         std::back_inserter(twoSidedAlgos));
   }
 
-  if (me == 0) {
-    print_env();
-  }
-
   // We have to half the capacity because we do not in-place all to all
   // We again half by the number of processors
   // const size_t number_nodes = nr / 28;
@@ -488,29 +484,4 @@ void printMeasurementCsvLine(
   myos << tmerge << ", ";
   myos << tcomm << "\n";
   os << myos.str();
-}
-
-extern char** environ;
-
-void print_env()
-{
-  int   i          = 1;
-  char* env_var_kv = *environ;
-
-  std::cout << "-- RTLX_GIT_COMMIT = " << RTLX_GIT_COMMIT << "\n";
-  for (; env_var_kv != nullptr; ++i) {
-    // Split into key and value:
-    char*       flag_name_cstr  = env_var_kv;
-    char*       flag_value_cstr = std::strstr(env_var_kv, "=");
-    auto        flag_name_len   = flag_value_cstr - flag_name_cstr;
-    std::string flag_name(flag_name_cstr, flag_name_cstr + flag_name_len);
-    std::string flag_value(flag_value_cstr + 1);
-
-    if ((std::strstr(flag_name.c_str(), "OMPI_") != nullptr) ||
-        (std::strstr(flag_name.c_str(), "I_MPI_") != nullptr)) {
-      std::cout << "-- " << flag_name << " = " << flag_value << "\n";
-    }
-
-    env_var_kv = *(environ + i);
-  }
 }
