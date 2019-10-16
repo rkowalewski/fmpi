@@ -6,14 +6,14 @@ namespace mpi {
 
 MpiCommCtx::MpiCommCtx(MPI_Comm const& base)
 {
-  A2A_ASSERT_RETURNS(MPI_Comm_dup(base, &m_comm), MPI_SUCCESS);
+  RTLX_ASSERT_RETURNS(MPI_Comm_dup(base, &m_comm), MPI_SUCCESS);
   _initialize();
 }
 
 MpiCommCtx::MpiCommCtx(MPI_Comm&& base)
 {
   if (base == MPI_COMM_WORLD) {
-    A2A_ASSERT_RETURNS(MPI_Comm_dup(base, &m_comm), MPI_SUCCESS);
+    RTLX_ASSERT_RETURNS(MPI_Comm_dup(base, &m_comm), MPI_SUCCESS);
   }
   else {
     m_comm = std::move(base);
@@ -54,14 +54,14 @@ MpiCommCtx& MpiCommCtx::operator=(MpiCommCtx&& other) noexcept
 MpiCommCtx::~MpiCommCtx()
 {
   if (m_comm != MPI_COMM_NULL && m_comm != MPI_COMM_WORLD) {
-    A2A_ASSERT_RETURNS(MPI_Comm_free(&m_comm), MPI_SUCCESS);
+    RTLX_ASSERT_RETURNS(MPI_Comm_free(&m_comm), MPI_SUCCESS);
   }
 }
 
 void MpiCommCtx::_initialize()
 {
-  A2A_ASSERT_RETURNS(MPI_Comm_size(m_comm, &m_size), MPI_SUCCESS);
-  A2A_ASSERT_RETURNS(MPI_Comm_rank(m_comm, &m_rank), MPI_SUCCESS);
+  RTLX_ASSERT_RETURNS(MPI_Comm_size(m_comm, &m_size), MPI_SUCCESS);
+  RTLX_ASSERT_RETURNS(MPI_Comm_rank(m_comm, &m_rank), MPI_SUCCESS);
 }
 
 
@@ -69,7 +69,7 @@ MpiCommCtx splitSharedComm(MpiCommCtx const& baseComm)
 {
   MPI_Comm sharedComm;
   // split world into shared memory communicator
-  A2A_ASSERT_RETURNS(
+  RTLX_ASSERT_RETURNS(
       MPI_Comm_split_type(
           baseComm.mpiComm(),
           MPI_COMM_TYPE_SHARED,

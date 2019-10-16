@@ -13,10 +13,10 @@ inline auto mpiAllReduceMinMax(MpiCommCtx const& ctx, T value)
 
   T min, max;
 
-  A2A_ASSERT_RETURNS(
+  RTLX_ASSERT_RETURNS(
       MPI_Allreduce(&value, &min, 1, mpi_type, MPI_MIN, ctx.mpiComm()),
       MPI_SUCCESS);
-  A2A_ASSERT_RETURNS(
+  RTLX_ASSERT_RETURNS(
       MPI_Allreduce(&value, &max, 1, mpi_type, MPI_MAX, ctx.mpiComm()),
       MPI_SUCCESS);
 

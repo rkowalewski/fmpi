@@ -76,9 +76,9 @@ class CommState {
 
   iterator_type receive_allocate(int key)
   {
-    A2A_ASSERT(m_arena_freelist.size() > 0);
-    A2A_ASSERT(0 <= key && std::size_t(key) < NReqs);
-    A2A_ASSERT(!m_freelist.empty() && m_freelist.size() <= MAX_FREE_CHUNKS);
+    RTLX_ASSERT(m_arena_freelist.size() > 0);
+    RTLX_ASSERT(0 <= key && std::size_t(key) < NReqs);
+    RTLX_ASSERT(!m_freelist.empty() && m_freelist.size() <= MAX_FREE_CHUNKS);
 
     // access last block remove it from stack
     auto freeBlock = m_freelist.top();
@@ -90,9 +90,9 @@ class CommState {
 
   void receive_complete(int key)
   {
-    A2A_ASSERT(m_arena_completed.size() > 0);
-    A2A_ASSERT(0 <= key && std::size_t(key) < NReqs);
-    A2A_ASSERT(m_completed.size() < MAX_COMPLETED_CHUNKS);
+    RTLX_ASSERT(m_arena_completed.size() > 0);
+    RTLX_ASSERT(0 <= key && std::size_t(key) < NReqs);
+    RTLX_ASSERT(m_completed.size() < MAX_COMPLETED_CHUNKS);
 
     auto block = m_pending[key];
     m_completed.push_back(block);
@@ -100,8 +100,8 @@ class CommState {
 
   void release_completed()
   {
-    A2A_ASSERT(m_arena_freelist.size() > 0);
-    A2A_ASSERT(m_completed.size() <= MAX_COMPLETED_CHUNKS);
+    RTLX_ASSERT(m_arena_freelist.size() > 0);
+    RTLX_ASSERT(m_completed.size() <= MAX_COMPLETED_CHUNKS);
 
     for (auto const& completed : m_completed) {
       m_freelist.push(completed);
@@ -110,7 +110,7 @@ class CommState {
     // 2) reset completed receives
     m_completed.clear();
 
-    A2A_ASSERT(!m_freelist.empty() && m_freelist.size() <= MAX_FREE_CHUNKS);
+    RTLX_ASSERT(!m_freelist.empty() && m_freelist.size() <= MAX_FREE_CHUNKS);
   }
 
   std::size_t available_slots() const noexcept
@@ -166,9 +166,9 @@ inline auto enqueueMpiOps(
 
     auto* buf = bufAlloc(peer, idx);
 
-    A2A_ASSERT(buf);
+    RTLX_ASSERT(buf);
 
-    A2A_ASSERT_RETURNS(commOp(buf, peer, idx), MPI_SUCCESS);
+    RTLX_ASSERT_RETURNS(commOp(buf, peer, idx), MPI_SUCCESS);
 
     ++nreqs;
   }
@@ -239,7 +239,7 @@ inline void scatteredPairwiseWaitsome(
 
   detail::CommState<value_type, NReqs> commState{std::size_t(blocksize)};
 
-  A2A_ASSERT(2 * reqsInFlight <= reqs.size());
+  RTLX_ASSERT(2 * reqsInFlight <= reqs.size());
 
   std::size_t nsreqs = 0, nrreqs = 0, sphase = 0, rphase = 0;
 
@@ -329,7 +329,7 @@ inline void scatteredPairwiseWaitsome(
   if (alreadyDone) {
     // We are already done
     // Wait for previous round
-    A2A_ASSERT_RETURNS(
+    RTLX_ASSERT_RETURNS(
         MPI_Waitall(reqs.size(), &(reqs[0]), MPI_STATUSES_IGNORE),
         MPI_SUCCESS);
 
@@ -379,7 +379,7 @@ inline void scatteredPairwiseWaitsome(
 
       trace.tick(COMMUNICATION);
 
-      A2A_ASSERT_RETURNS(
+      RTLX_ASSERT_RETURNS(
           MPI_Waitsome(
               reqs.size(),
               &(reqs[0]),
@@ -388,7 +388,7 @@ inline void scatteredPairwiseWaitsome(
               MPI_STATUSES_IGNORE),
           MPI_SUCCESS);
 
-      A2A_ASSERT(nReqCompleted != MPI_UNDEFINED);
+      RTLX_ASSERT(nReqCompleted != MPI_UNDEFINED);
       ncReqs += nReqCompleted;
 
       auto fstCompletedReq = std::begin(reqsCompleted);
@@ -426,7 +426,7 @@ inline void scatteredPairwiseWaitsome(
 
       ncrReqs += nReceivedChunks;
 
-      A2A_ASSERT((nReceivedChunks + nSentChunks) == nReqCompleted);
+      RTLX_ASSERT((nReceivedChunks + nSentChunks) == nReqCompleted);
 
       // Number of open receives in this round.
       auto const maxVals = {// Number of total open receives
@@ -441,7 +441,7 @@ inline void scatteredPairwiseWaitsome(
 
       P(me << " max receives in this round: " << maxRecvs);
 
-      A2A_ASSERT((fstRecvRequest + maxRecvs) <= fstSendRequest);
+      RTLX_ASSERT((fstRecvRequest + maxRecvs) <= fstSendRequest);
 
       rphase = detail::enqueueMpiOps(
           rphase,
@@ -514,7 +514,7 @@ inline void scatteredPairwiseWaitsome(
         auto const needsFinalMerge = mergedChunksPsum.size() > 2;
 
         if (sentReqsOpen && needsFinalMerge) {
-          A2A_ASSERT(chunks_to_merge.empty());
+          RTLX_ASSERT(chunks_to_merge.empty());
 
           auto mergeBuffer = merge_buffer_t{std::size_t(nr) * blocksize};
 
@@ -548,7 +548,7 @@ inline void scatteredPairwiseWaitsome(
     }
     trace.tick(MERGE);
     if (mergedChunksPsum.size() > 2) {
-      A2A_ASSERT(chunks_to_merge.empty());
+      RTLX_ASSERT(chunks_to_merge.empty());
 
       auto mergeBuffer = merge_buffer_t{std::size_t(nr) * blocksize};
       // generate pairs of chunks to merge
@@ -576,7 +576,7 @@ inline void scatteredPairwiseWaitsome(
          << tokenizeRange(
                 std::begin(mergedChunksPsum), std::end(mergedChunksPsum)));
   }
-  A2A_ASSERT(std::is_sorted(out, out + nr * blocksize));
+  RTLX_ASSERT(std::is_sorted(out, out + nr * blocksize));
 }
 
 template <AllToAllAlgorithm algo, class InputIt, class OutputIt, class Op>
@@ -631,7 +631,7 @@ inline void scatteredPairwise(
     P(me << " sendto " << sendto);
     P(me << " recvfrom " << recvfrom);
 
-    A2A_ASSERT_RETURNS(
+    RTLX_ASSERT_RETURNS(
         MPI_Sendrecv(
             std::next(begin, sendto * blocksize),
             static_cast<int>(blocksize),
@@ -670,7 +670,7 @@ inline void scatteredPairwise(
   op(chunks, out);
 
   trace.tock(MERGE);
-  A2A_ASSERT(std::is_sorted(out, out + nr * blocksize));
+  RTLX_ASSERT(std::is_sorted(out, out + nr * blocksize));
 }
 
 template <class InputIt, class OutputIt, class Op>
@@ -693,7 +693,7 @@ inline void MpiAlltoAll(
 
   auto rbuf = std::unique_ptr<value_type[]>(new value_type[nr * blocksize]);
 
-  A2A_ASSERT_RETURNS(
+  RTLX_ASSERT_RETURNS(
       MPI_Alltoall(
           std::addressof(*begin),
           blocksize,
@@ -727,7 +727,7 @@ inline void MpiAlltoAll(
 
   trace.tock(MERGE);
 
-  A2A_ASSERT(std::is_sorted(out, out + nr * blocksize));
+  RTLX_ASSERT(std::is_sorted(out, out + nr * blocksize));
 }
 
 #if 0
@@ -766,7 +766,7 @@ inline void scatteredPairwiseWaitany(
   auto const totalReqs      = 2 * totalExchanges;
   auto const reqsInFlight   = std::min(totalExchanges, NReqs);
 
-  A2A_ASSERT(2 * reqsInFlight <= reqs.size());
+  RTLX_ASSERT(2 * reqsInFlight <= reqs.size());
 
   std::size_t nsreqs, nrreqs;
   for (nrreqs = 0; nrreqs < reqsInFlight; ++nrreqs) {
@@ -775,7 +775,7 @@ inline void scatteredPairwiseWaitany(
 
     P(me << " recvfrom block " << recvfrom << ", req " << nrreqs);
     // post request
-    A2A_ASSERT_RETURNS(
+    RTLX_ASSERT_RETURNS(
         MPI_Irecv(
             std::next(out, recvfrom * blocksize),
             blocksize,
@@ -794,7 +794,7 @@ inline void scatteredPairwiseWaitany(
     auto reqIdx = nsreqs + reqsInFlight;
 
     P(me << " sendto block " << sendto << ", req " << reqIdx);
-    A2A_ASSERT_RETURNS(
+    RTLX_ASSERT_RETURNS(
         MPI_Isend(
             std::next(begin, sendto * blocksize),
             blocksize,
@@ -810,7 +810,7 @@ inline void scatteredPairwiseWaitany(
   if (reqsInFlight == totalExchanges) {
     // We are already done
     // Wait for previous round
-    A2A_ASSERT_RETURNS(
+    RTLX_ASSERT_RETURNS(
         MPI_Waitall(reqs.size(), &(reqs[0]), MPI_STATUSES_IGNORE),
         MPI_SUCCESS);
   }
@@ -820,7 +820,7 @@ inline void scatteredPairwiseWaitany(
     while (ncReqs < totalReqs) {
       int reqCompleted;
 
-      A2A_ASSERT_RETURNS(
+      RTLX_ASSERT_RETURNS(
           MPI_Waitany(
               reqs.size(), &(reqs[0]), &reqCompleted, MPI_STATUS_IGNORE),
           MPI_SUCCESS);
@@ -830,7 +830,7 @@ inline void scatteredPairwiseWaitany(
       reqs[reqCompleted] = MPI_REQUEST_NULL;
       ++ncReqs;
       P(me << " ncReqs " << ncReqs);
-      A2A_ASSERT(reqCompleted >= 0);
+      RTLX_ASSERT(reqCompleted >= 0);
       if (reqCompleted < static_cast<int>(reqsInFlight)) {
         // a receive request is done, so post a new one...
 
@@ -842,7 +842,7 @@ inline void scatteredPairwiseWaitany(
 
           P(me << " recvfrom " << recvfrom);
 
-          A2A_ASSERT_RETURNS(
+          RTLX_ASSERT_RETURNS(
               MPI_Irecv(
                   std::next(out, recvfrom * blocksize),
                   blocksize,
@@ -863,7 +863,7 @@ inline void scatteredPairwiseWaitany(
 
           P(me << " sendto " << sendto);
 
-          A2A_ASSERT_RETURNS(
+          RTLX_ASSERT_RETURNS(
               MPI_Isend(
                   std::next(begin, sendto * blocksize),
                   blocksize,

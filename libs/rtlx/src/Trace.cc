@@ -35,7 +35,7 @@ std::string const &TimeTrace::context() const noexcept
 void TimeTrace::tick(const TraceStore::key_t &key)
 {
   if (enabled()) {
-    A2A_ASSERT(m_cache.find(key) == std::end(m_cache));
+    RTLX_ASSERT(m_cache.find(key) == std::end(m_cache));
     m_cache[key] = ChronoClockNow();
   }
 }
@@ -44,7 +44,7 @@ void TimeTrace::tock(const TraceStore::key_t &key)
 {
   auto &store = TraceStore::GetInstance();
   if (store.enabled()) {
-    A2A_ASSERT(m_cache.find(key) != std::end(m_cache));
+    RTLX_ASSERT(m_cache.find(key) != std::end(m_cache));
     store.get(m_context)[key] += ChronoClockNow() - m_cache[key];
     m_cache.erase(key);
   }
@@ -62,7 +62,7 @@ TimeTrace::measurements() const
 {
   auto &      store = TraceStore::GetInstance();
   auto const &m     = store.get(m_context);
-  // A2A_ASSERT(m.size() > 0);
+  // RTLX_ASSERT(m.size() > 0);
   return m;
 }
 
@@ -90,7 +90,7 @@ std::unordered_map<TraceStore::key_t, TraceStore::value_t> &TraceStore::get(
 static bool isTraceEnvironFlagEnabled()
 {
   // Split into key and value:
-  if (auto const *flag = std::getenv("A2A_ENABLE_TRACE")) {
+  if (auto const *flag = std::getenv("RTLX_ENABLE_TRACE")) {
     std::string flag_value = flag;
     return flag_value == "1" || flag_value == "ON";
   }

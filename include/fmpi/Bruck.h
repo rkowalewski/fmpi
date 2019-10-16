@@ -96,7 +96,7 @@ inline void bruck(
         comm);
 
     // Wait for final round
-    A2A_ASSERT_RETURNS(
+    RTLX_ASSERT_RETURNS(
         MPI_Waitall(reqs.size(), &(reqs[0]), MPI_STATUSES_IGNORE),
         MPI_SUCCESS);
 
@@ -222,7 +222,7 @@ inline void bruck_mod(
         comm);
 
     // Wait for final round
-    A2A_ASSERT_RETURNS(
+    RTLX_ASSERT_RETURNS(
         MPI_Waitall(reqs.size(), &(reqs[0]), MPI_STATUSES_IGNORE),
         MPI_SUCCESS);
 

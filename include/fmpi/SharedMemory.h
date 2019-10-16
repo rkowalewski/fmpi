@@ -1,5 +1,5 @@
-#ifndef A2A_COLL_SHMEM_H
-#define A2A_COLL_SHMEM_H
+#ifndef RTLX_COLL_SHMEM_H
+#define RTLX_COLL_SHMEM_H
 
 #include <cstdlib>
 
@@ -46,13 +46,13 @@ inline void all2allMortonZSource(
   auto trace = rtlx::TimeTrace{me, s};
   trace.tick(COMMUNICATION);
 
-  A2A_ASSERT(from.ctx().mpiComm() == to.ctx().mpiComm());
-  A2A_ASSERT(isPow2(static_cast<unsigned>(nr)));
+  RTLX_ASSERT(from.ctx().mpiComm() == to.ctx().mpiComm());
+  RTLX_ASSERT(isPow2(static_cast<unsigned>(nr)));
 
   auto const log2 = tlx::integer_log2_floor(static_cast<unsigned_rank_t>(nr));
   // We want to guarantee that we do not only have a power of 2.
   // But we need a square as well.
-  // A2A_ASSERT((log2 % 2 == 0) || (nr == 2));
+  // RTLX_ASSERT((log2 % 2 == 0) || (nr == 2));
 
   char          rflag;
   const char    sflag      = 1;
@@ -80,7 +80,7 @@ inline void all2allMortonZSource(
     P(me << " point (" << y << "," << x << "), recv from: " << src);
 
     if (static_cast<mpi::rank_t>(src) != me) {
-      A2A_ASSERT_RETURNS(
+      RTLX_ASSERT_RETURNS(
           MPI_Irecv(
               &rflag,
               0,
@@ -168,7 +168,7 @@ inline void all2allMortonZSource(
         P(me << " point (" << srcRank << "," << srcOffset
              << "), send to: " << dstRank);
 
-        A2A_ASSERT_RETURNS(
+        RTLX_ASSERT_RETURNS(
             MPI_Send(
                 &sflag,
                 0,
@@ -184,7 +184,7 @@ inline void all2allMortonZSource(
 
   trace.tick(COMMUNICATION);
 
-  A2A_ASSERT_RETURNS(
+  RTLX_ASSERT_RETURNS(
       MPI_Waitall(nreq, &reqs[0], MPI_STATUSES_IGNORE), MPI_SUCCESS);
 
   trace.tock(COMMUNICATION);
@@ -201,7 +201,7 @@ inline void all2allMortonZSource(
         auto f = std::next(buf, offset);
         auto l = std::next(f, chunksize);
 
-        A2A_ASSERT(std::is_sorted(f, l));
+        RTLX_ASSERT(std::is_sorted(f, l));
 
         return std::make_pair(f, l);
       });
@@ -212,7 +212,7 @@ inline void all2allMortonZSource(
 
   trace.tock(MERGE);
 
-  A2A_ASSERT(std::is_sorted(to.base(), to.base() + nr * blocksize));
+  RTLX_ASSERT(std::is_sorted(to.base(), to.base() + nr * blocksize));
 }
 
 template <class T, class Op>
@@ -244,13 +244,13 @@ inline void all2allMortonZDest(
   auto trace = rtlx::TimeTrace{me, s};
   trace.tick(COMMUNICATION);
 
-  A2A_ASSERT(from.ctx().mpiComm() == to.ctx().mpiComm());
-  A2A_ASSERT(isPow2(static_cast<unsigned>(nr)));
+  RTLX_ASSERT(from.ctx().mpiComm() == to.ctx().mpiComm());
+  RTLX_ASSERT(isPow2(static_cast<unsigned>(nr)));
 
   auto const log2 = tlx::integer_log2_floor(static_cast<unsigned_rank_t>(nr));
   // We want to guarantee that we do not only have a power of 2.
   // But we need a square as well.
-  // A2A_ASSERT((log2 % 2 == 0) || (nr == 2));
+  // RTLX_ASSERT((log2 % 2 == 0) || (nr == 2));
 
   char          rflag;
   const char    sflag      = 1;
@@ -278,7 +278,7 @@ inline void all2allMortonZDest(
 
     if (static_cast<mpi::rank_t>(piece) != me) {
       P(me << " point (" << me << "," << x << "), recv from: " << piece);
-      A2A_ASSERT_RETURNS(
+      RTLX_ASSERT_RETURNS(
           MPI_Irecv(
               &rflag,
               0,
@@ -373,7 +373,7 @@ inline void all2allMortonZDest(
       trace.tick(COMMUNICATION);
       P(me << " notify rank: " << dstRank);
 
-      A2A_ASSERT_RETURNS(
+      RTLX_ASSERT_RETURNS(
           MPI_Send(
               &sflag, 0, MPI_BYTE, dstRank, notify_tag, from.ctx().mpiComm()),
           MPI_SUCCESS);
@@ -383,7 +383,7 @@ inline void all2allMortonZDest(
 
   trace.tick(COMMUNICATION);
 
-  A2A_ASSERT_RETURNS(
+  RTLX_ASSERT_RETURNS(
       MPI_Waitall(nreq, &reqs[0], MPI_STATUSES_IGNORE), MPI_SUCCESS);
 
   trace.tock(COMMUNICATION);
@@ -403,7 +403,7 @@ inline void all2allMortonZDest(
         auto f = std::next(buf, offset);
         auto l = std::next(f, chunksize);
 
-        A2A_ASSERT(std::is_sorted(f, l));
+        RTLX_ASSERT(std::is_sorted(f, l));
 
         return std::make_pair(f, l);
       });
@@ -414,7 +414,7 @@ inline void all2allMortonZDest(
 
   trace.tock(MERGE);
 
-  A2A_ASSERT(std::is_sorted(to.base(), to.base() + nr * blocksize));
+  RTLX_ASSERT(std::is_sorted(to.base(), to.base() + nr * blocksize));
 }
 
 template <class T, class Op>
@@ -466,7 +466,7 @@ inline void all2allNaive(
 
   trace.tock(MERGE);
 
-  A2A_ASSERT(std::is_sorted(to.base(me), to.base(me) + nr * blocksize));
+  RTLX_ASSERT(std::is_sorted(to.base(me), to.base(me) + nr * blocksize));
 }
 }  // namespace fmpi
 

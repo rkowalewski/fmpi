@@ -56,7 +56,7 @@ inline void oneFactor_odd(
           100,
           comm);
 
-      A2A_ASSERT_RETURNS(
+      RTLX_ASSERT_RETURNS(
           MPI_Waitall(reqs.size(), &(reqs[0]), MPI_STATUSES_IGNORE),
           MPI_SUCCESS);
     }
@@ -114,7 +114,7 @@ inline void oneFactor_even(
         comm);
 
     // Wait for previous round
-    A2A_ASSERT_RETURNS(
+    RTLX_ASSERT_RETURNS(
         MPI_Waitall(reqs.size(), &(reqs[0]), MPI_STATUSES_IGNORE),
         MPI_SUCCESS);
   }

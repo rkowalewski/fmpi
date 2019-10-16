@@ -7,14 +7,14 @@
 
 // Stolen from Abseil
 //
-// A2A_PREDICT_TRUE, A2A_PREDICT_FALSE
+// RTLX_PREDICT_TRUE, RTLX_PREDICT_FALSE
 //
 // Enables the compiler to prioritize compilation using static analysis for
 // likely paths within a boolean branch.
 //
 // Example:
 //
-//   if (A2A_PREDICT_TRUE(expression)) {
+//   if (RTLX_PREDICT_TRUE(expression)) {
 //     return result;                        // Faster if more likely
 //   } else {
 //     return 0;
@@ -31,25 +31,25 @@
 // specific branches that are both hot and consistently mispredicted is likely
 // to yield performance improvements.
 #if (defined(__GNUC__) && !defined(__clang__))
-#define A2A_PREDICT_FALSE(x) (__builtin_expect(x, 0))
-#define A2A_PREDICT_TRUE(x) (__builtin_expect(!!(x), 1))
+#define RTLX_PREDICT_FALSE(x) (__builtin_expect(x, 0))
+#define RTLX_PREDICT_TRUE(x) (__builtin_expect(!!(x), 1))
 #else
-#define A2A_PREDICT_FALSE(x) (x)
-#define A2A_PREDICT_TRUE(x) (x)
+#define RTLX_PREDICT_FALSE(x) (x)
+#define RTLX_PREDICT_TRUE(x) (x)
 #endif
 
 #if defined(NDEBUG)
-#define A2A_ASSERT(expr) \
+#define RTLX_ASSERT(expr) \
   (false ? static_cast<void>(expr) : static_cast<void>(0))
 
-#define A2A_ASSERT_RETURNS(expr, ret) \
+#define RTLX_ASSERT_RETURNS(expr, ret) \
   (true ? static_cast<void>(expr) : static_cast<void>(0))
 #else
 #include <exception>
-#define A2A_ASSERT(expr)                           \
-  (A2A_PREDICT_TRUE((expr)) ? static_cast<void>(0) \
+#define RTLX_ASSERT(expr)                           \
+  (RTLX_PREDICT_TRUE((expr)) ? static_cast<void>(0) \
                             : [] { throw std::runtime_error{#expr}; }())  // NOLINT
-#define A2A_ASSERT_RETURNS(expr, ret) A2A_ASSERT((expr) == (ret))
+#define RTLX_ASSERT_RETURNS(expr, ret) RTLX_ASSERT((expr) == (ret))
 #endif
 
 template <class InputIt>
@@ -77,7 +77,7 @@ auto tokenizeRange(InputIt begin, InputIt end)
 #define PRANGE(a, b)
 
 #ifndef NDEBUG
-#ifdef A2A_ENABLE_LOGGING
+#ifdef RTLX_ENABLE_LOGGING
 #undef P
 // NOLINT
 #define P(x)                                                                 \

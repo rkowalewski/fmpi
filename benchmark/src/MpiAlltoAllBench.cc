@@ -55,14 +55,14 @@ using value_t = int;
 using container_t = mpi::ShmSegment<value_t>;
 using iterator_t  = typename container_t::pointer;
 
-using twoSidedA2A_t = std::function<void(
+using twoSidedAlgo_t = std::function<void(
     iterator_t,
     iterator_t,
     int,
     mpi::MpiCommCtx const&,
     merge_t<iterator_t, iterator_t>)>;
 
-std::array<std::pair<std::string, twoSidedA2A_t>, 9> TWO_SIDED = {
+std::array<std::pair<std::string, twoSidedAlgo_t>, 9> TWO_SIDED = {
     std::make_pair(
         "AlltoAll",
         fmpi::MpiAlltoAll<
@@ -157,13 +157,13 @@ std::array<std::pair<std::string, twoSidedA2A_t>, 9> TWO_SIDED = {
 #endif
 };
 
-using oneSidedA2A_t = std::function<void(
+using oneSidedAlgo_t = std::function<void(
     mpi::ShmSegment<value_t> const&,
     mpi::ShmSegment<value_t>&,
     int,
     merge_t<iterator_t, iterator_t>)>;
 
-std::array<std::pair<std::string, oneSidedA2A_t>, 3> ONE_SIDED = {
+std::array<std::pair<std::string, oneSidedAlgo_t>, 3> ONE_SIDED = {
     std::make_pair(
         "All2AllNaive",
         fmpi::all2allNaive<value_t, merge_t<iterator_t, iterator_t>>),
@@ -198,7 +198,7 @@ int main(int argc, char* argv[])
 
   auto nhosts = std::atoi(argv[1]);
 
-  std::vector<std::pair<std::string, twoSidedA2A_t>> twoSidedAlgos;
+  std::vector<std::pair<std::string, twoSidedAlgo_t>> twoSidedAlgos;
 
   if (argc == 3) {
     std::string selected_algo = argv[2];
@@ -233,7 +233,7 @@ int main(int argc, char* argv[])
   // We have to half the capacity because we do not in-place all to all
   // We again half by the number of processors
   // const size_t number_nodes = nr / 28;
-  A2A_ASSERT((nr % nhosts) == 0);
+  RTLX_ASSERT((nr % nhosts) == 0);
 
   // We divide by two because we have in and out buffers
   // Then we divide by the number of PEs per node
@@ -268,7 +268,7 @@ int main(int argc, char* argv[])
 
   P(me << " nsteps: " << nsteps);
 
-  A2A_ASSERT(minblocksize >= sizeof(value_t));
+  RTLX_ASSERT(minblocksize >= sizeof(value_t));
 
   if (me == 0) {
     printMeasurementHeader(std::cout);
@@ -277,7 +277,7 @@ int main(int argc, char* argv[])
   // calibrate clock
   auto clock           = SynchronizedClock{};
   bool is_clock_synced = clock.Init(commCtx.mpiComm());
-  A2A_ASSERT(is_clock_synced);
+  RTLX_ASSERT(is_clock_synced);
 
   for (size_t blocksize = minblocksize, step = 0; step <= nsteps;
        blocksize *= 2, ++step) {
@@ -288,10 +288,10 @@ int main(int argc, char* argv[])
       P("sendcount: " << sendcount);
     }
 
-    A2A_ASSERT(blocksize % sizeof(value_t) == 0);
+    RTLX_ASSERT(blocksize % sizeof(value_t) == 0);
 
     // Required by good old 32-bit MPI
-    A2A_ASSERT(sendcount > 0 && sendcount < std::numeric_limits<int>::max());
+    RTLX_ASSERT(sendcount > 0 && sendcount < std::numeric_limits<int>::max());
 
     auto nels = sendcount * nr;
 
@@ -329,7 +329,7 @@ int main(int argc, char* argv[])
       }
 
       for (std::size_t block = 0; block < std::size_t(nr); ++block) {
-        A2A_ASSERT(std::is_sorted(
+        RTLX_ASSERT(std::is_sorted(
             std::next(data.base(), block * sendcount),
             std::next(data.base(), (block + 1) * sendcount)));
       }
@@ -358,7 +358,7 @@ int main(int argc, char* argv[])
           static_cast<int>(sendcount),
           commCtx.mpiComm(),
           merger);
-      A2A_ASSERT(
+      RTLX_ASSERT(
           std::is_sorted(correct.base(), std::next(correct.base(), nels)));
 #endif
 
@@ -383,7 +383,7 @@ int main(int argc, char* argv[])
         }
 
         auto barrier = clock.Barrier(commCtx.mpiComm());
-        A2A_ASSERT(barrier.Success(commCtx.mpiComm()));
+        RTLX_ASSERT(barrier.Success(commCtx.mpiComm()));
 
         auto t = run_algorithm(
             algo.second,
@@ -394,7 +394,7 @@ int main(int argc, char* argv[])
             merger);
 
 #ifndef NDEBUG
-        A2A_ASSERT(std::equal(
+        RTLX_ASSERT(std::equal(
             correct.base(), std::next(correct.base(), nels), out.base()));
 #endif
 
@@ -417,14 +417,14 @@ int main(int argc, char* argv[])
         P("running algorithm: " << algo.first);
 
         auto barrier = clock.Barrier(commCtx.mpiComm());
-        A2A_ASSERT(barrier.Success(commCtx.mpiComm()));
+        RTLX_ASSERT(barrier.Success(commCtx.mpiComm()));
 
         auto t = rtlx::ChronoClockNow();
         algo.second(data, out, static_cast<int>(sendcount), merger);
         t = rtlx::ChronoClockNow() - t;
 
 #ifndef NDEBUG
-        A2A_ASSERT(std::equal(
+        RTLX_ASSERT(std::equal(
             correct.base(), std::next(correct.base(), nels), out.base()));
 #endif
 
@@ -497,7 +497,7 @@ void print_env()
   int   i          = 1;
   char* env_var_kv = *environ;
 
-  std::cout << "-- A2A_GIT_COMMIT = " << A2A_GIT_COMMIT << "\n";
+  std::cout << "-- RTLX_GIT_COMMIT = " << RTLX_GIT_COMMIT << "\n";
   for (; env_var_kv != nullptr; ++i) {
     // Split into key and value:
     char*       flag_name_cstr  = env_var_kv;

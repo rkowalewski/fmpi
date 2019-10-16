@@ -22,7 +22,7 @@ inline auto sendrecv(
 {
   auto mpi_datatype = mpi::type_mapper<S>::type();
 
-  A2A_ASSERT_RETURNS(
+  RTLX_ASSERT_RETURNS(
       MPI_Sendrecv(
           sbuf,
           static_cast<int>(scount),

@@ -22,7 +22,7 @@ mpi::rank_t FlatHandshake::recvRank(
 mpi::rank_t FlatHandshake::hypercube(
     mpi::MpiCommCtx const& comm, mpi::rank_t phase) const noexcept
 {
-  A2A_ASSERT(isPow2<unsigned>(comm.size()));
+  RTLX_ASSERT(isPow2<unsigned>(comm.size()));
   return comm.rank() ^ phase;
 }
 
