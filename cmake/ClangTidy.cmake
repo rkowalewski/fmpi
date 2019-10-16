@@ -14,8 +14,6 @@ if(CMAKE_VERSION VERSION_GREATER 3.6 AND ENABLE_CLANG_TIDY)
 
     if(NOT CLANG_TIDY_BIN)
         message(FATAL_ERROR "unable to locate clang-tidy")
-    else()
-        message(INFO "clang tidy: ${CLANG_TIDY_BIN}")
     endif()
 
     find_program(
@@ -27,8 +25,6 @@ if(CMAKE_VERSION VERSION_GREATER 3.6 AND ENABLE_CLANG_TIDY)
 
     if(NOT RUN_CLANG_TIDY_BIN)
         message(FATAL_ERROR "unable to locate run-clang-tidy-5.0.py")
-    else()
-        message(INFO "clang tidy: ${RUN_CLANG_TIDY_BIN}")
     endif()
 
     list(APPEND RUN_CLANG_TIDY_BIN_ARGS
