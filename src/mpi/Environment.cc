@@ -1,6 +1,6 @@
 #include <fmpi/mpi/Environment.h>
 
-#include <rtlx/Debug.h>
+#include <rtlx/Assert.h>
 
 namespace mpi {
 

@@ -6,7 +6,7 @@
 #include <cmath>
 #include <memory>
 
-#include <rtlx/Debug.h>
+#include <rtlx/Assert.h>
 #include <rtlx/Trace.h>
 
 #include <fmpi/Constants.h>

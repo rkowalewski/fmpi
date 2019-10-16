@@ -1,7 +1,7 @@
 #ifndef MATH_H
 #define MATH_H
 
-#include <rtlx/Debug.h>
+#include <rtlx/Assert.h>
 
 #include <type_traits>
 

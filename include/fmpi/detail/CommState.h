@@ -1,7 +1,7 @@
 #ifndef FMPI__DETAIL__COMM_STATE_H
 #define FMPI__DETAIL__COMM_STATE_H
 
-#include <fmpi/detail/Debug.h>
+#include <fmpi/Debug.h>
 
 namespace fmpi::detail {
 

@@ -14,13 +14,13 @@
 
 #include <fmpi/AlltoAll.h>
 #include <fmpi/SharedMemory.h>
-#include <fmpi/detail/Debug.h>
-#include <fmpi/rtlx.h>
+#include <fmpi/Debug.h>
 
 #include <Random.h>
-#include <rtlx/Debug.h>
+#include <rtlx/Assert.h>
 #include <rtlx/Timer.h>
 #include <rtlx/Trace.h>
+#include <rtlx/ScopedLambda.h>
 
 #include <MPISynchronizedBarrier.h>
 #include <MpiAlltoAllBench.h>

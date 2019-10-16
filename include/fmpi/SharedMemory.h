@@ -3,7 +3,7 @@
 
 #include <cstdlib>
 
-#include <rtlx/Debug.h>
+#include <rtlx/Assert.h>
 
 #include <fmpi/Math.h>
 #include <fmpi/mpi/Mpi.h>

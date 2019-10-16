@@ -7,7 +7,7 @@
 #include <tuple>
 #include <type_traits>
 
-#include <rtlx/Debug.h>
+#include <rtlx/Assert.h>
 
 #include <tlx/simple_vector.hpp>
 

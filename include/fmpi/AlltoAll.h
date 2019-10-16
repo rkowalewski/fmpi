@@ -13,7 +13,7 @@
 #include <tlx/simple_vector.hpp>
 #include <tlx/stack_allocator.hpp>
 
-#include <rtlx/Debug.h>
+#include <rtlx/Assert.h>
 #include <rtlx/Trace.h>
 
 // Other AllToAll Algorithms
@@ -22,7 +22,7 @@
 #include <fmpi/NumericRange.h>
 #include <fmpi/Schedule.h>
 #include <fmpi/detail/CommState.h>
-#include <fmpi/detail/Debug.h>
+#include <fmpi/Debug.h>
 #include <fmpi/mpi/Mpi.h>
 
 namespace fmpi {
