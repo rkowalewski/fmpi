@@ -19,6 +19,7 @@ enum class AllToAllAlgorithm;
 
 template <class T, class Op>
 inline void all2allMortonZSource(
+    mpi::MpiCommCtx const&    ctx,
     mpi::ShmSegment<T> const& from,
     mpi::ShmSegment<T>&       to,
     int                       blocksize,
@@ -33,8 +34,8 @@ inline void all2allMortonZSource(
 
   using morton_coords_t = std::pair<uint_fast32_t, uint_fast32_t>;
 
-  auto const nr = from.ctx().size();
-  auto const me = from.ctx().rank();
+  auto const nr = ctx.size();
+  auto const me = ctx.rank();
 
   std::string s;
   if (rtlx::TraceStore::GetInstance().enabled()) {
@@ -46,7 +47,6 @@ inline void all2allMortonZSource(
   auto trace = rtlx::TimeTrace{me, s};
   trace.tick(COMMUNICATION);
 
-  RTLX_ASSERT(from.ctx().mpiComm() == to.ctx().mpiComm());
   RTLX_ASSERT(isPow2(static_cast<unsigned>(nr)));
 
   auto const log2 = tlx::integer_log2_floor(static_cast<unsigned_rank_t>(nr));
@@ -80,6 +80,7 @@ inline void all2allMortonZSource(
     FMPI_DBG_STREAM("point (" << y << "," << x << "), recv from: " << src);
 
     if (static_cast<mpi::rank_t>(src) != me) {
+      std::cerr << "hello\n";
       RTLX_ASSERT_RETURNS(
           MPI_Irecv(
               &rflag,
@@ -87,7 +88,7 @@ inline void all2allMortonZSource(
               MPI_BYTE,
               src,
               notify_tag,
-              from.ctx().mpiComm(),
+              ctx.mpiComm(),
               &reqs[nreq]),
           MPI_SUCCESS);
 
@@ -165,8 +166,9 @@ inline void all2allMortonZSource(
 
       trace.tick(COMMUNICATION);
       if (static_cast<mpi::rank_t>(dstRank) != me) {
-        FMPI_DBG_STREAM("point (" << srcRank << "," << srcOffset
-             << "), send to: " << dstRank);
+        FMPI_DBG_STREAM(
+            "point (" << srcRank << "," << srcOffset
+                      << "), send to: " << dstRank);
 
         RTLX_ASSERT_RETURNS(
             MPI_Send(
@@ -175,7 +177,7 @@ inline void all2allMortonZSource(
                 MPI_BYTE,
                 dstRank,
                 notify_tag,
-                from.ctx().mpiComm()),
+                ctx.mpiComm()),
             MPI_SUCCESS);
       }
       trace.tock(COMMUNICATION);
@@ -197,7 +199,8 @@ inline void all2allMortonZSource(
       std::begin(range),
       std::end(range),
       std::begin(chunks),
-      [buf = to.base(), chunksize = ystride * blocksize](auto offset) {
+      [buf       = to.base(ctx.rank()),
+       chunksize = ystride * blocksize](auto offset) {
         auto f = std::next(buf, offset);
         auto l = std::next(f, chunksize);
 
@@ -208,15 +211,17 @@ inline void all2allMortonZSource(
 
   op(chunks, rbuf.begin());
 
-  std::move(rbuf.data(), rbuf.data() + nr * blocksize, to.base());
+  std::move(rbuf.data(), rbuf.data() + nr * blocksize, to.base(ctx.rank()));
 
   trace.tock(MERGE);
 
-  RTLX_ASSERT(std::is_sorted(to.base(), to.base() + nr * blocksize));
+  RTLX_ASSERT(std::is_sorted(
+      to.base(ctx.rank()), to.base(ctx.rank()) + nr * blocksize));
 }
 
 template <class T, class Op>
 inline void all2allMortonZDest(
+    mpi::MpiCommCtx const&    ctx,
     mpi::ShmSegment<T> const& from,
     mpi::ShmSegment<T>&       to,
     int                       blocksize,
@@ -231,8 +236,8 @@ inline void all2allMortonZDest(
 
   using morton_coords_t = std::pair<uint_fast32_t, uint_fast32_t>;
 
-  auto const nr = from.ctx().size();
-  auto const me = from.ctx().rank();
+  auto const nr = ctx.size();
+  auto const me = ctx.rank();
 
   std::string s;
   if (rtlx::TraceStore::GetInstance().enabled()) {
@@ -244,7 +249,6 @@ inline void all2allMortonZDest(
   auto trace = rtlx::TimeTrace{me, s};
   trace.tick(COMMUNICATION);
 
-  RTLX_ASSERT(from.ctx().mpiComm() == to.ctx().mpiComm());
   RTLX_ASSERT(isPow2(static_cast<unsigned>(nr)));
 
   auto const log2 = tlx::integer_log2_floor(static_cast<unsigned_rank_t>(nr));
@@ -277,7 +281,8 @@ inline void all2allMortonZDest(
     auto piece = code / nr;
 
     if (static_cast<mpi::rank_t>(piece) != me) {
-      FMPI_DBG_STREAM("point (" << me << "," << x << "), recv from: " << piece);
+      FMPI_DBG_STREAM(
+          "point (" << me << "," << x << "), recv from: " << piece);
       RTLX_ASSERT_RETURNS(
           MPI_Irecv(
               &rflag,
@@ -285,7 +290,7 @@ inline void all2allMortonZDest(
               MPI_BYTE,
               piece,
               notify_tag,
-              from.ctx().mpiComm(),
+              ctx.mpiComm(),
               &reqs[nreq]),
           MPI_SUCCESS);
     }
@@ -357,8 +362,9 @@ inline void all2allMortonZDest(
           auto dst = buf + block;
           auto f   = std::next(dst, offset);
           auto l   = std::next(f, chunksize);
-          FMPI_DBG_STREAM("merging pair (" << std::distance(buf, f) << ", "
-               << std::distance(buf, l) << ")");
+          FMPI_DBG_STREAM(
+              "merging pair (" << std::distance(buf, f) << ", "
+                               << std::distance(buf, l) << ")");
           return std::make_pair(f, l);
         });
 
@@ -375,7 +381,7 @@ inline void all2allMortonZDest(
 
       RTLX_ASSERT_RETURNS(
           MPI_Send(
-              &sflag, 0, MPI_BYTE, dstRank, notify_tag, from.ctx().mpiComm()),
+              &sflag, 0, MPI_BYTE, dstRank, notify_tag, ctx.mpiComm()),
           MPI_SUCCESS);
       trace.tock(COMMUNICATION);
     }
@@ -399,7 +405,7 @@ inline void all2allMortonZDest(
       std::begin(range),
       std::end(range),
       std::begin(chunks),
-      [buf = to.base(), chunksize = stride](auto offset) {
+      [buf = to.base(ctx.rank()), chunksize = stride](auto offset) {
         auto f = std::next(buf, offset);
         auto l = std::next(f, chunksize);
 
@@ -410,15 +416,17 @@ inline void all2allMortonZDest(
 
   op(chunks, rbuf.begin());
 
-  std::move(rbuf.data(), rbuf.data() + nr * blocksize, to.base());
+  std::move(rbuf.data(), rbuf.data() + nr * blocksize, to.base(ctx.rank()));
 
   trace.tock(MERGE);
 
-  RTLX_ASSERT(std::is_sorted(to.base(), to.base() + nr * blocksize));
+  RTLX_ASSERT(std::is_sorted(
+      to.base(ctx.rank()), to.base(ctx.rank()) + nr * blocksize));
 }
 
 template <class T, class Op>
 inline void all2allNaive(
+    mpi::MpiCommCtx const&    ctx,
     mpi::ShmSegment<T> const& from,
     mpi::ShmSegment<T>&       to,
     int                       blocksize,
@@ -427,8 +435,8 @@ inline void all2allNaive(
   using value_type = T;
   using iterator   = typename mpi::ShmSegment<T>::pointer;
 
-  auto nr = from.ctx().size();
-  auto me = from.ctx().rank();
+  auto nr = ctx.size();
+  auto me = ctx.rank();
 
   auto rbuf = std::unique_ptr<value_type[]>(new value_type[nr * blocksize]);
 

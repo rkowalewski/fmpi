@@ -13,14 +13,14 @@
 #include <omp.h>
 
 #include <fmpi/AlltoAll.h>
-#include <fmpi/SharedMemory.h>
 #include <fmpi/Debug.h>
+#include <fmpi/SharedMemory.h>
 
 #include <Random.h>
 #include <rtlx/Assert.h>
+#include <rtlx/ScopedLambda.h>
 #include <rtlx/Timer.h>
 #include <rtlx/Trace.h>
-#include <rtlx/ScopedLambda.h>
 
 #include <MPISynchronizedBarrier.h>
 #include <MpiAlltoAllBench.h>
@@ -159,12 +159,14 @@ std::array<std::pair<std::string, twoSidedAlgo_t>, 9> TWO_SIDED = {
 };
 
 using oneSidedAlgo_t = std::function<void(
+    mpi::MpiCommCtx const&,
     mpi::ShmSegment<value_t> const&,
     mpi::ShmSegment<value_t>&,
     int,
     merge_t<iterator_t, iterator_t>)>;
 
 std::array<std::pair<std::string, oneSidedAlgo_t>, 3> ONE_SIDED = {
+
     std::make_pair(
         "All2AllNaive",
         fmpi::all2allNaive<value_t, merge_t<iterator_t, iterator_t>>),
@@ -183,11 +185,8 @@ int main(int argc, char* argv[])
 
   mpi::MpiCommCtx worldCtx{MPI_COMM_WORLD};
 
-  auto        sharedCommCtx = mpi::splitSharedComm(worldCtx);
-  auto const& commCtx       = sharedCommCtx;
-
-  auto me = commCtx.rank();
-  auto nr = commCtx.size();
+  auto            me = worldCtx.rank();
+  auto            nr = worldCtx.size();
 
   if (argc < 2) {
     if (me == 0) {
@@ -272,7 +271,7 @@ int main(int argc, char* argv[])
 
   // calibrate clock
   auto clock           = SynchronizedClock{};
-  bool is_clock_synced = clock.Init(commCtx.mpiComm());
+  bool is_clock_synced = clock.Init(worldCtx.mpiComm());
   RTLX_ASSERT(is_clock_synced);
 
   for (size_t blocksize = minblocksize, step = 0; step <= nsteps;
@@ -292,10 +291,10 @@ int main(int argc, char* argv[])
     auto nels = sendcount * nr;
 
     // container_t data, out, correct;
-    auto data = container_t(commCtx, nels);
-    auto out  = container_t(commCtx, nels);
+    auto data = container_t(worldCtx, nels);
+    auto out  = container_t(worldCtx, nels);
 #ifndef NDEBUG
-    auto correct = container_t(commCtx, nels);
+    auto correct = container_t(worldCtx, nels);
 #endif
 
     for (int it = 0; it < niters + nwarmup; ++it) {
@@ -308,17 +307,17 @@ int main(int argc, char* argv[])
 #ifdef NDEBUG
           // generate some randome values
           std::generate(
-              std::next(data.base(), block * sendcount),
-              std::next(data.base(), (block + 1) * sendcount),
+              std::next(data.base(worldCtx.rank()), block * sendcount),
+              std::next(data.base(worldCtx.rank()), (block + 1) * sendcount),
               [&]() { return distribution(generator); });
           // sort it
           std::sort(
-              std::next(data.base(), block * sendcount),
-              std::next(data.base(), (block + 1) * sendcount));
+              std::next(data.base(worldCtx.rank()), block * sendcount),
+              std::next(data.base(worldCtx.rank()), (block + 1) * sendcount));
 #else
           std::iota(
-              std::next(data.base(), block * sendcount),
-              std::next(data.base(), (block + 1) * sendcount),
+              std::next(data.base(worldCtx.rank()), block * sendcount),
+              std::next(data.base(worldCtx.rank()), (block + 1) * sendcount),
               block * sendcount + (me * nels));
 #endif
         }
@@ -326,8 +325,8 @@ int main(int argc, char* argv[])
 
       for (std::size_t block = 0; block < std::size_t(nr); ++block) {
         RTLX_ASSERT(std::is_sorted(
-            std::next(data.base(), block * sendcount),
-            std::next(data.base(), (block + 1) * sendcount)));
+            std::next(data.base(worldCtx.rank()), block * sendcount),
+            std::next(data.base(worldCtx.rank()), (block + 1) * sendcount)));
       }
 
       auto merger = [nels](
@@ -349,13 +348,14 @@ int main(int argc, char* argv[])
       // with our own algorithms
 #ifndef NDEBUG
       fmpi::MpiAlltoAll(
-          data.base(),
-          correct.base(),
+          data.base(worldCtx.rank()),
+          correct.base(worldCtx.rank()),
           static_cast<int>(sendcount),
-          commCtx.mpiComm(),
+          worldCtx.mpiComm(),
           merger);
-      RTLX_ASSERT(
-          std::is_sorted(correct.base(), std::next(correct.base(), nels)));
+      RTLX_ASSERT(std::is_sorted(
+          correct.base(worldCtx.rank()),
+          std::next(correct.base(worldCtx.rank()), nels)));
 #endif
 
       Params p{};
@@ -378,20 +378,22 @@ int main(int argc, char* argv[])
           continue;
         }
 
-        auto barrier = clock.Barrier(commCtx.mpiComm());
-        RTLX_ASSERT(barrier.Success(commCtx.mpiComm()));
+        auto barrier = clock.Barrier(worldCtx.mpiComm());
+        RTLX_ASSERT(barrier.Success(worldCtx.mpiComm()));
 
         auto t = run_algorithm(
             algo.second,
-            data.base(),
-            out.base(),
+            data.base(worldCtx.rank()),
+            out.base(worldCtx.rank()),
             static_cast<int>(sendcount),
-            commCtx,
+            worldCtx,
             merger);
 
 #ifndef NDEBUG
         RTLX_ASSERT(std::equal(
-            correct.base(), std::next(correct.base(), nels), out.base()));
+            correct.base(worldCtx.rank()),
+            std::next(correct.base(worldCtx.rank()), nels),
+            out.base(worldCtx.rank())));
 #endif
 
         if (it >= nwarmup) {
@@ -409,6 +411,7 @@ int main(int argc, char* argv[])
         }
       }
 
+#if 0
       for (auto const& algo : ONE_SIDED) {
         FMPI_DBG_STREAM("running algorithm: " << algo.first);
 
@@ -416,12 +419,14 @@ int main(int argc, char* argv[])
         RTLX_ASSERT(barrier.Success(commCtx.mpiComm()));
 
         auto t = rtlx::ChronoClockNow();
-        algo.second(data, out, static_cast<int>(sendcount), merger);
+        algo.second(commCtx, data, out, static_cast<int>(sendcount), merger);
         t = rtlx::ChronoClockNow() - t;
 
 #ifndef NDEBUG
         RTLX_ASSERT(std::equal(
-            correct.base(), std::next(correct.base(), nels), out.base()));
+            correct.base(commCtx.rank()),
+            std::next(correct.base(commCtx.rank()), nels),
+            out.base(commCtx.rank())));
 #endif
 
         if (it >= nwarmup) {
@@ -438,10 +443,11 @@ int main(int argc, char* argv[])
           trace.clear();
         }
       }
+#endif
     }
     // synchronize before advancing to the next stage
     FMPI_DBG("Iteration Finished");
-    MPI_Barrier(commCtx.mpiComm());
+    MPI_Barrier(worldCtx.mpiComm());
   }
 
   return 0;

@@ -21,14 +21,12 @@ struct MemorySegmentBase {
   size_type         m_nbytes{};
   difference_type   m_disp_unit{};
   MPI_Win           m_win{MPI_WIN_NULL};
-  MpiCommCtx const* m_ctx;
 
   MemorySegmentBase() = default;
 
-  MemorySegmentBase(MpiCommCtx const& ctx, size_t nbytes, size_t disp_unit)
+  MemorySegmentBase(size_t nbytes, size_t disp_unit)
     : m_nbytes(nbytes)
     , m_disp_unit(disp_unit)
-    , m_ctx(&ctx)
   {
   }
 
@@ -52,16 +50,10 @@ struct MemorySegmentBase {
     std::swap(m_win, other.m_win);
     std::swap(m_nbytes, other.m_nbytes);
     std::swap(m_disp_unit, other.m_disp_unit);
-    std::swap(m_ctx, other.m_ctx);
     return *this;
   }
 
  public:
-  constexpr MpiCommCtx const& ctx() const noexcept
-  {
-    return *m_ctx;
-  }
-
   constexpr MPI_Win const& win() const noexcept
   {
     return m_win;
@@ -85,9 +77,9 @@ class ShmSegment : private detail::MemorySegmentBase {
 
   ShmSegment() = default;
 
-  ShmSegment(MpiCommCtx const& ctx, size_t nels)
-    : MemorySegmentBase(ctx, nels * sizeof(T), sizeof(T))
-    , m_baseptrs(m_ctx->size())
+  ShmSegment(MpiCommCtx const & ctx, size_t nels)
+    : MemorySegmentBase(nels * sizeof(T), sizeof(T))
+    , m_baseptrs(ctx.size())
   {
     MPI_Info info = MPI_INFO_NULL;
 
@@ -95,7 +87,7 @@ class ShmSegment : private detail::MemorySegmentBase {
     MPI_Info_set(info, "same_disp_unit", "true");
 
     size_t min, max;
-    std::tie(min, max) = mpiAllReduceMinMax(m_ctx->mpiComm(), m_nbytes);
+    std::tie(min, max) = mpiAllReduceMinMax(ctx.mpiComm(), m_nbytes);
     if (min == max) {
       MPI_Info_set(info, "same_size", "true");
     }
@@ -107,12 +99,12 @@ class ShmSegment : private detail::MemorySegmentBase {
             m_nbytes,
             m_disp_unit,
             info,
-            m_ctx->mpiComm(),
-            &m_baseptrs[m_ctx->rank()],
+            ctx.mpiComm(),
+            &m_baseptrs[ctx.rank()],
             &m_win),
         MPI_SUCCESS);
 
-    auto me = m_ctx->rank();
+    auto me = ctx.rank();
 
     auto queryShmPtrs = [this](auto idx) {
       size_type       sz;
@@ -129,7 +121,7 @@ class ShmSegment : private detail::MemorySegmentBase {
       queryShmPtrs(r);
     }
 
-    for (mpi::rank_t r = me + 1; r < m_ctx->size(); ++r) {
+    for (mpi::rank_t r = me + 1; r < ctx.size(); ++r) {
       queryShmPtrs(r);
     }
 
@@ -150,16 +142,6 @@ class ShmSegment : private detail::MemorySegmentBase {
     *this = std::move(other);
   }
 
-  pointer base() noexcept
-  {
-    return m_baseptrs[m_ctx->rank()];
-  }
-
-  const_pointer base() const noexcept
-  {
-    return m_baseptrs[m_ctx->rank()];
-  }
-
   pointer base(rank_t rank) noexcept
   {
     return m_baseptrs[rank];
@@ -170,7 +152,6 @@ class ShmSegment : private detail::MemorySegmentBase {
     return m_baseptrs[rank];
   }
 
-  using base_t::ctx;
   using base_t::win;
 
  private:
@@ -199,7 +180,7 @@ struct GlobalSegment : private detail::MemorySegmentBase {
     MPI_Info_set(info, "same_disp_unit", "true");
 
     size_t min, max;
-    std::tie(min, max) = mpiAllReduceMinMax(m_ctx->mpiComm(), m_nbytes);
+    std::tie(min, max) = mpiAllReduceMinMax(ctx, m_nbytes);
     if (min == max) {
       MPI_Info_set(info, "same_size", "true");
     }
@@ -210,7 +191,7 @@ struct GlobalSegment : private detail::MemorySegmentBase {
             m_nbytes,
             m_disp_unit,
             MPI_INFO_NULL,
-            m_ctx->mpiComm(),
+            ctx.mpiComm(),
             &m_baseptr,
             &m_win),
         MPI_SUCCESS);

@@ -6,18 +6,13 @@ namespace mpi {
 
 MpiCommCtx::MpiCommCtx(MPI_Comm const& base)
 {
-  RTLX_ASSERT_RETURNS(MPI_Comm_dup(base, &m_comm), MPI_SUCCESS);
+  m_comm = base;
   _initialize();
 }
 
 MpiCommCtx::MpiCommCtx(MPI_Comm&& base)
 {
-  if (base == MPI_COMM_WORLD) {
-    RTLX_ASSERT_RETURNS(MPI_Comm_dup(base, &m_comm), MPI_SUCCESS);
-  }
-  else {
-    m_comm = base;
-  }
+  m_comm = std::move(base);
   _initialize();
 }
 
@@ -53,9 +48,6 @@ MpiCommCtx& MpiCommCtx::operator=(MpiCommCtx&& other) noexcept
 
 MpiCommCtx::~MpiCommCtx()
 {
-  if (m_comm != MPI_COMM_NULL && m_comm != MPI_COMM_WORLD) {
-    RTLX_ASSERT_RETURNS(MPI_Comm_free(&m_comm), MPI_SUCCESS);
-  }
 }
 
 void MpiCommCtx::_initialize()
@@ -63,7 +55,6 @@ void MpiCommCtx::_initialize()
   RTLX_ASSERT_RETURNS(MPI_Comm_size(m_comm, &m_size), MPI_SUCCESS);
   RTLX_ASSERT_RETURNS(MPI_Comm_rank(m_comm, &m_rank), MPI_SUCCESS);
 }
-
 
 MpiCommCtx splitSharedComm(MpiCommCtx const& baseComm)
 {
