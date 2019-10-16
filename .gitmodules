@@ -4,3 +4,6 @@
 [submodule "external/tlx"]
 	path = external/tlx
 	url = git@github.com:rkowalewski/tlx.git
+[submodule "external/dbg-macro"]
+	path = external/dbg-macro
+	url = git@github.com:sharkdp/dbg-macro.git

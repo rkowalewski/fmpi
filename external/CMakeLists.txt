@@ -1,5 +1,6 @@
 add_subdirectory(tlx)
 add_subdirectory(libmorton)
+add_subdirectory(dbg-macro)
 
 add_library(MPISynchronizedBarrier MPISynchronizedBarrier/MPISynchronizedBarrier.cc)
 

@@ -21,11 +21,6 @@ if (UNIX)
     target_compile_definitions (mpiFusionBench PRIVATE A2A_CACHELEVEL2_SIZE=${_l2CacheSize})
 endif()
 
-if (ENABLE_LOGGING)
-    target_compile_definitions (mpiFusionBench PRIVATE A2A_ENABLE_LOGGING)
-endif()
-
-
 add_custom_target(GitVersion
     COMMAND ${CMAKE_COMMAND}
     -D INPUT_FILE=${CMAKE_CURRENT_SOURCE_DIR}/src/Version.h.in

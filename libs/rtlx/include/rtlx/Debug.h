@@ -46,59 +46,11 @@
   (true ? static_cast<void>(expr) : static_cast<void>(0))
 #else
 #include <exception>
-#define RTLX_ASSERT(expr)                           \
-  (RTLX_PREDICT_TRUE((expr)) ? static_cast<void>(0) \
-                            : [] { throw std::runtime_error{#expr}; }())  // NOLINT
+#define RTLX_ASSERT(expr)                                  \
+  (RTLX_PREDICT_TRUE((expr)) ? static_cast<void>(0) : [] { \
+    throw std::runtime_error{#expr};                       \
+  }())  // NOLINT
 #define RTLX_ASSERT_RETURNS(expr, ret) RTLX_ASSERT((expr) == (ret))
-#endif
-
-template <class InputIt>
-void printVector(InputIt begin, InputIt end, int me)
-{
-  using value_t = typename std::iterator_traits<InputIt>::value_type;
-
-  std::ostringstream os;
-  os << "rank " << me << ": ";
-  std::copy(begin, end, std::ostream_iterator<value_t>(os, " "));
-  os << "\n";
-  std::cout << os.str();
-}
-
-template <class InputIt>
-auto tokenizeRange(InputIt begin, InputIt end)
-{
-  std::ostringstream os;
-  using value_t = typename std::iterator_traits<InputIt>::value_type;
-  std::copy(begin, end, std::ostream_iterator<value_t>(os, " "));
-  return os.str();
-}
-
-#define P(x)
-#define PRANGE(a, b)
-
-#ifndef NDEBUG
-#ifdef RTLX_ENABLE_LOGGING
-#undef P
-// NOLINT
-#define P(x)                                                                 \
-  do {                                                                       \
-    std::ostringstream os;                                                   \
-    os << "-- [ " << __func__ << ":" << __LINE__ << " ] " << x << std::endl; \
-    std::cout << os.str();                                                   \
-  } while (0)
-// DISABLE_NOLINT
-
-#undef PRANGE
-#define PRANGE(a, b)                                                        \
-  do {                                                                      \
-    std::ostringstream os;                                                  \
-    using value_t = typename std::iterator_traits<decltype(a)>::value_type; \
-    os << "-- [ " << __func__ << ":" << __LINE__ << " ] ";                  \
-    std::copy(a, b, std::ostream_iterator<value_t>(os, " "));               \
-    os << std::endl;                                                        \
-    std::cout << os.str();                                                  \
-  } while (0)
-#endif
 #endif
 
 #endif

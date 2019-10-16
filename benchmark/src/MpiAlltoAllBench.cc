@@ -14,12 +14,13 @@
 
 #include <fmpi/AlltoAll.h>
 #include <fmpi/SharedMemory.h>
+#include <fmpi/detail/Debug.h>
 #include <fmpi/rtlx.h>
 
+#include <Random.h>
 #include <rtlx/Debug.h>
 #include <rtlx/Timer.h>
 #include <rtlx/Trace.h>
-#include <Random.h>
 
 #include <MPISynchronizedBarrier.h>
 #include <MpiAlltoAllBench.h>
@@ -264,9 +265,8 @@ int main(int argc, char* argv[])
     std::cout << "++ number of blocksize steps: " << nsteps << "\n";
     std::cout << "++ minblocksize: " << minblocksize << "\n";
     std::cout << "++ maxlocksize: " << _maxblocksize << "\n";
+    FMPI_DBG(nsteps);
   }
-
-  P(me << " nsteps: " << nsteps);
 
   RTLX_ASSERT(minblocksize >= sizeof(value_t));
 
@@ -285,7 +285,7 @@ int main(int argc, char* argv[])
     auto sendcount = blocksize / sizeof(value_t);
 
     if (me == 0) {
-      P("sendcount: " << sendcount);
+      FMPI_DBG(sendcount);
     }
 
     RTLX_ASSERT(blocksize % sizeof(value_t) == 0);
@@ -371,7 +371,7 @@ int main(int argc, char* argv[])
       p.blocksize = blocksize;
 
       for (auto const& algo : twoSidedAlgos) {
-        P("running algorithm: " << algo.first);
+        FMPI_DBG_STREAM("running algorithm: " << algo.first);
 
         // We always want to guarantee that all processors start at the same
         // time, so this is a real barrier
@@ -414,7 +414,7 @@ int main(int argc, char* argv[])
       }
 
       for (auto const& algo : ONE_SIDED) {
-        P("running algorithm: " << algo.first);
+        FMPI_DBG_STREAM("running algorithm: " << algo.first);
 
         auto barrier = clock.Barrier(commCtx.mpiComm());
         RTLX_ASSERT(barrier.Success(commCtx.mpiComm()));
@@ -444,7 +444,7 @@ int main(int argc, char* argv[])
       }
     }
     // synchronize before advancing to the next stage
-    P(me << " reaching barrier, going to next iteration");
+    FMPI_DBG("Iteration Finished");
     MPI_Barrier(commCtx.mpiComm());
   }
 

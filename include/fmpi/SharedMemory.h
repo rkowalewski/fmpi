@@ -77,7 +77,7 @@ inline void all2allMortonZSource(
 
     auto const src = p / nr;
 
-    P(me << " point (" << y << "," << x << "), recv from: " << src);
+    FMPI_DBG_STREAM("point (" << y << "," << x << "), recv from: " << src);
 
     if (static_cast<mpi::rank_t>(src) != me) {
       RTLX_ASSERT_RETURNS(
@@ -134,7 +134,7 @@ inline void all2allMortonZSource(
     auto buf = std::next(rbuf.begin(), block + blockOffs);
     // auto dstAddr = std::next(to.base(dstRank), dstOffset * blocksize);
 
-    P(me << " copy to offset: " << std::distance(rbuf.begin(), buf));
+    FMPI_DBG_STREAM("copy to offset: " << std::distance(rbuf.begin(), buf));
     // std::memcpy(dstAddr, srcAddr, blocksize * sizeof(value_type));
     std::copy(srcAddr, srcAddr + blocksize, buf);
 
@@ -158,14 +158,14 @@ inline void all2allMortonZSource(
       auto mergeBlock = (srcRank & ~ymask);
       auto dstAddr    = std::next(to.base(dstRank), mergeBlock * blocksize);
 
-      P(me << " merging to offset: " << mergeBlock * blocksize);
+      FMPI_DBG_STREAM("merging to offset: " << mergeBlock * blocksize);
 
       op(chunks, dstAddr);
       trace.tock(MERGE);
 
       trace.tick(COMMUNICATION);
       if (static_cast<mpi::rank_t>(dstRank) != me) {
-        P(me << " point (" << srcRank << "," << srcOffset
+        FMPI_DBG_STREAM("point (" << srcRank << "," << srcOffset
              << "), send to: " << dstRank);
 
         RTLX_ASSERT_RETURNS(
@@ -277,7 +277,7 @@ inline void all2allMortonZDest(
     auto piece = code / nr;
 
     if (static_cast<mpi::rank_t>(piece) != me) {
-      P(me << " point (" << me << "," << x << "), recv from: " << piece);
+      FMPI_DBG_STREAM("point (" << me << "," << x << "), recv from: " << piece);
       RTLX_ASSERT_RETURNS(
           MPI_Irecv(
               &rflag,
@@ -333,7 +333,7 @@ inline void all2allMortonZDest(
 
     auto buf = std::next(rbuf.begin(), block + blockOffs);
 
-    P(me << " copy to offset: " << std::distance(rbuf.begin(), buf));
+    FMPI_DBG_STREAM("copy to offset: " << std::distance(rbuf.begin(), buf));
 
     std::copy(srcAddr, srcAddr + blocksize, buf);
 
@@ -357,21 +357,21 @@ inline void all2allMortonZDest(
           auto dst = buf + block;
           auto f   = std::next(dst, offset);
           auto l   = std::next(f, chunksize);
-          P(me << " merging pair (" << std::distance(buf, f) << ", "
+          FMPI_DBG_STREAM("merging pair (" << std::distance(buf, f) << ", "
                << std::distance(buf, l) << ")");
           return std::make_pair(f, l);
         });
 
     auto dstAddr = std::next(to.base(dstRank), firstX * blocksize);
 
-    P(me << " merging to offset: " << firstX * blocksize);
+    FMPI_DBG_STREAM("merging to offset: " << firstX * blocksize);
 
     op(chunks, dstAddr);
     trace.tock(MERGE);
 
     if (static_cast<mpi::rank_t>(dstRank) != me) {
       trace.tick(COMMUNICATION);
-      P(me << " notify rank: " << dstRank);
+      FMPI_DBG_STREAM("notify rank: " << dstRank);
 
       RTLX_ASSERT_RETURNS(
           MPI_Send(
