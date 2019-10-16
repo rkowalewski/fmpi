@@ -2,7 +2,7 @@
 #include <iostream>
 #include <mutex>
 
-#include <rtlx/Debug.h>
+#include <rtlx/Assert.h>
 #include <rtlx/Timer.h>
 #include <rtlx/Trace.h>
 

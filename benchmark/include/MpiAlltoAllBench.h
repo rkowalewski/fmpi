@@ -52,25 +52,4 @@ auto run_algorithm(
   return rtlx::ChronoClockNow() - start;
 }
 
-template <class T>
-auto medianReduce(T myMedian, int root, MPI_Comm comm)
-{
-  int me, nr;
-  MPI_Comm_rank(comm, &me);
-  MPI_Comm_size(comm, &nr);
-  std::vector<double> meds;
-
-  meds.reserve(nr);
-
-  MPI_Gather(&myMedian, 1, MPI_DOUBLE, &meds[0], 1, MPI_DOUBLE, root, comm);
-
-  if (me == root) {
-    auto nth = &meds[0] + nr / 2;
-    std::nth_element(&meds[0], nth, &meds[0] + nr);
-    return *nth;
-  }
-
-  return T{};
-}
-
 #endif

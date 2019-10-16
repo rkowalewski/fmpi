@@ -27,6 +27,8 @@
 #include <Version.h>
 #include <parallel/algorithm>
 
+#include <tlx/cmdline_parser.hpp>
+
 constexpr size_t KB = 1 << 10;
 constexpr size_t MB = 1 << 20;
 constexpr size_t GB = 1 << 30;
@@ -177,6 +179,14 @@ std::array<std::pair<std::string, oneSidedAlgo_t>, 3> ONE_SIDED = {
         "All2AllMortonZDest",
         fmpi::all2allMortonZDest<value_t, merge_t<iterator_t, iterator_t>>)};
 
+template <class cT, class traits = std::char_traits<cT>>
+class basic_nullbuf : public std::basic_streambuf<cT, traits> {
+  typename traits::int_type overflow(typename traits::int_type c)
+  {
+    return traits::not_eof(c);  // indicate success
+  }
+};
+
 int main(int argc, char* argv[])
 {
   MPI_Init(&argc, &argv);
@@ -185,46 +195,36 @@ int main(int argc, char* argv[])
 
   mpi::MpiCommCtx worldCtx{MPI_COMM_WORLD};
 
-  auto            me = worldCtx.rank();
-  auto            nr = worldCtx.size();
+  auto me = worldCtx.rank();
+  auto nr = worldCtx.size();
 
-  if (argc < 2) {
-    if (me == 0) {
-      std::cout << "usage: " << argv[0] << " [number of nodes] <algorithm>\n";
-    }
-    MPI_Finalize();
+  tlx::CmdlineParser cp;
+
+  // add description and author
+  cp.set_description("Benchmark for the FMPI Algorithms Library.");
+  cp.set_author("Roger Kowalewski <roger.kowaleski@nm.ifi.lmu.de>");
+
+  unsigned nhosts = 0;
+  cp.add_param_unsigned("nodes", nhosts, "Number of computation nodes");
+
+  std::string selected_algo = "";
+  cp.add_opt_param_string(
+      "algo", selected_algo, "Select a specific algorithm");
+
+  int good = false;
+
+  // process command line
+  if (me == 0) {
+    good = cp.process(argc, argv);
+  }
+
+  MPI_Bcast(&good, 1, mpi::type_mapper<int>::type(), 0, worldCtx.mpiComm());
+
+  if (!good) {
     return 1;
   }
 
-  auto nhosts = std::atoi(argv[1]);
-
-  std::vector<std::pair<std::string, twoSidedAlgo_t>> twoSidedAlgos;
-
-  if (argc == 3) {
-    std::string selected_algo = argv[2];
-
-    auto algo = std::find_if(
-        std::begin(TWO_SIDED),
-        std::end(TWO_SIDED),
-        [selected_algo](auto const& p) { return p.first == selected_algo; });
-
-    if (algo == std::end(TWO_SIDED)) {
-      if (me == 0) {
-        std::cout << "invalid algorithm\n";
-      }
-
-      MPI_Finalize();
-      return 1;
-    }
-
-    twoSidedAlgos.push_back(*algo);
-  }
-  else {
-    std::copy(
-        std::begin(TWO_SIDED),
-        std::end(TWO_SIDED),
-        std::back_inserter(twoSidedAlgos));
-  }
+  MPI_Bcast(&nhosts, 1, mpi::type_mapper<int>::type(), 0, worldCtx.mpiComm());
 
   // We have to half the capacity because we do not in-place all to all
   // We again half by the number of processors
@@ -247,11 +247,11 @@ int main(int argc, char* argv[])
   const size_t _maxblocksize =
       (maxblocksize == 0) ? maxprocsize / nr : maxblocksize;
 
-  std::size_t nsteps = std::ceil(std::log2(_maxblocksize)) -
-                       std::ceil(std::log2(minblocksize));
+  std::size_t nsteps = 1;
 
-  if (nsteps <= 0) {
-    nsteps = 1;
+  if (_maxblocksize >= minblocksize) {
+    nsteps = std::ceil(std::log2(_maxblocksize)) -
+             std::ceil(std::log2(minblocksize));
   }
 
   nsteps = std::min<std::size_t>(nsteps, 20);
@@ -366,7 +366,7 @@ int main(int argc, char* argv[])
       p.nbytes    = nels * nr * sizeof(value_t);
       p.blocksize = blocksize;
 
-      for (auto const& algo : twoSidedAlgos) {
+      for (auto const& algo : TWO_SIDED) {
         FMPI_DBG_STREAM("running algorithm: " << algo.first);
 
         // We always want to guarantee that all processors start at the same
