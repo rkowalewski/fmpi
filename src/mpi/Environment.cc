@@ -16,7 +16,7 @@ MpiCommCtx::MpiCommCtx(MPI_Comm&& base)
     RTLX_ASSERT_RETURNS(MPI_Comm_dup(base, &m_comm), MPI_SUCCESS);
   }
   else {
-    m_comm = std::move(base);
+    m_comm = base;
   }
   _initialize();
 }
@@ -78,7 +78,7 @@ MpiCommCtx splitSharedComm(MpiCommCtx const& baseComm)
           &sharedComm),
       MPI_SUCCESS);
 
-  return MpiCommCtx{std::move(sharedComm)};
+  return MpiCommCtx{sharedComm};
 }
 
 }  // namespace mpi

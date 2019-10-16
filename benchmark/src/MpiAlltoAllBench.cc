@@ -341,7 +341,7 @@ int main(int argc, char* argv[])
             std::end(seqs),
             res,
             nels,
-            std::less<value_t>{},
+            std::less<>{},
             __gnu_parallel::parallel_tag{nthreads});
       };
 

@@ -1,5 +1,5 @@
-#ifndef TRACE_H
-#define TRACE_H
+#ifndef RTLX_TRACE_H
+#define RTLX_TRACE_H
 
 #include <iosfwd>
 #include <memory>
@@ -64,6 +64,6 @@ class TimeTrace {
   std::unordered_map<TraceStore::key_t, TraceStore::value_t> m_cache;
 };
 
-}  // namespace a2a
+} // namespace rtlx
 
 #endif

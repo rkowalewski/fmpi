@@ -1,5 +1,5 @@
-#include <fmpi/Schedule.h>
 #include <fmpi/Math.h>
+#include <fmpi/Schedule.h>
 
 namespace fmpi {
 
@@ -23,13 +23,14 @@ mpi::rank_t FlatHandshake::hypercube(
     mpi::MpiCommCtx const& comm, mpi::rank_t phase) const noexcept
 {
   RTLX_ASSERT(isPow2<unsigned>(comm.size()));
-  return comm.rank() ^ phase;
+  using unsigned_t = std::make_unsigned<mpi::rank_t>::type;
+  return unsigned_t(comm.rank()) ^ unsigned_t(phase);
 }
 
 mpi::rank_t OneFactor::sendRank(
     mpi::MpiCommCtx const& comm, mpi::rank_t phase) const noexcept
 {
-  return comm.size() % 2 ? factor_odd(comm, phase) : factor_even(comm, phase);
+  return (comm.size() % 2) != 0 ? factor_odd(comm, phase) : factor_even(comm, phase);
 }
 
 mpi::rank_t OneFactor::recvRank(

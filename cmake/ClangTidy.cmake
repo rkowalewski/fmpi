@@ -33,7 +33,7 @@ if(CMAKE_VERSION VERSION_GREATER 3.6 AND ENABLE_CLANG_TIDY)
 
     list(APPEND RUN_CLANG_TIDY_BIN_ARGS
         -clang-tidy-binary ${CLANG_TIDY_BIN}
-        "\"-header-filter=${CMAKE_SOURCE_DIR}/\(include\|libs\)/*\""
+        "\"-header-filter=${CMAKE_SOURCE_DIR}/\(include\|libs\)/**\""
         -checks="*,-hicpp-no-array-decay,-fuchsia*,-cppcoreguidelines-pro-bounds-array-to-pointer-decay,-clang-analyzer-core.NonNull*,-clang-analyzer-core.NullDereference,-clang-analyzer-core.uninitialized.Branch"
         ${CMAKE_SOURCE_DIR}/src/*
         ${CMAKE_SOURCE_DIR}/benchmark/src/*

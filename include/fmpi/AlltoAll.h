@@ -102,7 +102,7 @@ inline void scatteredPairwiseWaitsome(
   };
 
   auto receiveOp =
-      [reqs = &reqs[0], blocksize, mpi_datatype, comm = ctx.mpiComm(), me](
+      [reqs = &reqs[0], blocksize, mpi_datatype, comm = ctx.mpiComm()](
           auto* buf, auto peer, auto reqIdx) {
         FMPI_DBG_STREAM("receiving from " << peer << " reqIdx " << reqIdx);
 
@@ -137,7 +137,7 @@ inline void scatteredPairwiseWaitsome(
   };
 
   auto sendOp =
-      [reqs = &reqs[0], blocksize, mpi_datatype, comm = ctx.mpiComm(), me](
+      [reqs = &reqs[0], blocksize, mpi_datatype, comm = ctx.mpiComm()](
           auto* buf, auto peer, auto reqIdx) {
         FMPI_DBG_STREAM("sending to " << peer << " reqIdx " << reqIdx);
         return MPI_Isend(

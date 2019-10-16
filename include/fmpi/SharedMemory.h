@@ -353,7 +353,7 @@ inline void all2allMortonZDest(
         std::begin(range),
         std::end(range),
         std::begin(chunks),
-        [buf = rbuf.begin(), block, chunksize = blocksize, me](auto offset) {
+        [buf = rbuf.begin(), block, chunksize = blocksize](auto offset) {
           auto dst = buf + block;
           auto f   = std::next(dst, offset);
           auto l   = std::next(f, chunksize);
