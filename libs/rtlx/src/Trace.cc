@@ -6,8 +6,6 @@
 #include <rtlx/Timer.h>
 #include <rtlx/Trace.h>
 
-extern char **environ;
-
 namespace rtlx {
 
 bool TimeTrace::enabled() const noexcept
