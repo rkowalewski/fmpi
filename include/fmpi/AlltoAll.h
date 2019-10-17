@@ -14,13 +14,12 @@
 #include <rtlx/Assert.h>
 #include <rtlx/Trace.h>
 
-#include <fmpi/Schedule.h>
-#include <fmpi/Debug.h>
 #include <fmpi/Constants.h>
+#include <fmpi/Debug.h>
+#include <fmpi/Schedule.h>
 #include <fmpi/detail/CommState.h>
 
 #include <fmpi/NumericRange.h>
-
 
 // Other AllToAll Algorithms
 
@@ -56,7 +55,6 @@ inline void scatteredPairwiseWaitsome(
 
   using algo_type   = typename detail::selectAlgorithm<algo>::type;
   using value_type  = typename std::iterator_traits<InputIt>::value_type;
-  auto mpi_datatype = mpi::type_mapper<value_type>::type();
 
   auto const nr = ctx.size();
   auto const me = ctx.rank();
@@ -100,20 +98,12 @@ inline void scatteredPairwiseWaitsome(
     return commState.receive_allocate(reqIdx);
   };
 
-  auto receiveOp =
-      [reqs = &reqs[0], blocksize, mpi_datatype, comm = ctx.mpiComm()](
-          auto* buf, auto peer, auto reqIdx) {
-        FMPI_DBG_STREAM("receiving from " << peer << " reqIdx " << reqIdx);
+  auto receiveOp = [&reqs, blocksize, &ctx](
+                       auto* buf, auto peer, auto reqIdx) {
+    FMPI_DBG_STREAM("receiving from " << peer << " reqIdx " << reqIdx);
 
-        return MPI_Irecv(
-            buf,
-            blocksize,
-            mpi_datatype,
-            peer,
-            100,
-            comm,
-            std::next(reqs, reqIdx));
-      };
+    return mpi::irecv(buf, blocksize, peer, 100, ctx, reqs[reqIdx]);
+  };
 
   rphase = detail::enqueueMpiOps(
       rphase,
@@ -135,19 +125,11 @@ inline void scatteredPairwiseWaitsome(
     return &*std::next(begin, peer * blocksize);
   };
 
-  auto sendOp =
-      [reqs = &reqs[0], blocksize, mpi_datatype, comm = ctx.mpiComm()](
-          auto* buf, auto peer, auto reqIdx) {
-        FMPI_DBG_STREAM("sending to " << peer << " reqIdx " << reqIdx);
-        return MPI_Isend(
-            buf,
-            blocksize,
-            mpi_datatype,
-            peer,
-            100,
-            comm,
-            std::next(reqs, reqIdx));
-      };
+  auto sendOp = [&reqs, blocksize, comm = ctx.mpiComm()](
+                    auto* buf, auto peer, auto reqIdx) {
+    FMPI_DBG_STREAM("sending to " << peer << " reqIdx " << reqIdx);
+    return mpi::isend(buf, blocksize, peer, 100, comm, reqs[reqIdx]);
+  };
 
   sphase = detail::enqueueMpiOps(
       sphase,

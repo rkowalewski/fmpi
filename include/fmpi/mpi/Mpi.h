@@ -11,7 +11,7 @@
 
 #include <tlx/simple_vector.hpp>
 
-#include <fmpi/mpi/Collective.h>
+#include <fmpi/mpi/Algorithm.h>
 
 namespace mpi {
 
@@ -87,7 +87,7 @@ class ShmSegment : private detail::MemorySegmentBase {
     MPI_Info_set(info, "same_disp_unit", "true");
 
     size_t min, max;
-    std::tie(min, max) = mpiAllReduceMinMax(ctx.mpiComm(), m_nbytes);
+    std::tie(min, max) = allreduce_minmax(ctx.mpiComm(), m_nbytes);
     if (min == max) {
       MPI_Info_set(info, "same_size", "true");
     }
@@ -180,7 +180,7 @@ struct GlobalSegment : private detail::MemorySegmentBase {
     MPI_Info_set(info, "same_disp_unit", "true");
 
     size_t min, max;
-    std::tie(min, max) = mpiAllReduceMinMax(ctx, m_nbytes);
+    std::tie(min, max) = allreduce_minmax(ctx, m_nbytes);
     if (min == max) {
       MPI_Info_set(info, "same_size", "true");
     }

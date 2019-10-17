@@ -241,6 +241,7 @@ int main(int argc, char* argv[])
           worldCtx.mpiComm(),
           merger);
 
+
       RTLX_ASSERT(
           std::is_sorted(correct.begin(), std::next(correct.begin(), nels)));
 #endif
