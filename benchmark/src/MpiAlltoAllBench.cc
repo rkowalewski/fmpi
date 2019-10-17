@@ -41,22 +41,11 @@ constexpr int nwarmup = 0;
 constexpr int niters  = 1;
 #endif
 
-constexpr size_t minblocksize = (1 << 7);
-// constexpr size_t minblocksize = 32768 * 2;
-/* If maxblocksiz == 0, this means that we use the capacity per node and scale
- * the minblocksize in successive steps */
-constexpr size_t maxblocksize = 0;
-/* constexpr size_t maxblocksize = runtime argument */
-
-// This are approximately 25 GB
-// constexpr size_t capacity_per_node = 32 * MB * 28 * 28;
-constexpr size_t capacity_per_node = 16 * GB;
-
 // The container where we store our
 using value_t = int;
-// using container_t = std::unique_ptr<value_t[]>;
-using container_t = mpi::ShmSegment<value_t>;
-using iterator_t  = typename container_t::pointer;
+// using storage_t = std::unique_ptr<value_t[]>;
+using storage_t  = mpi::ShmSegment<value_t>;
+using iterator_t = typename storage_t::pointer;
 
 using twoSidedAlgo_t = std::function<void(
     iterator_t,
@@ -207,9 +196,25 @@ int main(int argc, char* argv[])
   unsigned nhosts = 0;
   cp.add_param_unsigned("nodes", nhosts, "Number of computation nodes");
 
+#if 0
   std::string selected_algo = "";
   cp.add_opt_param_string(
       "algo", selected_algo, "Select a specific algorithm");
+#endif
+
+  std::size_t           minblocksize = 128, maxblocksize = 256;
+  std::array<size_t, 2> blocksizes = {minblocksize, maxblocksize};
+
+  cp.add_bytes(
+      'l',
+      "minblocksize",
+      blocksizes[0],
+      "Minimum block size communication to each unit.");
+  cp.add_bytes(
+      'u',
+      "maxblocksize",
+      blocksizes[1],
+      "Maximum block size communication to each unit.");
 
   int good = false;
 
@@ -224,44 +229,27 @@ int main(int argc, char* argv[])
     return 1;
   }
 
-  MPI_Bcast(&nhosts, 1, mpi::type_mapper<int>::type(), 0, worldCtx.mpiComm());
+  if (me == 0) {
+    cp.print_result();
+  }
 
-  // We have to half the capacity because we do not in-place all to all
-  // We again half by the number of processors
-  // const size_t number_nodes = nr / 28;
+  MPI_Bcast(&nhosts, 1, mpi::type_mapper<int>::type(), 0, worldCtx.mpiComm());
+  MPI_Bcast(
+      &blocksizes[0],
+      2,
+      mpi::type_mapper<std::size_t>::type(),
+      0,
+      worldCtx.mpiComm());
+
+  minblocksize = blocksizes[0];
+  maxblocksize = blocksizes[1];
+
   RTLX_ASSERT((nr % nhosts) == 0);
 
-  // We divide by two because we have in and out buffers
-  // Then we divide by the number of PEs per node
-  // Then we divide again divide by number of PEs to obtain the largest
-  // blocksize.
-#ifdef NDEBUG
-  auto         procs_per_node = nr / nhosts;
-  const size_t maxprocsize    = capacity_per_node / (2 * procs_per_node);
-#else
-  const size_t maxprocsize = minblocksize;
-#endif
+  std::size_t nsteps =
+      std::ceil(std::log2(maxblocksize)) - std::ceil(std::log2(minblocksize));
 
-  // We have to divide the maximum capacity per proc by the number of PE
-  // to get the largest possible block size
-  const size_t _maxblocksize =
-      (maxblocksize == 0) ? maxprocsize / nr : maxblocksize;
-
-  std::size_t nsteps = 1;
-
-  if (_maxblocksize >= minblocksize) {
-    nsteps = std::ceil(std::log2(_maxblocksize)) -
-             std::ceil(std::log2(minblocksize));
-  }
-
-  nsteps = std::min<std::size_t>(nsteps, 20);
-
-  if (me == 0) {
-    std::cout << "++ number of blocksize steps: " << nsteps << "\n";
-    std::cout << "++ minblocksize: " << minblocksize << "\n";
-    std::cout << "++ maxlocksize: " << _maxblocksize << "\n";
-    FMPI_DBG(nsteps);
-  }
+  nsteps = std::min(nsteps, std::size_t(20));
 
   RTLX_ASSERT(minblocksize >= sizeof(value_t));
 
@@ -274,14 +262,14 @@ int main(int argc, char* argv[])
   bool is_clock_synced = clock.Init(worldCtx.mpiComm());
   RTLX_ASSERT(is_clock_synced);
 
+  FMPI_DBG(niters);
+
   for (size_t blocksize = minblocksize, step = 0; step <= nsteps;
        blocksize *= 2, ++step) {
     // each process sends sencount to all other PEs
     auto sendcount = blocksize / sizeof(value_t);
 
-    if (me == 0) {
-      FMPI_DBG(sendcount);
-    }
+    FMPI_DBG(sendcount);
 
     RTLX_ASSERT(blocksize % sizeof(value_t) == 0);
 
@@ -290,11 +278,11 @@ int main(int argc, char* argv[])
 
     auto nels = sendcount * nr;
 
-    // container_t data, out, correct;
-    auto data = container_t(worldCtx, nels);
-    auto out  = container_t(worldCtx, nels);
+    // storage_t data, out, correct;
+    auto data = storage_t(worldCtx, nels);
+    auto out  = storage_t(worldCtx, nels);
 #ifndef NDEBUG
-    auto correct = container_t(worldCtx, nels);
+    auto correct = storage_t(worldCtx, nels);
 #endif
 
     for (int it = 0; it < niters + nwarmup; ++it) {
