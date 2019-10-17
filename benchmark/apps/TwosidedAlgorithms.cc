@@ -1,37 +1,16 @@
-#include <algorithm>
-#include <cstring>
-#include <functional>
-#include <iostream>
-#include <iterator>
-#include <memory>
-#include <sstream>
-#include <unordered_map>
-#include <utility>
-#include <vector>
-
-#include <mpi.h>
-#include <omp.h>
-
-#include <fmpi/AlltoAll.h>
-#include <fmpi/Debug.h>
-#include <fmpi/SharedMemory.h>
-
-#include <Random.h>
-#include <rtlx/Assert.h>
-#include <rtlx/ScopedLambda.h>
-#include <rtlx/Timer.h>
-#include <rtlx/Trace.h>
-
-#include <MPISynchronizedBarrier.h>
-#include <MpiAlltoAllBench.h>
-#include <Version.h>
 #include <parallel/algorithm>
 
-#include <Params.h>
+#include <tlx/container/simple_vector.hpp>
 
-constexpr size_t KB = 1 << 10;
-constexpr size_t MB = 1 << 20;
-constexpr size_t GB = 1 << 30;
+#include <fmpi/AlltoAll.h>
+#include <fmpi/Math.h>
+
+#include <MPISynchronizedBarrier.h>
+#include <rtlx/ScopedLambda.h>
+
+#include <Params.h>
+#include <Random.h>
+#include <TwosidedAlgorithms.h>
 
 #ifdef NDEBUG
 constexpr int nwarmup = 1;
@@ -43,137 +22,109 @@ constexpr int niters  = 1;
 
 // The container where we store our
 using value_t = int;
-// using storage_t = std::unique_ptr<value_t[]>;
-using storage_t  = mpi::ShmSegment<value_t>;
-using iterator_t = typename storage_t::pointer;
+using storage_t =
+    tlx::SimpleVector<value_t, tlx::SimpleVectorMode::NoInitNoDestroy>;
+using iterator_t = typename storage_t::iterator;
 
-using twoSidedAlgo_t = std::function<void(
-    iterator_t,
-    iterator_t,
-    int,
-    mpi::MpiCommCtx const&,
-    merge_t<iterator_t, iterator_t>)>;
+template <class InputIterator, class OutputIterator>
+using merger_t = std::function<void(
+    std::vector<std::pair<InputIterator, InputIterator>>, OutputIterator)>;
 
-std::array<std::pair<std::string, twoSidedAlgo_t>, 9> TWO_SIDED = {
-    std::make_pair(
-        "AlltoAll",
-        fmpi::MpiAlltoAll<
-            iterator_t,
-            iterator_t,
-            merge_t<iterator_t, iterator_t>>),
-    std::make_pair(
-        "ScatteredPairwiseFlatHandshake",
-        fmpi::scatteredPairwise<
-            fmpi::AllToAllAlgorithm::FLAT_HANDSHAKE,
-            iterator_t,
-            iterator_t,
-            merge_t<iterator_t, iterator_t>>),
-    std::make_pair(
-        "ScatteredPairwiseOneFactor",
-        fmpi::scatteredPairwise<
-            fmpi::AllToAllAlgorithm::ONE_FACTOR,
-            iterator_t,
-            iterator_t,
-            merge_t<iterator_t, iterator_t>>),
-    std::make_pair(
-        "ScatteredPairwiseWaitsomeFlatHandshake4",
-        fmpi::scatteredPairwiseWaitsome<
-            fmpi::AllToAllAlgorithm::FLAT_HANDSHAKE,
-            iterator_t,
-            iterator_t,
-            merge_t<iterator_t, iterator_t>,
-            4>),
-    std::make_pair(
-        "ScatteredPairwiseWaitsomeFlatHandshake8",
-        fmpi::scatteredPairwiseWaitsome<
-            fmpi::AllToAllAlgorithm::FLAT_HANDSHAKE,
-            iterator_t,
-            iterator_t,
-            merge_t<iterator_t, iterator_t>,
-            8>),
-    std::make_pair(
-        "ScatteredPairwiseWaitsomeFlatHandshake16",
-        fmpi::scatteredPairwiseWaitsome<
-            fmpi::AllToAllAlgorithm::FLAT_HANDSHAKE,
-            iterator_t,
-            iterator_t,
-            merge_t<iterator_t, iterator_t>,
-            16>),
-    std::make_pair(
-        "ScatteredPairwiseWaitsomeOneFactor4",
-        fmpi::scatteredPairwiseWaitsome<
-            fmpi::AllToAllAlgorithm::ONE_FACTOR,
-            iterator_t,
-            iterator_t,
-            merge_t<iterator_t, iterator_t>,
-            4>),
-    std::make_pair(
-        "ScatteredPairwiseWaitsomeOneFactor8",
-        fmpi::scatteredPairwiseWaitsome<
-            fmpi::AllToAllAlgorithm::ONE_FACTOR,
-            iterator_t,
-            iterator_t,
-            merge_t<iterator_t, iterator_t>,
-            8>),
-    std::make_pair(
-        "ScatteredPairwiseWaitsomeOneFactor16",
-        fmpi::scatteredPairwiseWaitsome<
-            fmpi::AllToAllAlgorithm::ONE_FACTOR,
-            iterator_t,
-            iterator_t,
-            merge_t<iterator_t, iterator_t>,
-            16>)
+std::vector<std::pair<
+    std::string,
+    fmpi_algrithm_t<iterator_t, merger_t<iterator_t, iterator_t>>>>
+    ALGORITHMS = {std::make_pair(
+                      "AlltoAll",
+                      fmpi::MpiAlltoAll<
+                          iterator_t,
+                          iterator_t,
+                          merger_t<iterator_t, iterator_t>>),
+                  std::make_pair(
+                      "ScatteredPairwiseFlatHandshake",
+                      fmpi::scatteredPairwise<
+                          fmpi::AllToAllAlgorithm::FLAT_HANDSHAKE,
+                          iterator_t,
+                          iterator_t,
+                          merger_t<iterator_t, iterator_t>>),
+                  std::make_pair(
+                      "ScatteredPairwiseOneFactor",
+                      fmpi::scatteredPairwise<
+                          fmpi::AllToAllAlgorithm::ONE_FACTOR,
+                          iterator_t,
+                          iterator_t,
+                          merger_t<iterator_t, iterator_t>>),
+                  std::make_pair(
+                      "ScatteredPairwiseWaitsomeFlatHandshake4",
+                      fmpi::scatteredPairwiseWaitsome<
+                          fmpi::AllToAllAlgorithm::FLAT_HANDSHAKE,
+                          iterator_t,
+                          iterator_t,
+                          merger_t<iterator_t, iterator_t>,
+                          4>),
+                  std::make_pair(
+                      "ScatteredPairwiseWaitsomeFlatHandshake8",
+                      fmpi::scatteredPairwiseWaitsome<
+                          fmpi::AllToAllAlgorithm::FLAT_HANDSHAKE,
+                          iterator_t,
+                          iterator_t,
+                          merger_t<iterator_t, iterator_t>,
+                          8>),
+                  std::make_pair(
+                      "ScatteredPairwiseWaitsomeFlatHandshake16",
+                      fmpi::scatteredPairwiseWaitsome<
+                          fmpi::AllToAllAlgorithm::FLAT_HANDSHAKE,
+                          iterator_t,
+                          iterator_t,
+                          merger_t<iterator_t, iterator_t>,
+                          16>),
+                  std::make_pair(
+                      "ScatteredPairwiseWaitsomeOneFactor4",
+                      fmpi::scatteredPairwiseWaitsome<
+                          fmpi::AllToAllAlgorithm::ONE_FACTOR,
+                          iterator_t,
+                          iterator_t,
+                          merger_t<iterator_t, iterator_t>,
+                          4>),
+                  std::make_pair(
+                      "ScatteredPairwiseWaitsomeOneFactor8",
+                      fmpi::scatteredPairwiseWaitsome<
+                          fmpi::AllToAllAlgorithm::ONE_FACTOR,
+                          iterator_t,
+                          iterator_t,
+                          merger_t<iterator_t, iterator_t>,
+                          8>),
+                  std::make_pair(
+                      "ScatteredPairwiseWaitsomeOneFactor16",
+                      fmpi::scatteredPairwiseWaitsome<
+                          fmpi::AllToAllAlgorithm::ONE_FACTOR,
+                          iterator_t,
+                          iterator_t,
+                          merger_t<iterator_t, iterator_t>,
+                          16>)
 #if 0
     std::make_pair(
         "ScatteredPairwiseWaitany16",
-        fmpi::scatteredPairwiseWaitany<iterator_t, iterator_t, merge_t, 16>),
+        fmpi::scatteredPairwiseWaitany<iterator_t, iterator_t, merger_t, 16>),
     std::make_pair(
         "ScatteredPairwiseWaitany32",
-        fmpi::scatteredPairwiseWaitany<iterator_t, iterator_t, merge_t, 32>),
+        fmpi::scatteredPairwiseWaitany<iterator_t, iterator_t, merger_t, 32>),
     std::make_pair(
         "ScatteredPairwiseWaitany64",
-        fmpi::scatteredPairwiseWaitany<iterator_t, iterator_t, merge_t, 64>),
+        fmpi::scatteredPairwiseWaitany<iterator_t, iterator_t, merger_t, 64>),
     std::make_pair(
         "ScatteredPairwiseWaitany128",
-        fmpi::scatteredPairwiseWaitany<iterator_t, iterator_t, merge_t, 128>),
+        fmpi::scatteredPairwiseWaitany<iterator_t, iterator_t, merger_t, 128>),
     // Hierarchical XOR Shift Hypercube, works only if #PEs is power of two
     std::make_pair(
-        "Hypercube", fmpi::hypercube<iterator_t, iterator_t, merge_t>),
+        "Hypercube", fmpi::hypercube<iterator_t, iterator_t, merger_t>),
 #endif
 // Bruck Algorithms, first the original one, then a modified version which
 // omits the last local rotation step
 #if 0
-    std::make_pair("Bruck", fmpi::bruck<iterator_t, iterator_t, merge_t>),
+    std::make_pair("Bruck", fmpi::bruck<iterator_t, iterator_t, merger_t>),
     std::make_pair(
-        "Bruck_Mod", fmpi::bruck_mod<iterator_t, iterator_t, merge_t>)
+        "Bruck_Mod", fmpi::bruck_mod<iterator_t, iterator_t, merger_t>)
 #endif
-};
-
-using oneSidedAlgo_t = std::function<void(
-    mpi::MpiCommCtx const&,
-    mpi::ShmSegment<value_t> const&,
-    mpi::ShmSegment<value_t>&,
-    int,
-    merge_t<iterator_t, iterator_t>)>;
-
-std::array<std::pair<std::string, oneSidedAlgo_t>, 3> ONE_SIDED = {
-
-    std::make_pair(
-        "All2AllNaive",
-        fmpi::all2allNaive<value_t, merge_t<iterator_t, iterator_t>>),
-    std::make_pair(
-        "All2AllMortonZSource",
-        fmpi::all2allMortonZSource<value_t, merge_t<iterator_t, iterator_t>>),
-    std::make_pair(
-        "All2AllMortonZDest",
-        fmpi::all2allMortonZDest<value_t, merge_t<iterator_t, iterator_t>>)};
-
-template <class cT, class traits = std::char_traits<cT>>
-class basic_nullbuf : public std::basic_streambuf<cT, traits> {
-  typename traits::int_type overflow(typename traits::int_type c)
-  {
-    return traits::not_eof(c);  // indicate success
-  }
 };
 
 int main(int argc, char* argv[])
@@ -227,11 +178,10 @@ int main(int argc, char* argv[])
 
     auto nels = sendcount * nr;
 
-    // storage_t data, out, correct;
-    auto data = storage_t(worldCtx, nels);
-    auto out  = storage_t(worldCtx, nels);
+    auto data = storage_t(nels);
+    auto out  = storage_t(nels);
 #ifndef NDEBUG
-    auto correct = storage_t(worldCtx, nels);
+    auto correct = storage_t(nels);
 #endif
 
     for (int it = 0; it < niters + nwarmup; ++it) {
@@ -244,17 +194,17 @@ int main(int argc, char* argv[])
 #ifdef NDEBUG
           // generate some randome values
           std::generate(
-              std::next(data.base(worldCtx.rank()), block * sendcount),
-              std::next(data.base(worldCtx.rank()), (block + 1) * sendcount),
+              std::next(data.begin(), block * sendcount),
+              std::next(data.begin(), (block + 1) * sendcount),
               [&]() { return distribution(generator); });
           // sort it
           std::sort(
-              std::next(data.base(worldCtx.rank()), block * sendcount),
-              std::next(data.base(worldCtx.rank()), (block + 1) * sendcount));
+              std::next(data.begin(), block * sendcount),
+              std::next(data.begin(), (block + 1) * sendcount));
 #else
           std::iota(
-              std::next(data.base(worldCtx.rank()), block * sendcount),
-              std::next(data.base(worldCtx.rank()), (block + 1) * sendcount),
+              std::next(data.begin(), block * sendcount),
+              std::next(data.begin(), (block + 1) * sendcount),
               block * sendcount + (me * nels));
 #endif
         }
@@ -262,8 +212,8 @@ int main(int argc, char* argv[])
 
       for (std::size_t block = 0; block < std::size_t(nr); ++block) {
         RTLX_ASSERT(std::is_sorted(
-            std::next(data.base(worldCtx.rank()), block * sendcount),
-            std::next(data.base(worldCtx.rank()), (block + 1) * sendcount)));
+            std::next(data.begin(), block * sendcount),
+            std::next(data.begin(), (block + 1) * sendcount)));
       }
 
       auto merger = [nels](
@@ -285,25 +235,25 @@ int main(int argc, char* argv[])
       // with our own algorithms
 #ifndef NDEBUG
       fmpi::MpiAlltoAll(
-          data.base(worldCtx.rank()),
-          correct.base(worldCtx.rank()),
+          data.begin(),
+          correct.begin(),
           static_cast<int>(sendcount),
           worldCtx.mpiComm(),
           merger);
-      RTLX_ASSERT(std::is_sorted(
-          correct.base(worldCtx.rank()),
-          std::next(correct.base(worldCtx.rank()), nels)));
+
+      RTLX_ASSERT(
+          std::is_sorted(correct.begin(), std::next(correct.begin(), nels)));
 #endif
 
-      Params p{};
-      p.nhosts    = params.nhosts;
-      p.nprocs    = nr;
-      p.me        = me;
-      p.step      = step + 1;
-      p.nbytes    = nels * nr * sizeof(value_t);
-      p.blocksize = blocksize;
+      Measurement m{};
+      m.nhosts    = params.nhosts;
+      m.nprocs    = nr;
+      m.me        = me;
+      m.step      = step + 1;
+      m.nbytes    = nels * nr * sizeof(value_t);
+      m.blocksize = blocksize;
 
-      for (auto const& algo : TWO_SIDED) {
+      for (auto const& algo : ALGORITHMS) {
         FMPI_DBG_STREAM("running algorithm: " << algo.first);
 
         // We always want to guarantee that all processors start at the same
@@ -320,108 +270,60 @@ int main(int argc, char* argv[])
 
         auto t = run_algorithm(
             algo.second,
-            data.base(worldCtx.rank()),
-            out.base(worldCtx.rank()),
+            data.begin(),
+            out.begin(),
             static_cast<int>(sendcount),
             worldCtx,
             merger);
 
 #ifndef NDEBUG
         RTLX_ASSERT(std::equal(
-            correct.base(worldCtx.rank()),
-            std::next(correct.base(worldCtx.rank()), nels),
-            out.base(worldCtx.rank())));
+            correct.begin(), std::next(correct.begin(), nels), out.begin()));
 #endif
 
         if (it >= nwarmup) {
           auto trace = rtlx::TimeTrace{me, algo.first};
 
-          printMeasurementCsvLine(
-              std::cout,
-              p,
-              algo.first,
-              std::make_tuple(
-                  t,
-                  trace.lookup(fmpi::MERGE),
-                  trace.lookup(fmpi::COMMUNICATION)));
+          m.algorithm = algo.first;
+
+          m.times = std::make_tuple(
+              t,
+              trace.lookup(fmpi::MERGE),
+              trace.lookup(fmpi::COMMUNICATION));
+
+          printMeasurementCsvLine(std::cout, m);
+
           trace.clear();
         }
       }
 
-#if 0
-      for (auto const& algo : ONE_SIDED) {
-        FMPI_DBG_STREAM("running algorithm: " << algo.first);
-
-        auto barrier = clock.Barrier(commCtx.mpiComm());
-        RTLX_ASSERT(barrier.Success(commCtx.mpiComm()));
-
-        auto t = rtlx::ChronoClockNow();
-        algo.second(commCtx, data, out, static_cast<int>(sendcount), merger);
-        t = rtlx::ChronoClockNow() - t;
-
-#ifndef NDEBUG
-        RTLX_ASSERT(std::equal(
-            correct.base(commCtx.rank()),
-            std::next(correct.base(commCtx.rank()), nels),
-            out.base(commCtx.rank())));
-#endif
-
-        if (it >= nwarmup) {
-          auto trace = rtlx::TimeTrace{me, algo.first};
-
-          printMeasurementCsvLine(
-              std::cout,
-              p,
-              algo.first,
-              std::make_tuple(
-                  t,
-                  trace.lookup(fmpi::MERGE),
-                  trace.lookup(fmpi::COMMUNICATION)));
-          trace.clear();
-        }
-      }
-#endif
+      // synchronize before advancing to the next stage
+      FMPI_DBG("Iteration Finished");
+      MPI_Barrier(worldCtx.mpiComm());
     }
-    // synchronize before advancing to the next stage
-    FMPI_DBG("Iteration Finished");
-    MPI_Barrier(worldCtx.mpiComm());
+
+    return 0;
   }
-
-  return 0;
-}
-
-bool operator<(StringDoublePair const& lhs, StringDoublePair const& rhs)
-{
-  return lhs.second < rhs.second;
-}
-
-std::ostream& operator<<(std::ostream& os, StringDoublePair const& p)
-{
-  os << "{" << p.first << ", " << p.second << "}";
-  return os;
 }
 
 void printMeasurementHeader(std::ostream& os)
 {
-  os << "Nodes, Procs, Round, NBytes, Blocksize, Algo, Rank, Ttotal, Tmerge, "
+  os << "Nodes, Procs, Round, NBytes, Blocksize, Algo, Rank, Ttotal, "
+        "Tmerge, "
         "Tcomm\n";
 }
 
-void printMeasurementCsvLine(
-    std::ostream&                      os,
-    Params                             m,
-    const std::string&                 algorithm,
-    std::tuple<double, double, double> times)
+void printMeasurementCsvLine(std::ostream& os, Measurement const& m)
 {
   double total, tmerge, tcomm;
-  std::tie(total, tmerge, tcomm) = times;
+  std::tie(total, tmerge, tcomm) = m.times;
   std::ostringstream myos;
   myos << m.nhosts << ", ";
   myos << m.nprocs << ", ";
   myos << m.step << ", ";
   myos << m.nbytes << ", ";
   myos << m.blocksize << ", ";
-  myos << algorithm << ", ";
+  myos << m.algorithm << ", ";
   myos << m.me << ", ";
   myos << total << ", ";
   myos << tmerge << ", ";

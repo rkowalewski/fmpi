@@ -3,7 +3,7 @@ add_executable(twoSidedAlgorithms apps/TwosidedAlgorithms.cc src/Params.cc)
 set_target_properties(twoSidedAlgorithms PROPERTIES DEBUG_POSTFIX ".${CMAKE_DEBUG_POSTFIX}")
 
 add_dependencies(twoSidedAlgorithms GitVersion)
-target_include_directories(twoSidedAlgorithms PRIVATE include src)
+target_include_directories(twoSidedAlgorithms PRIVATE include apps src)
 
 # Make sure you link your targets with this command. It can also link libraries and
 # even flags, so linking a target that does not exist will not give a configure-time error.

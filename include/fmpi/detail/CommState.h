@@ -3,6 +3,8 @@
 
 #include <fmpi/Debug.h>
 
+#include <fmpi/NumericRange.h>
+
 namespace fmpi::detail {
 
 template <class T, std::size_t NReqs>
