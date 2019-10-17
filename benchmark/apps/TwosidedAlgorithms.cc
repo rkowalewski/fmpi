@@ -302,9 +302,9 @@ int main(int argc, char* argv[])
       FMPI_DBG("Iteration Finished");
       MPI_Barrier(worldCtx.mpiComm());
     }
-
-    return 0;
   }
+
+  return 0;
 }
 
 void printMeasurementHeader(std::ostream& os)
