@@ -1,16 +1,16 @@
-add_executable(mpiFusionBench src/MpiAlltoAllBench.cc)
+add_executable(twoSidedAlgorithms apps/TwosidedAlgorithms.cc src/Params.cc)
 
-set_target_properties(mpiFusionBench PROPERTIES DEBUG_POSTFIX ".${CMAKE_DEBUG_POSTFIX}")
+set_target_properties(twoSidedAlgorithms PROPERTIES DEBUG_POSTFIX ".${CMAKE_DEBUG_POSTFIX}")
 
-add_dependencies(mpiFusionBench GitVersion)
-target_include_directories(mpiFusionBench PRIVATE include src)
+add_dependencies(twoSidedAlgorithms GitVersion)
+target_include_directories(twoSidedAlgorithms PRIVATE include src)
 
 # Make sure you link your targets with this command. It can also link libraries and
 # even flags, so linking a target that does not exist will not give a configure-time error.
-target_link_libraries(mpiFusionBench PRIVATE OpenMP::OpenMP_CXX MPI::MPI_CXX
+target_link_libraries(twoSidedAlgorithms PRIVATE OpenMP::OpenMP_CXX MPI::MPI_CXX
     MPISynchronizedBarrier tlx Morton rtlx fmpi)
 # link tlx
-target_compile_options(mpiFusionBench PRIVATE ${OpenMP_CXX_FLAGS})
+target_compile_options(twoSidedAlgorithms PRIVATE ${OpenMP_CXX_FLAGS})
 
 add_custom_target(GitVersion
     COMMAND ${CMAKE_COMMAND}

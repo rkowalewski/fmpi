@@ -27,7 +27,7 @@
 #include <Version.h>
 #include <parallel/algorithm>
 
-#include <tlx/cmdline_parser.hpp>
+#include <Params.h>
 
 constexpr size_t KB = 1 << 10;
 constexpr size_t MB = 1 << 20;
@@ -187,71 +187,20 @@ int main(int argc, char* argv[])
   auto me = worldCtx.rank();
   auto nr = worldCtx.size();
 
-  tlx::CmdlineParser cp;
+  fmpi::benchmark::Params params{};
 
-  // add description and author
-  cp.set_description("Benchmark for the FMPI Algorithms Library.");
-  cp.set_author("Roger Kowalewski <roger.kowaleski@nm.ifi.lmu.de>");
-
-  unsigned nhosts = 0;
-  cp.add_param_unsigned("nodes", nhosts, "Number of computation nodes");
-
-#if 0
-  std::string selected_algo = "";
-  cp.add_opt_param_string(
-      "algo", selected_algo, "Select a specific algorithm");
-#endif
-
-  std::size_t           minblocksize = 128, maxblocksize = 256;
-  std::array<size_t, 2> blocksizes = {minblocksize, maxblocksize};
-
-  cp.add_bytes(
-      'l',
-      "minblocksize",
-      blocksizes[0],
-      "Minimum block size communication to each unit.");
-  cp.add_bytes(
-      'u',
-      "maxblocksize",
-      blocksizes[1],
-      "Maximum block size communication to each unit.");
-
-  int good = false;
-
-  // process command line
-  if (me == 0) {
-    good = cp.process(argc, argv);
+  if (!fmpi::benchmark::process(argc, argv, worldCtx, params)) {
+    return -1;
   }
 
-  MPI_Bcast(&good, 1, mpi::type_mapper<int>::type(), 0, worldCtx.mpiComm());
+  RTLX_ASSERT((nr % params.nhosts) == 0);
 
-  if (!good) {
-    return 1;
-  }
-
-  if (me == 0) {
-    cp.print_result();
-  }
-
-  MPI_Bcast(&nhosts, 1, mpi::type_mapper<int>::type(), 0, worldCtx.mpiComm());
-  MPI_Bcast(
-      &blocksizes[0],
-      2,
-      mpi::type_mapper<std::size_t>::type(),
-      0,
-      worldCtx.mpiComm());
-
-  minblocksize = blocksizes[0];
-  maxblocksize = blocksizes[1];
-
-  RTLX_ASSERT((nr % nhosts) == 0);
-
-  std::size_t nsteps =
-      std::ceil(std::log2(maxblocksize)) - std::ceil(std::log2(minblocksize));
+  std::size_t nsteps = std::ceil(std::log2(params.maxblocksize)) -
+                       std::ceil(std::log2(params.minblocksize));
 
   nsteps = std::min(nsteps, std::size_t(20));
 
-  RTLX_ASSERT(minblocksize >= sizeof(value_t));
+  RTLX_ASSERT(params.minblocksize >= sizeof(value_t));
 
   if (me == 0) {
     printMeasurementHeader(std::cout);
@@ -264,7 +213,7 @@ int main(int argc, char* argv[])
 
   FMPI_DBG(niters);
 
-  for (size_t blocksize = minblocksize, step = 0; step <= nsteps;
+  for (size_t blocksize = params.minblocksize, step = 0; step <= nsteps;
        blocksize *= 2, ++step) {
     // each process sends sencount to all other PEs
     auto sendcount = blocksize / sizeof(value_t);
@@ -347,7 +296,7 @@ int main(int argc, char* argv[])
 #endif
 
       Params p{};
-      p.nhosts    = nhosts;
+      p.nhosts    = params.nhosts;
       p.nprocs    = nr;
       p.me        = me;
       p.step      = step + 1;
