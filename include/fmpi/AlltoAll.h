@@ -18,6 +18,7 @@
 #include <fmpi/Debug.h>
 #include <fmpi/Schedule.h>
 #include <fmpi/detail/CommState.h>
+#include <fmpi/mpi/Request.h>
 
 #include <fmpi/NumericRange.h>
 
@@ -53,8 +54,8 @@ inline void scatteredPairwiseWaitsome(
   static_assert(
       utilization_threshold, "at least two concurrent receives required");
 
-  using algo_type   = typename detail::selectAlgorithm<algo>::type;
-  using value_type  = typename std::iterator_traits<InputIt>::value_type;
+  using algo_type  = typename detail::selectAlgorithm<algo>::type;
+  using value_type = typename std::iterator_traits<InputIt>::value_type;
 
   auto const nr = ctx.size();
   auto const me = ctx.rank();
@@ -192,11 +193,8 @@ inline void scatteredPairwiseWaitsome(
     using merge_buffer_t =
         tlx::SimpleVector<value_type, tlx::SimpleVectorMode::NoInitNoDestroy>;
 
-    size_t ncReqs = 0, ncrReqs = 0;
+    size_t ncReqs = 0, nrecvTotal = 0;
     auto   outIt = out;
-
-    // request indexes indexes which have been completed so far
-    std::array<int, reqs.size()> reqsCompleted{};
 
     std::vector<std::size_t> mergedChunksPsum;
     mergedChunksPsum.reserve(nr);
@@ -205,108 +203,81 @@ inline void scatteredPairwiseWaitsome(
     trace.tock(COMMUNICATION);
 
     while (ncReqs < totalReqs) {
-      int nReqCompleted;
-
       trace.tick(COMMUNICATION);
 
-      RTLX_ASSERT_RETURNS(
-          MPI_Waitsome(
-              reqs.size(),
-              &(reqs[0]),
-              &nReqCompleted,
-              &(reqsCompleted[0]),
-              MPI_STATUSES_IGNORE),
-          MPI_SUCCESS);
+      auto reqsCompleted = mpi::waitsome(reqs);
 
-      RTLX_ASSERT(nReqCompleted != MPI_UNDEFINED);
-      ncReqs += nReqCompleted;
+      ncReqs += reqsCompleted.size();
 
-      auto fstCompletedReq = std::begin(reqsCompleted);
-      auto lstCompletedReq = fstCompletedReq + nReqCompleted;
-
-      FMPI_DBG_RANGE(fstCompletedReq, lstCompletedReq);
-
-      // reset all MPI Requests
-      std::for_each(fstCompletedReq, lstCompletedReq, [&reqs](auto reqIdx) {
-        reqs[reqIdx] = MPI_REQUEST_NULL;
-      });
+      FMPI_DBG(reqsCompleted);
 
       // we want all receive requests on the left, and send requests on the
       // right
-      auto const fstRecvRequest = fstCompletedReq;
-      auto const fstSendRequest = std::partition(
-          fstCompletedReq, lstCompletedReq, [reqsInFlight](auto req) {
+      auto const fstSentIdx = std::partition(
+          std::begin(reqsCompleted),
+          std::end(reqsCompleted),
+          [reqsInFlight](auto req) {
             // left half of reqs array array are receives
             return req < static_cast<int>(reqsInFlight);
           });
 
-      auto const nReceivedChunks =
-          std::distance(fstRecvRequest, fstSendRequest);
-      auto const nSentChunks = std::distance(fstSendRequest, lstCompletedReq);
+      auto fstRecvIdx = std::begin(reqsCompleted);
+
+      auto const nrecv = std::distance(fstRecvIdx, fstSentIdx);
+
+      auto const nsent = reqsCompleted.size() - nrecv;
 
       FMPI_DBG_STREAM(
           me << " available chunks to merge: "
-             << commState.completed_receives().size() + nReceivedChunks);
+             << commState.completed_receives().size() + nrecv);
 
       // mark all receives
-      std::for_each(
-          fstRecvRequest, fstSendRequest, [&commState](auto reqIdx) {
-            commState.receive_complete(reqIdx);
-          });
+      std::for_each(fstRecvIdx, fstSentIdx, [&commState](auto reqIdx) {
+        commState.receive_complete(reqIdx);
+      });
 
-      ncrReqs += nReceivedChunks;
+      nrecvTotal += nrecv;
 
-      RTLX_ASSERT((nReceivedChunks + nSentChunks) == nReqCompleted);
+      auto const nrecvOpen = totalExchanges - nrreqs;
 
-      // Number of open receives in this round.
-      auto const maxVals = {// Number of total open receives
-                            totalExchanges - nrreqs,
-                            // Number of free receive slots
-                            static_cast<size_t>(nReceivedChunks),
-                            // number of free memory slots
-                            commState.available_slots()};
+      auto const nslotsRecv = std::min(
+          std::min<std::size_t>(nrecv, nrecvOpen),
+          commState.available_slots());
 
-      auto const maxRecvs =
-          *std::min_element(std::begin(maxVals), std::end(maxVals));
+      FMPI_DBG(nslotsRecv);
 
-      FMPI_DBG_STREAM("max receives in this round: " << maxRecvs);
-
-      RTLX_ASSERT((fstRecvRequest + maxRecvs) <= fstSendRequest);
+      RTLX_ASSERT((fstRecvIdx + nslotsRecv) <= fstSentIdx);
 
       rphase = detail::enqueueMpiOps(
           rphase,
           me,
-          maxRecvs,
+          nslotsRecv,
           rschedule,
-          [fstRecvRequest](auto nreqs) {
-            return *std::next(fstRecvRequest, nreqs);
-          },
+          [fstRecvIdx](auto nreqs) { return *std::next(fstRecvIdx, nreqs); },
           rbufAlloc,
           receiveOp);
 
-      nrreqs += maxRecvs;
+      nrreqs += nslotsRecv;
 
-      auto const maxSents =
-          std::min<std::size_t>(totalExchanges - nsreqs, nSentChunks);
+      auto const nslotsSend =
+          std::min<std::size_t>(totalExchanges - nsreqs, nsent);
 
       sphase = detail::enqueueMpiOps(
           sphase,
           me,
-          maxSents,
+          nslotsSend,
           sschedule,
-          [fstSendRequest](auto nreqs) {
-            return *std::next(fstSendRequest, nreqs);
-          },
+          [fstSentIdx](auto nreqs) { return *std::next(fstSentIdx, nreqs); },
           sbufAlloc,
           sendOp);
 
-      nsreqs += maxSents;
+      nsreqs += nslotsSend;
 
       trace.tock(COMMUNICATION);
 
       trace.tick(MERGE);
 
-      auto const allReceivesDone = ncrReqs == totalExchanges;
+      auto const allReceivesDone = nrecvTotal == totalExchanges;
 
       auto const mergeCount =
           commState.completed_receives().size() + chunks_to_merge.size();
