@@ -2,7 +2,8 @@
 
 #include <tlx/cmdline_parser.hpp>
 
-namespace fmpi::benchmark {
+namespace fmpi {
+namespace benchmark {
 
 bool process(
     int argc, char* argv[], ::mpi::Context const& mpiCtx, Params& params)
@@ -13,7 +14,8 @@ bool process(
   cp.set_description("Benchmark for the FMPI Algorithms Library.");
   cp.set_author("Roger Kowalewski <roger.kowaleski@nm.ifi.lmu.de>");
 
-  cp.add_param_unsigned("nodes", params.nhosts, "Number of computation nodes");
+  cp.add_param_unsigned(
+      "nodes", params.nhosts, "Number of computation nodes");
 
 #if 0
   std::string selected_algo = "";
@@ -35,16 +37,16 @@ bool process(
       blocksizes[1],
       "Maximum block size communication to each unit.");
 
-  int good = false;
+  int good = 0;
 
   // process command line
   if (mpiCtx.rank() == 0) {
-    good = cp.process(argc, argv);
+    good = static_cast<int>(cp.process(argc, argv));
   }
 
   MPI_Bcast(&good, 1, mpi::type_mapper<int>::type(), 0, mpiCtx.mpiComm());
 
-  if (!good) {
+  if (good == 0) {
     return false;
   }
 
@@ -66,4 +68,5 @@ bool process(
 
   return true;
 }
-}  // namespace fmpi::benchmark
+}  // namespace benchmark
+}  // namespace fmpi
