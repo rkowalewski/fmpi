@@ -117,45 +117,6 @@ class CommState {
   simple_vector m_buffer{};
 };
 
-template <class Schedule, class ReqIdx, class BufAlloc, class CommOp>
-inline auto enqueueMpiOps(
-    mpi::rank_t const firstPhase,
-    mpi::rank_t const me,
-    mpi::rank_t const reqsInFlight,
-    Schedule&&        partner,
-    ReqIdx&&          reqIdx,
-    BufAlloc&&        bufAlloc,
-    CommOp&&          commOp)
-{
-  using mpi::rank_t;
-
-  rank_t phase, nreqs;
-
-  for (phase = firstPhase, nreqs = 0; nreqs < reqsInFlight; ++phase) {
-    auto peer = partner(phase);
-
-    if (peer == me) {
-      FMPI_DBG_STREAM("skipping local phase " << phase);
-      continue;
-    }
-
-    auto idx = reqIdx(nreqs);
-
-    FMPI_DBG_STREAM("exchanging data with " << peer << " phase " << phase
-         << " reqIdx " << idx);
-
-    auto* buf = bufAlloc(peer, idx);
-
-    RTLX_ASSERT(buf);
-
-    RTLX_ASSERT_RETURNS(commOp(buf, peer, idx), MPI_SUCCESS);
-
-    ++nreqs;
-  }
-
-  return phase;
-}
-
 }  // namespace fmpi::detail
 
 #endif

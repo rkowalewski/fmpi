@@ -23,7 +23,7 @@ inline bool irecv(
   RTLX_ASSERT(count < std::numeric_limits<int>::max());
 
   return MPI_Irecv(
-      buf, static_cast<int>(count), type, source, tag, ctx.mpiComm(), &req);
+      buf, static_cast<int>(count), type, source, tag, ctx.mpiComm(), &req) == MPI_SUCCESS;
 }
 
 template <class T>
@@ -71,7 +71,7 @@ inline bool sendrecv(
       source,
       recvtag,
       ctx.mpiComm(),
-      MPI_STATUS_IGNORE);
+      MPI_STATUS_IGNORE) == MPI_SUCCESS;
 }
 
 template <class T, class U>
@@ -92,7 +92,7 @@ inline bool alltoall(
       recvbuf,
       static_cast<int>(recvcount),
       mpi::type_mapper<U>::type(),
-      ctx.mpiComm());
+      ctx.mpiComm()) == MPI_SUCCESS;
 }
 
 template <class T>
