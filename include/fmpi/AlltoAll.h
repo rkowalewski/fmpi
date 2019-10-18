@@ -75,7 +75,7 @@ inline void scatteredPairwiseWaitsome(
   trace.tick(COMMUNICATION);
 
   std::array<MPI_Request, 2 * NReqs> reqs{};
-  std::uninitialized_fill(std::begin(reqs), std::end(reqs), MPI_REQUEST_NULL);
+  reqs.fill(MPI_REQUEST_NULL);
 
   auto const totalExchanges = static_cast<size_t>(nr - 1);
   auto const totalReqs      = 2 * totalExchanges;
@@ -160,9 +160,7 @@ inline void scatteredPairwiseWaitsome(
   if (alreadyDone) {
     // We are already done
     // Wait for previous round
-    RTLX_ASSERT_RETURNS(
-        MPI_Waitall(reqs.size(), &(reqs[0]), MPI_STATUSES_IGNORE),
-        MPI_SUCCESS);
+    RTLX_ASSERT(mpi::waitall(reqs));
 
     trace.tock(COMMUNICATION);
 
@@ -389,7 +387,6 @@ inline void scatteredPairwise(
   using algo_type  = typename detail::selectAlgorithm<algo>::type;
   using value_type = typename std::iterator_traits<InputIt>::value_type;
 
-  auto mpi_datatype = mpi::type_mapper<value_type>::type();
   auto rbuf = std::unique_ptr<value_type[]>(new value_type[nr * blocksize]);
 
   std::string s;
@@ -427,21 +424,16 @@ inline void scatteredPairwise(
     FMPI_DBG(sendto);
     FMPI_DBG(recvfrom);
 
-    RTLX_ASSERT_RETURNS(
-        MPI_Sendrecv(
-            std::next(begin, sendto * blocksize),
-            static_cast<int>(blocksize),
-            mpi_datatype,
-            sendto,
-            100,
-            std::next(&(rbuf[0]), recvfrom * blocksize),
-            static_cast<int>(blocksize),
-            mpi_datatype,
-            recvfrom,
-            100,
-            ctx.mpiComm(),
-            MPI_STATUS_IGNORE),
-        MPI_SUCCESS);
+    RTLX_ASSERT(mpi::sendrecv(
+        std::next(begin, sendto * blocksize),
+        blocksize,
+        sendto,
+        100,
+        std::next(&(rbuf[0]), recvfrom * blocksize),
+        blocksize,
+        recvfrom,
+        100,
+        ctx));
   }
 
   trace.tock(COMMUNICATION);
@@ -477,8 +469,7 @@ inline void MpiAlltoAll(
     mpi::MpiCommCtx const& ctx,
     Op&&                   op)
 {
-  using value_type  = typename std::iterator_traits<InputIt>::value_type;
-  auto mpi_datatype = mpi::type_mapper<value_type>::type();
+  using value_type = typename std::iterator_traits<InputIt>::value_type;
 
   auto nr = ctx.size();
   auto me = ctx.rank();
@@ -489,16 +480,8 @@ inline void MpiAlltoAll(
 
   auto rbuf = std::unique_ptr<value_type[]>(new value_type[nr * blocksize]);
 
-  RTLX_ASSERT_RETURNS(
-      MPI_Alltoall(
-          std::addressof(*begin),
-          blocksize,
-          mpi_datatype,
-          &rbuf[0],
-          blocksize,
-          mpi_datatype,
-          ctx.mpiComm()),
-      MPI_SUCCESS);
+  RTLX_ASSERT(mpi::alltoall(
+      std::addressof(*begin), blocksize, &rbuf[0], blocksize, ctx));
 
   trace.tock(COMMUNICATION);
 

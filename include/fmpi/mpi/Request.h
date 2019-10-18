@@ -18,13 +18,26 @@ inline std::vector<int> waitsome(std::array<MPI_Request, N> pending)
 
   int completed;
 
+  using vector = std::vector<int>;
+
   RTLX_ASSERT_RETURNS(
       MPI_Waitsome(
           N, &(pending[0]), &completed, &(indices[0]), MPI_STATUSES_IGNORE),
       MPI_SUCCESS);
 
-  return std::vector<int>(
+  if (completed == MPI_UNDEFINED) {
+    return vector(0);
+  }
+
+  return vector(
       std::begin(indices), std::next(std::begin(indices), completed));
+}
+
+template <std::size_t N>
+inline bool waitall(std::array<MPI_Request, N> pending)
+{
+  return MPI_Waitall(pending.size(), &(pending[0]), MPI_STATUSES_IGNORE) ==
+         MPI_SUCCESS;
 }
 }  // namespace mpi
 

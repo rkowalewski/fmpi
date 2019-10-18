@@ -7,9 +7,6 @@
 
 namespace mpi {
 
-using rank_t          = int32_t;
-using size_type       = MPI_Aint;
-using difference_type = int32_t;
 
 namespace detail {
 
@@ -57,5 +54,10 @@ struct type_mapper {
     return detail::type_mapper<T>::type();
   }
 };
+
+
+using rank_t          = int32_t;
+using size_type       = MPI_Aint;
+using difference_type = int32_t;
 }  // namespace mpi
 #endif
