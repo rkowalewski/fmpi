@@ -5,8 +5,7 @@ namespace fmpi {
 
 using namespace mpi;
 
-Rank FlatHandshake::sendRank(
-    mpi::Context const& comm, mpi_rank phase) const noexcept
+Rank FlatHandshake::sendRank(mpi::Context const& comm, mpi_rank phase) const
 {
   auto r = isPow2(comm.size())
                ? hypercube(comm, phase)
@@ -14,8 +13,7 @@ Rank FlatHandshake::sendRank(
   return Rank{r};
 }
 
-Rank FlatHandshake::recvRank(
-    mpi::Context const& comm, mpi_rank phase) const noexcept
+Rank FlatHandshake::recvRank(mpi::Context const& comm, mpi_rank phase) const
 {
   auto r = isPow2(comm.size())
                ? hypercube(comm, phase)
@@ -23,28 +21,24 @@ Rank FlatHandshake::recvRank(
   return Rank{r};
 }
 
-Rank FlatHandshake::hypercube(
-    mpi::Context const& comm, mpi_rank phase) const noexcept
+Rank FlatHandshake::hypercube(mpi::Context const& comm, mpi_rank phase) const
 {
   RTLX_ASSERT(isPow2(comm.size()));
   return Rank{comm.rank() ^ phase};
 }
 
 Rank OneFactor::sendRank(mpi::Context const& comm, mpi_rank phase) const
-    noexcept
 {
   return (comm.size() % 2) != 0 ? factor_odd(comm, phase)
                                 : factor_even(comm, phase);
 }
 
 Rank OneFactor::recvRank(mpi::Context const& comm, mpi_rank phase) const
-    noexcept
 {
   return sendRank(comm, phase);
 }
 
 Rank OneFactor::factor_even(mpi::Context const& comm, mpi_rank phase) const
-    noexcept
 {
   Rank idle = static_cast<Rank>(
       mod<mpi_rank>(comm.size() * phase / 2, comm.size() - 1));
@@ -61,7 +55,6 @@ Rank OneFactor::factor_even(mpi::Context const& comm, mpi_rank phase) const
 }
 
 Rank OneFactor::factor_odd(mpi::Context const& comm, mpi_rank phase) const
-    noexcept
 {
   return Rank{mod<mpi_rank>(phase - comm.rank(), comm.size())};
 }
