@@ -4,6 +4,7 @@
 #include <mpi.h>
 
 #include <fmpi/mpi/TypeMapper.h>
+#include <cstdint>
 
 namespace mpi {
 

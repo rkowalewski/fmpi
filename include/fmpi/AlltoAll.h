@@ -249,8 +249,6 @@ inline void scatteredPairwiseWaitsome(
 
       auto reqsCompleted = mpi::waitsome(reqs);
 
-      for (auto&& reqIdx : reqsCompleted) reqs[reqIdx] = MPI_REQUEST_NULL;
-
       ncReqs += reqsCompleted.size();
 
       FMPI_DBG(reqsCompleted);
