@@ -40,9 +40,6 @@
 
 #if defined(NDEBUG)
 #define RTLX_ASSERT(expr) \
-  (false ? static_cast<void>(expr) : static_cast<void>(0))
-
-#define RTLX_ASSERT_RETURNS(expr, ret) \
   (true ? static_cast<void>(expr) : static_cast<void>(0))
 #else
 #include <exception>
@@ -50,7 +47,8 @@
   (RTLX_PREDICT_TRUE((expr)) ? static_cast<void>(0) : [] { \
     throw std::runtime_error{#expr};                       \
   }())  // NOLINT
-#define RTLX_ASSERT_RETURNS(expr, ret) RTLX_ASSERT((expr) == (ret))
 #endif
+
+#define RTLX_ASSERT_RETURNS(expr, ret) RTLX_ASSERT((expr) == (ret))
 
 #endif

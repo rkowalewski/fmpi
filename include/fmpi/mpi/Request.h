@@ -9,6 +9,8 @@
 
 #include <rtlx/Assert.h>
 
+#include <fmpi/Debug.h>
+
 namespace mpi {
 
 template <std::size_t N>
@@ -19,6 +21,8 @@ inline std::vector<int> waitsome(std::array<MPI_Request, N> pending)
   int completed;
 
   using vector = std::vector<int>;
+
+  FMPI_DBG(pending);
 
   RTLX_ASSERT_RETURNS(
       MPI_Waitsome(
