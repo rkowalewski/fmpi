@@ -1,5 +1,5 @@
-#ifndef MPI__COLLECTIVE_H
-#define MPI__COLLECTIVE_H
+#ifndef MPI__ALGORITHM_H
+#define MPI__ALGORITHM_H
 
 #include <fmpi/mpi/Environment.h>
 #include <fmpi/mpi/Types.h>
@@ -37,8 +37,6 @@ inline return_code isend(
 
   return MPI_Isend(buf, count, type, target, tag, ctx.mpiComm(), &req);
 }
-
-inline MPI_Request* waitsome(MPI_Request* begin, MPI_Request* end);
 
 template <class T>
 inline auto allreduce_minmax(MpiCommCtx const& ctx, T value)

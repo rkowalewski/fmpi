@@ -1,13 +1,12 @@
-#include <fmpi/mpi/Algorithm.h>
+#include <fmpi/mpi/Request.h>
+#include <rtlx/Assert.h>
 #include <iterator>
 
-#include <rtlx/Assert.h>
-
-inline MPI_Request* waitsome(MPI_Request* begin, MPI_Request* end)
+inline std::vector<int> waitsome(MPI_Request* begin, MPI_Request* end)
 {
   auto pending = std::distance(begin, end);
 
-  std::vector<int> indices(nreqs, MPI_UNDEFINED);
+  std::vector<int> indices(pending);
 
   int completed;
 
@@ -16,8 +15,7 @@ inline MPI_Request* waitsome(MPI_Request* begin, MPI_Request* end)
           pending, begin, completed, &(indices[0]), MPI_STATUSES_IGNORE),
       MPI_SUCCESS);
 
-  if (completed == MPI_UNDEFINED) {
-    return begin;
-  }
+  indices.resize(completed);
 
+  return indices;
 }
