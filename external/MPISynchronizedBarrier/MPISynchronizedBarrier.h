@@ -39,6 +39,6 @@ protected:
     int sync_tag_;
     double max_async_time_;
     double time_to_sync_;
-    double time_diff_;
+    double time_diff_{};
     bool synced_;
 };

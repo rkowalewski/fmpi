@@ -1,5 +1,5 @@
-#ifndef RTLX_DEBUG_H
-#define RTLX_DEBUG_H
+#ifndef RTLX_ASSERT_H
+#define RTLX_ASSERT_H
 #include <algorithm>
 #include <iostream>
 #include <iterator>
