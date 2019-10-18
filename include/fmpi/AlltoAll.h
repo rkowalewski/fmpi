@@ -249,10 +249,7 @@ inline void scatteredPairwiseWaitsome(
 
       auto reqsCompleted = mpi::waitsome(reqs);
 
-      std::for_each(
-          std::begin(reqsCompleted),
-          std::end(reqsCompleted),
-          [&reqs](auto reqIdx) { reqs[reqIdx] = MPI_REQUEST_NULL; });
+      for (auto&& reqIdx : reqsCompleted) reqs[reqIdx] = MPI_REQUEST_NULL;
 
       ncReqs += reqsCompleted.size();
 

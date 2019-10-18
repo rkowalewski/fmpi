@@ -1,5 +1,5 @@
-#ifndef SCHEDULE_H
-#define SCHEDULE_H
+#ifndef FMPI_SCHEDULE_H
+#define FMPI_SCHEDULE_H
 
 #include <fmpi/mpi/Mpi.h>
 

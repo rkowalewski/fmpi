@@ -1,5 +1,5 @@
-#ifndef MPI__ALGORITHM_H
-#define MPI__ALGORITHM_H
+#ifndef FMPI_MPI_ALGORITHM_H
+#define FMPI_MPI_ALGORITHM_H
 
 #include <fmpi/mpi/Environment.h>
 

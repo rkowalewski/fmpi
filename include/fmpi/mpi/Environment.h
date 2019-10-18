@@ -1,5 +1,5 @@
-#ifndef MPI__ENVIRONMENT_H
-#define MPI__ENVIRONMENT_H
+#ifndef FMPI_MPI_ENVIRONMENT_H
+#define FMPI_MPI_ENVIRONMENT_H
 
 #include <mpi.h>
 
@@ -13,7 +13,7 @@ struct Rank {
  public:
   Rank() = default;
   explicit Rank(mpi_rank rank) noexcept;
-  operator mpi_rank() const noexcept;
+  operator mpi_rank() const noexcept; //NOLINT
 
  private:
   mpi_rank m_rank{MPI_PROC_NULL};

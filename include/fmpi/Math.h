@@ -1,5 +1,5 @@
-#ifndef MATH_H
-#define MATH_H
+#ifndef FMPI_MATH_H
+#define FMPI_MATH_H
 
 #include <rtlx/Assert.h>
 

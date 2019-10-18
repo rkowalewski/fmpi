@@ -1,5 +1,5 @@
-#ifndef MPI_H
-#define MPI_H
+#ifndef FMPI_MPI_MPI_H
+#define FMPI_MPI_MPI_H
 
 #include <mpi.h>
 

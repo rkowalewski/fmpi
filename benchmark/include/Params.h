@@ -1,11 +1,12 @@
-#ifndef FMPI__BENCHMARK__PARAMS_H
-#define FMPI__BENCHMARK__PARAMS_H
+#ifndef PARAMS_H
+#define PARAMS_H
 
 #include <array>
 
 #include <fmpi/mpi/Environment.h>
 
-namespace fmpi::benchmark {
+namespace fmpi {
+namespace benchmark {
 
 constexpr size_t MINSZ = 128;
 constexpr size_t MAXSZ = 256;
@@ -16,7 +17,12 @@ typedef struct Params {
   unsigned int         nhosts{};
 } Params;
 
-bool process(int, char* argv[], ::mpi::Context const&, Params& /* inout */);
+bool process(
+    int /*argc*/,
+    char* argv[],
+    ::mpi::Context const& /*mpiCtx*/,
+    Params& /* inout */);
 
-}  // namespace fmpi::benchmark
+}  // namespace benchmark
+}  // namespace fmpi
 #endif
