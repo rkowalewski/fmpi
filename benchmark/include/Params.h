@@ -16,7 +16,7 @@ typedef struct Params {
   unsigned int         nhosts{};
 } Params;
 
-bool process(int, char* argv[], ::mpi::MpiCommCtx const&, Params& /* inout */);
+bool process(int, char* argv[], ::mpi::Context const&, Params& /* inout */);
 
 }  // namespace fmpi::benchmark
 #endif

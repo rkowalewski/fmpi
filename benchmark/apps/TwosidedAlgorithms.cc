@@ -133,7 +133,7 @@ int main(int argc, char* argv[])
 
   auto finalizer = rtlx::scope_exit([]() { MPI_Finalize(); });
 
-  mpi::MpiCommCtx worldCtx{MPI_COMM_WORLD};
+  mpi::Context worldCtx{MPI_COMM_WORLD};
 
   auto me = worldCtx.rank();
   auto nr = worldCtx.size();

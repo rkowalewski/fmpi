@@ -51,7 +51,7 @@ using twoSidedAlgo_t = std::function<void(
     iterator_t,
     iterator_t,
     int,
-    mpi::MpiCommCtx const&,
+    mpi::Context const&,
     merge_t<iterator_t, iterator_t>)>;
 
 std::array<std::pair<std::string, twoSidedAlgo_t>, 9> TWO_SIDED = {
@@ -150,7 +150,7 @@ std::array<std::pair<std::string, twoSidedAlgo_t>, 9> TWO_SIDED = {
 };
 
 using oneSidedAlgo_t = std::function<void(
-    mpi::MpiCommCtx const&,
+    mpi::Context const&,
     mpi::ShmSegment<value_t> const&,
     mpi::ShmSegment<value_t>&,
     int,
@@ -182,7 +182,7 @@ int main(int argc, char* argv[])
 
   auto finalizer = rtlx::scope_exit([]() { MPI_Finalize(); });
 
-  mpi::MpiCommCtx worldCtx{MPI_COMM_WORLD};
+  mpi::Context worldCtx{MPI_COMM_WORLD};
 
   auto me = worldCtx.rank();
   auto nr = worldCtx.size();

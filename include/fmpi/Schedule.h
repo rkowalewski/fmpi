@@ -11,14 +11,14 @@ class FlatHandshake {
  public:
   static constexpr const char* NAME = "FlatHandshake";
 
-  mpi::Rank sendRank(mpi::MpiCommCtx const& comm, mpi::mpi_rank phase) const
+  mpi::Rank sendRank(mpi::Context const& comm, mpi::mpi_rank phase) const
       noexcept;
 
-  mpi::Rank recvRank(mpi::MpiCommCtx const& comm, mpi::mpi_rank phase) const
+  mpi::Rank recvRank(mpi::Context const& comm, mpi::mpi_rank phase) const
       noexcept;
 
  private:
-  mpi::Rank hypercube(mpi::MpiCommCtx const& comm, mpi::mpi_rank phase) const
+  mpi::Rank hypercube(mpi::Context const& comm, mpi::mpi_rank phase) const
       noexcept;
 };
 
@@ -26,17 +26,17 @@ class OneFactor {
  public:
   static constexpr const char* NAME = "OneFactor";
 
-  mpi::Rank sendRank(mpi::MpiCommCtx const& comm, mpi::mpi_rank phase) const
+  mpi::Rank sendRank(mpi::Context const& comm, mpi::mpi_rank phase) const
       noexcept;
 
-  mpi::Rank recvRank(mpi::MpiCommCtx const& comm, mpi::mpi_rank phase) const
+  mpi::Rank recvRank(mpi::Context const& comm, mpi::mpi_rank phase) const
       noexcept;
 
  private:
   mpi::Rank factor_even(
-      mpi::MpiCommCtx const& comm, mpi::mpi_rank phase) const noexcept;
+      mpi::Context const& comm, mpi::mpi_rank phase) const noexcept;
 
-  mpi::Rank factor_odd(mpi::MpiCommCtx const& comm, mpi::mpi_rank phase) const
+  mpi::Rank factor_odd(mpi::Context const& comm, mpi::mpi_rank phase) const
       noexcept;
 };
 

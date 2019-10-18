@@ -28,7 +28,7 @@ auto run_algorithm(
     InputIt                begin,
     OutputIt               out,
     int                    blocksize,
-    mpi::MpiCommCtx const& comm,
+    mpi::Context const& comm,
     Computation&&          op)
 {
   auto start = rtlx::ChronoClockNow();
@@ -38,6 +38,6 @@ auto run_algorithm(
 
 template <class Iterator, class Callback>
 using fmpi_algrithm_t = std::function<void(
-    Iterator, Iterator, int, mpi::MpiCommCtx const&, Callback)>;
+    Iterator, Iterator, int, mpi::Context const&, Callback)>;
 
 #endif

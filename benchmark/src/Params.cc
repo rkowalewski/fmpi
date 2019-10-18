@@ -5,7 +5,7 @@
 namespace fmpi::benchmark {
 
 bool process(
-    int argc, char* argv[], ::mpi::MpiCommCtx const& mpiCtx, Params& params)
+    int argc, char* argv[], ::mpi::Context const& mpiCtx, Params& params)
 {
   tlx::CmdlineParser cp;
 

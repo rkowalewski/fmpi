@@ -4,7 +4,7 @@
 
 namespace mpi {
 
-MpiCommCtx::MpiCommCtx(MPI_Comm comm)
+Context::Context(MPI_Comm comm)
   : m_comm(comm)
 {
   int sz, rank;
@@ -15,17 +15,17 @@ MpiCommCtx::MpiCommCtx(MPI_Comm comm)
   m_rank = static_cast<Rank>(rank);
 }
 
-Rank MpiCommCtx::rank() const noexcept
+Rank Context::rank() const noexcept
 {
   return m_rank;
 }
 
-MpiCommCtx::size_type MpiCommCtx::size() const noexcept
+Context::size_type Context::size() const noexcept
 {
   return m_size;
 }
 
-MPI_Comm MpiCommCtx::mpiComm() const noexcept
+MPI_Comm Context::mpiComm() const noexcept
 {
   return m_comm;
 }
@@ -50,7 +50,7 @@ bool operator!=(Rank lhs, Rank rhs) noexcept
   return !(lhs == rhs);
 }
 
-MpiCommCtx splitSharedComm(MpiCommCtx const& baseComm)
+Context splitSharedComm(Context const& baseComm)
 {
   MPI_Comm sharedComm;
   // split world into shared memory communicator
@@ -63,7 +63,7 @@ MpiCommCtx splitSharedComm(MpiCommCtx const& baseComm)
           &sharedComm),
       MPI_SUCCESS);
 
-  return MpiCommCtx{sharedComm};
+  return Context{sharedComm};
 }
 
 }  // namespace mpi

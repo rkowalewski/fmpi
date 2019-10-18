@@ -22,12 +22,12 @@ struct Rank {
 bool operator==(Rank lhs, Rank rhs) noexcept;
 bool operator!=(Rank lhs, Rank rhs) noexcept;
 
-class MpiCommCtx {
+class Context {
  public:
   using size_type = std::uint32_t;
 
  public:
-  explicit MpiCommCtx(MPI_Comm comm);
+  explicit Context(MPI_Comm comm);
 
   Rank rank() const noexcept;
 
@@ -41,7 +41,7 @@ class MpiCommCtx {
   MPI_Comm  m_comm{MPI_COMM_NULL};
 };
 
-MpiCommCtx splitSharedComm(MpiCommCtx const& baseComm);
+Context splitSharedComm(Context const& baseComm);
 
 }  // namespace mpi
 

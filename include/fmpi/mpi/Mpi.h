@@ -78,7 +78,7 @@ class ShmSegment : private detail::MemorySegmentBase {
 
   ShmSegment() = default;
 
-  ShmSegment(MpiCommCtx const & ctx, size_t nels)
+  ShmSegment(Context const & ctx, size_t nels)
     : MemorySegmentBase(nels * sizeof(T), sizeof(T))
     , m_baseptrs(ctx.size())
   {
@@ -170,7 +170,7 @@ struct GlobalSegment : private detail::MemorySegmentBase {
 
   GlobalSegment() = default;
 
-  GlobalSegment(MpiCommCtx const& ctx, size_t nels)
+  GlobalSegment(Context const& ctx, size_t nels)
     : MemorySegmentBase(ctx, nels * sizeof(T), sizeof(T))
   {
     MPI_Info info = MPI_INFO_NULL;

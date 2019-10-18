@@ -13,7 +13,7 @@ inline bool irecv(
     std::size_t       count,
     Rank              source,
     int               tag,
-    MpiCommCtx const& ctx,
+    Context const& ctx,
     MPI_Request&      req)
 
 {
@@ -37,7 +37,7 @@ inline bool isend(
     std::size_t       count,
     Rank              target,
     int               tag,
-    MpiCommCtx const& ctx,
+    Context const& ctx,
     MPI_Request&      req)
 
 {
@@ -65,7 +65,7 @@ inline bool sendrecv(
     std::size_t       recvcount,
     Rank              source,
     int               recvtag,
-    MpiCommCtx const& ctx)
+    Context const& ctx)
 {
   RTLX_ASSERT(sendcount < std::numeric_limits<int>::max());
   RTLX_ASSERT(recvcount < std::numeric_limits<int>::max());
@@ -91,7 +91,7 @@ inline bool alltoall(
     std::size_t       sendcount,
     U*                recvbuf,
     std::size_t       recvcount,
-    MpiCommCtx const& ctx)
+    Context const& ctx)
 {
   RTLX_ASSERT(sendcount < std::numeric_limits<int>::max());
   RTLX_ASSERT(recvcount < std::numeric_limits<int>::max());
@@ -107,7 +107,7 @@ inline bool alltoall(
 }
 
 template <class T>
-inline auto allreduce_minmax(MpiCommCtx const& ctx, T value)
+inline auto allreduce_minmax(Context const& ctx, T value)
 {
   auto mpi_type = mpi::type_mapper<T>::type();
 

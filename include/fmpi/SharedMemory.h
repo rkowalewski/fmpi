@@ -19,7 +19,7 @@ enum class AllToAllAlgorithm;
 
 template <class T, class Op>
 inline void all2allMortonZSource(
-    mpi::MpiCommCtx const&    ctx,
+    mpi::Context const&    ctx,
     mpi::ShmSegment<T> const& from,
     mpi::ShmSegment<T>&       to,
     int                       blocksize,
@@ -221,7 +221,7 @@ inline void all2allMortonZSource(
 
 template <class T, class Op>
 inline void all2allMortonZDest(
-    mpi::MpiCommCtx const&    ctx,
+    mpi::Context const&    ctx,
     mpi::ShmSegment<T> const& from,
     mpi::ShmSegment<T>&       to,
     int                       blocksize,
@@ -426,7 +426,7 @@ inline void all2allMortonZDest(
 
 template <class T, class Op>
 inline void all2allNaive(
-    mpi::MpiCommCtx const&    ctx,
+    mpi::Context const&    ctx,
     mpi::ShmSegment<T> const& from,
     mpi::ShmSegment<T>&       to,
     int                       blocksize,

@@ -74,11 +74,11 @@ template <
     class Op,
     size_t NReqs = 2>
 inline void scatteredPairwiseWaitsome(
-    InputIt                begin,
-    OutputIt               out,
-    int                    blocksize,
-    mpi::MpiCommCtx const& ctx,
-    Op&&                   op)
+    InputIt             begin,
+    OutputIt            out,
+    int                 blocksize,
+    mpi::Context const& ctx,
+    Op&&                op)
 {
   // Tuning Parameters:
 
@@ -171,8 +171,7 @@ inline void scatteredPairwiseWaitsome(
     return &*std::next(begin, peer * blocksize);
   };
 
-  auto sendOp = [&reqs, blocksize, ctx](
-                    auto* buf, auto peer, auto reqIdx) {
+  auto sendOp = [&reqs, blocksize, ctx](auto* buf, auto peer, auto reqIdx) {
     FMPI_DBG_STREAM("sending to " << peer << " reqIdx " << reqIdx);
     return mpi::isend(buf, blocksize, peer, 100, ctx, reqs[reqIdx]);
   };
@@ -425,11 +424,11 @@ inline void scatteredPairwiseWaitsome(
 
 template <AllToAllAlgorithm algo, class InputIt, class OutputIt, class Op>
 inline void scatteredPairwise(
-    InputIt                begin,
-    OutputIt               out,
-    int                    blocksize,
-    mpi::MpiCommCtx const& ctx,
-    Op&&                   op)
+    InputIt             begin,
+    OutputIt            out,
+    int                 blocksize,
+    mpi::Context const& ctx,
+    Op&&                op)
 {
   auto nr = ctx.size();
   auto me = ctx.rank();
@@ -513,11 +512,11 @@ inline void scatteredPairwise(
 
 template <class InputIt, class OutputIt, class Op>
 inline void MpiAlltoAll(
-    InputIt                begin,
-    OutputIt               out,
-    int                    blocksize,
-    mpi::MpiCommCtx const& ctx,
-    Op&&                   op)
+    InputIt             begin,
+    OutputIt            out,
+    int                 blocksize,
+    mpi::Context const& ctx,
+    Op&&                op)
 {
   using value_type = typename std::iterator_traits<InputIt>::value_type;
 
