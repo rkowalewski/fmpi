@@ -4,56 +4,50 @@
 
 namespace mpi {
 
-MpiCommCtx::MpiCommCtx(MPI_Comm const& base)
+MpiCommCtx::MpiCommCtx(MPI_Comm comm)
+  : m_comm(comm)
 {
-  m_comm = base;
-  _initialize();
+  int sz, rank;
+  RTLX_ASSERT_RETURNS(MPI_Comm_size(m_comm, &sz), MPI_SUCCESS);
+  m_size = sz;
+
+  RTLX_ASSERT_RETURNS(MPI_Comm_rank(m_comm, &rank), MPI_SUCCESS);
+  m_rank = static_cast<Rank>(rank);
 }
 
-MpiCommCtx::MpiCommCtx(MPI_Comm&& base)
-{
-  m_comm = std::move(base);
-  _initialize();
-}
-
-rank_t MpiCommCtx::rank() const noexcept
+Rank MpiCommCtx::rank() const noexcept
 {
   return m_rank;
 }
 
-rank_t MpiCommCtx::size() const noexcept
+MpiCommCtx::size_type MpiCommCtx::size() const noexcept
 {
   return m_size;
 }
 
-MPI_Comm const& MpiCommCtx::mpiComm() const noexcept
+MPI_Comm MpiCommCtx::mpiComm() const noexcept
 {
   return m_comm;
 }
 
-MpiCommCtx::MpiCommCtx(MpiCommCtx&& other) noexcept
-{
-  *this = std::move(other);
-}
-
-MpiCommCtx& MpiCommCtx::operator=(MpiCommCtx&& other) noexcept
-{
-  std::swap(m_comm, other.m_comm);
-  std::swap(m_size, other.m_size);
-  std::swap(m_rank, other.m_rank);
-
-  other.m_comm = MPI_COMM_NULL;
-  return *this;
-}
-
-MpiCommCtx::~MpiCommCtx()
+Rank::Rank(int32_t rank) noexcept
+  : m_rank(rank)
 {
 }
 
-void MpiCommCtx::_initialize()
+Rank::operator int32_t() const noexcept
 {
-  RTLX_ASSERT_RETURNS(MPI_Comm_size(m_comm, &m_size), MPI_SUCCESS);
-  RTLX_ASSERT_RETURNS(MPI_Comm_rank(m_comm, &m_rank), MPI_SUCCESS);
+  return m_rank;
+}
+
+bool operator==(Rank lhs, Rank rhs) noexcept
+{
+  return static_cast<mpi_rank>(lhs) == static_cast<mpi_rank>(rhs);
+}
+
+bool operator!=(Rank lhs, Rank rhs) noexcept
+{
+  return !(lhs == rhs);
 }
 
 MpiCommCtx splitSharedComm(MpiCommCtx const& baseComm)

@@ -2,7 +2,6 @@
 #define MPI__ALGORITHM_H
 
 #include <fmpi/mpi/Environment.h>
-#include <fmpi/mpi/Types.h>
 
 #include <rtlx/Assert.h>
 
@@ -12,7 +11,7 @@ template <class T>
 inline bool irecv(
     T*                buf,
     std::size_t       count,
-    rank_t            source,
+    Rank              source,
     int               tag,
     MpiCommCtx const& ctx,
     MPI_Request&      req)
@@ -23,14 +22,20 @@ inline bool irecv(
   RTLX_ASSERT(count < std::numeric_limits<int>::max());
 
   return MPI_Irecv(
-      buf, static_cast<int>(count), type, source, tag, ctx.mpiComm(), &req) == MPI_SUCCESS;
+             buf,
+             static_cast<int>(count),
+             type,
+             source,
+             tag,
+             ctx.mpiComm(),
+             &req) == MPI_SUCCESS;
 }
 
 template <class T>
 inline bool isend(
     T const*          buf,
     std::size_t       count,
-    rank_t            target,
+    Rank              target,
     int               tag,
     MpiCommCtx const& ctx,
     MPI_Request&      req)
@@ -41,18 +46,24 @@ inline bool isend(
   RTLX_ASSERT(count < std::numeric_limits<int>::max());
 
   return MPI_Isend(
-      buf, static_cast<int>(count), type, target, tag, ctx.mpiComm(), &req) == MPI_SUCCESS;
+             buf,
+             static_cast<int>(count),
+             type,
+             target,
+             tag,
+             ctx.mpiComm(),
+             &req) == MPI_SUCCESS;
 }
 
 template <class T, class U>
 inline bool sendrecv(
     T const*          sendbuf,
     std::size_t       sendcount,
-    rank_t            dest,
+    Rank              dest,
     int               sendtag,
     U*                recvbuf,
-    int               recvcount,
-    rank_t            source,
+    std::size_t       recvcount,
+    Rank              source,
     int               recvtag,
     MpiCommCtx const& ctx)
 {
@@ -60,18 +71,18 @@ inline bool sendrecv(
   RTLX_ASSERT(recvcount < std::numeric_limits<int>::max());
 
   return MPI_Sendrecv(
-      sendbuf,
-      static_cast<int>(sendcount),
-      mpi::type_mapper<T>::type(),
-      dest,
-      sendtag,
-      recvbuf,
-      static_cast<int>(recvcount),
-      mpi::type_mapper<U>::type(),
-      source,
-      recvtag,
-      ctx.mpiComm(),
-      MPI_STATUS_IGNORE) == MPI_SUCCESS;
+             sendbuf,
+             static_cast<int>(sendcount),
+             mpi::type_mapper<T>::type(),
+             dest,
+             sendtag,
+             recvbuf,
+             static_cast<int>(recvcount),
+             mpi::type_mapper<U>::type(),
+             source,
+             recvtag,
+             ctx.mpiComm(),
+             MPI_STATUS_IGNORE) == MPI_SUCCESS;
 }
 
 template <class T, class U>
@@ -86,13 +97,13 @@ inline bool alltoall(
   RTLX_ASSERT(recvcount < std::numeric_limits<int>::max());
 
   return MPI_Alltoall(
-      sendbuf,
-      static_cast<int>(sendcount),
-      mpi::type_mapper<T>::type(),
-      recvbuf,
-      static_cast<int>(recvcount),
-      mpi::type_mapper<U>::type(),
-      ctx.mpiComm()) == MPI_SUCCESS;
+             sendbuf,
+             static_cast<int>(sendcount),
+             mpi::type_mapper<T>::type(),
+             recvbuf,
+             static_cast<int>(recvcount),
+             mpi::type_mapper<U>::type(),
+             ctx.mpiComm()) == MPI_SUCCESS;
 }
 
 template <class T>

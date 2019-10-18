@@ -1,37 +1,44 @@
 #ifndef MPI__ENVIRONMENT_H
 #define MPI__ENVIRONMENT_H
 
-#include <fmpi/mpi/Types.h>
+#include <mpi.h>
+
+#include <fmpi/mpi/TypeMapper.h>
 
 namespace mpi {
 
+using mpi_rank = int32_t;
+
+struct Rank {
+ public:
+  Rank() = default;
+  explicit Rank(mpi_rank rank) noexcept;
+  operator mpi_rank() const noexcept;
+
+ private:
+  mpi_rank m_rank{MPI_PROC_NULL};
+};
+
+bool operator==(Rank lhs, Rank rhs) noexcept;
+bool operator!=(Rank lhs, Rank rhs) noexcept;
+
 class MpiCommCtx {
  public:
-  MpiCommCtx() = default;
+  using size_type = std::uint32_t;
 
-  MpiCommCtx(MPI_Comm const& base);
+ public:
+  explicit MpiCommCtx(MPI_Comm comm);
 
-  MpiCommCtx(MPI_Comm&& base);
+  Rank rank() const noexcept;
 
-  rank_t rank() const noexcept;
+  size_type size() const noexcept;
 
-  rank_t size() const noexcept;
-
-  MPI_Comm const& mpiComm() const noexcept;
-
-  MpiCommCtx(MpiCommCtx&& other) noexcept;
-
-  MpiCommCtx& operator=(MpiCommCtx&& other) noexcept;
-
-  ~MpiCommCtx();
+  MPI_Comm mpiComm() const noexcept;
 
  private:
-  void _initialize();
-
- private:
-  MPI_Comm m_comm{MPI_COMM_NULL};
-  rank_t   m_size{};
-  rank_t   m_rank{};
+  size_type m_size{};
+  Rank      m_rank{};
+  MPI_Comm  m_comm{MPI_COMM_NULL};
 };
 
 MpiCommCtx splitSharedComm(MpiCommCtx const& baseComm);

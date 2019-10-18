@@ -238,7 +238,7 @@ int main(int argc, char* argv[])
           data.begin(),
           correct.begin(),
           static_cast<int>(sendcount),
-          worldCtx.mpiComm(),
+          worldCtx,
           merger);
 
 

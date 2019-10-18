@@ -30,19 +30,17 @@ namespace detail {
 
 template <class Schedule, class ReqIdx, class BufAlloc, class CommOp>
 inline auto enqueueMpiOps(
-    mpi::rank_t const firstPhase,
-    mpi::rank_t const me,
-    mpi::rank_t const reqsInFlight,
-    Schedule&&        partner,
-    ReqIdx&&          reqIdx,
-    BufAlloc&&        bufAlloc,
-    CommOp&&          commOp)
+    uint32_t   phase,
+    mpi::Rank  me,
+    uint32_t   reqsInFlight,
+    Schedule&& partner,
+    ReqIdx&&   reqIdx,
+    BufAlloc&& bufAlloc,
+    CommOp&&   commOp)
 {
-  using mpi::rank_t;
+  uint32_t nreqs;
 
-  rank_t phase, nreqs;
-
-  for (phase = firstPhase, nreqs = 0; nreqs < reqsInFlight; ++phase) {
+  for (nreqs = 0; nreqs < reqsInFlight; ++phase) {
     auto peer = partner(phase);
 
     if (peer == me) {
@@ -52,8 +50,9 @@ inline auto enqueueMpiOps(
 
     auto idx = reqIdx(nreqs);
 
-    FMPI_DBG_STREAM("exchanging data with " << peer << " phase " << phase
-         << " reqIdx " << idx);
+    FMPI_DBG_STREAM(
+        "exchanging data with " << peer << " phase " << phase << " reqIdx "
+                                << idx);
 
     auto* buf = bufAlloc(peer, idx);
 
@@ -66,7 +65,7 @@ inline auto enqueueMpiOps(
 
   return phase;
 }
-}
+}  // namespace detail
 
 template <
     AllToAllAlgorithm algo,
@@ -111,7 +110,8 @@ inline void scatteredPairwiseWaitsome(
   }
 
   int wait = 0;
-  while(wait);
+  while (wait)
+    ;
 
   auto trace = rtlx::TimeTrace{ctx.rank(), s};
 
@@ -171,10 +171,10 @@ inline void scatteredPairwiseWaitsome(
     return &*std::next(begin, peer * blocksize);
   };
 
-  auto sendOp = [&reqs, blocksize, comm = ctx.mpiComm()](
+  auto sendOp = [&reqs, blocksize, ctx](
                     auto* buf, auto peer, auto reqIdx) {
     FMPI_DBG_STREAM("sending to " << peer << " reqIdx " << reqIdx);
-    return mpi::isend(buf, blocksize, peer, 100, comm, reqs[reqIdx]);
+    return mpi::isend(buf, blocksize, peer, 100, ctx, reqs[reqIdx]);
   };
 
   sphase = detail::enqueueMpiOps(
@@ -250,10 +250,10 @@ inline void scatteredPairwiseWaitsome(
 
       auto reqsCompleted = mpi::waitsome(reqs);
 
-      std::for_each(std::begin(reqsCompleted), std::end(reqsCompleted), [&reqs](auto reqIdx) {
-        reqs[reqIdx] = MPI_REQUEST_NULL;
-      });
-
+      std::for_each(
+          std::begin(reqsCompleted),
+          std::end(reqsCompleted),
+          [&reqs](auto reqIdx) { reqs[reqIdx] = MPI_REQUEST_NULL; });
 
       ncReqs += reqsCompleted.size();
 
@@ -457,15 +457,15 @@ inline void scatteredPairwise(
 
   auto commAlgo = algo_type{};
 
-  for (int r = 0; r < nr; ++r) {
+  for (int r = 0; r < static_cast<int>(nr); ++r) {
     auto sendto   = commAlgo.sendRank(ctx, r);
     auto recvfrom = commAlgo.recvRank(ctx, r);
 
     if (sendto == me) {
-      sendto = MPI_PROC_NULL;
+      sendto = mpi::Rank{};
     }
     if (recvfrom == me) {
-      recvfrom = MPI_PROC_NULL;
+      recvfrom = mpi::Rank{};
     }
     if (sendto == MPI_PROC_NULL && recvfrom == MPI_PROC_NULL) {
       continue;
@@ -493,7 +493,7 @@ inline void scatteredPairwise(
   std::vector<std::pair<InputIt, InputIt>> chunks;
   chunks.reserve(nr);
 
-  auto range = fmpi::range(0, nr * blocksize, blocksize);
+  auto range = fmpi::range<uint32_t>(0, nr * blocksize, blocksize);
 
   std::transform(
       std::begin(range),
@@ -540,7 +540,7 @@ inline void MpiAlltoAll(
   std::vector<std::pair<InputIt, InputIt>> chunks;
   chunks.reserve(nr);
 
-  auto range = fmpi::range(0, nr * blocksize, blocksize);
+  auto range = fmpi::range<uint32_t>(0, nr * blocksize, blocksize);
 
   std::transform(
       std::begin(range),

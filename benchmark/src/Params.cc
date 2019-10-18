@@ -2,8 +2,6 @@
 
 #include <tlx/cmdline_parser.hpp>
 
-#include <fmpi/mpi/Types.h>
-
 namespace fmpi::benchmark {
 
 bool process(

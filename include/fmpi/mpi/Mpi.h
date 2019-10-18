@@ -13,6 +13,7 @@
 
 #include <fmpi/mpi/Algorithm.h>
 
+#if 0
 namespace mpi {
 
 namespace detail {
@@ -230,5 +231,6 @@ struct GlobalSegment : private detail::MemorySegmentBase {
 
 
 }  // namespace mpi
+#endif
 
 #endif

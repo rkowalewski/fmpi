@@ -1,12 +1,11 @@
-#ifndef MPI__TYPE_MAPPER_H
-#define MPI__TYPE_MAPPER_H
+#ifndef FMPI__MPI__DETAIL__TYPE_MAPPER_H
+#define FMPI__MPI__DETAIL__TYPE_MAPPER_H
 
 #include <mpi.h>
 
 #include <type_traits>
 
 namespace mpi {
-
 
 namespace detail {
 
@@ -23,12 +22,12 @@ struct type_mapper {
 };
 
 #define FMPI_MPI_DATATYPE_MAPPER(integral_type, mpi_type) \
-  template <>                                            \
-  struct type_mapper<integral_type> {                    \
-    static constexpr MPI_Datatype type()                 \
-    {                                                    \
-      return mpi_type;                                   \
-    }                                                    \
+  template <>                                             \
+  struct type_mapper<integral_type> {                     \
+    static constexpr MPI_Datatype type()                  \
+    {                                                     \
+      return mpi_type;                                    \
+    }                                                     \
   };
 
 FMPI_MPI_DATATYPE_MAPPER(int, MPI_INT)
@@ -55,9 +54,5 @@ struct type_mapper {
   }
 };
 
-
-using rank_t          = int32_t;
-using size_type       = MPI_Aint;
-using difference_type = int32_t;
 }  // namespace mpi
 #endif
