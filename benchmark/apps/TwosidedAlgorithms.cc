@@ -178,11 +178,9 @@ int main(int argc, char* argv[])
 
     auto nels = sendcount * nr;
 
-    auto data = storage_t(nels);
-    auto out  = storage_t(nels);
-#ifndef NDEBUG
-    auto correct = storage_t(nels);
-#endif
+    auto data    = storage_t(nels);
+    auto out     = storage_t(nels);
+    auto correct = storage_t(0);
 
     for (int it = 0; it < niters + nwarmup; ++it) {
 #pragma omp parallel
@@ -192,7 +190,7 @@ int main(int argc, char* argv[])
 #pragma omp for
         for (std::size_t block = 0; block < std::size_t(nr); ++block) {
 #ifdef NDEBUG
-          // generate some randome values
+          // generate some random values
           std::generate(
               std::next(data.begin(), block * sendcount),
               std::next(data.begin(), (block + 1) * sendcount),
@@ -233,18 +231,15 @@ int main(int argc, char* argv[])
 
       // first we want to obtain the correct result which we can verify then
       // with our own algorithms
-#ifndef NDEBUG
-      fmpi::MpiAlltoAll(
-          data.begin(),
-          correct.begin(),
-          static_cast<int>(sendcount),
-          worldCtx,
-          merger);
-
-
-      RTLX_ASSERT(
-          std::is_sorted(correct.begin(), std::next(correct.begin(), nels)));
-#endif
+      if (params.check) {
+        correct = storage_t(nels);
+        fmpi::MpiAlltoAll(
+            data.begin(),
+            correct.begin(),
+            static_cast<int>(sendcount),
+            worldCtx,
+            merger);
+      }
 
       Measurement m{};
       m.nhosts    = params.nhosts;
@@ -277,10 +272,16 @@ int main(int argc, char* argv[])
             worldCtx,
             merger);
 
-#ifndef NDEBUG
-        RTLX_ASSERT(std::equal(
-            correct.begin(), std::next(correct.begin(), nels), out.begin()));
-#endif
+        if (params.check) {
+          auto check = std::equal(
+              correct.begin(), std::next(correct.begin(), nels), out.begin());
+
+          if (!check) {
+            std::ostringstream os;
+            os << "[ERROR] Rank " << me << ": Not a correct sequence\n";
+            std::cout << os.str();
+          }
+        }
 
         if (it >= nwarmup) {
           auto trace = rtlx::TimeTrace{me, algo.first};

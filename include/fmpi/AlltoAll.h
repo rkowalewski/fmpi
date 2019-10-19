@@ -58,7 +58,8 @@ inline auto enqueueMpiOps(
 
     RTLX_ASSERT(buf);
 
-    RTLX_ASSERT(commOp(buf, peer, idx));
+    auto success = commOp(buf, peer, idx);
+    RTLX_ASSERT(success);
 
     ++nreqs;
   }
@@ -204,7 +205,8 @@ inline void scatteredPairwiseWaitsome(
   if (alreadyDone) {
     // We are already done
     // Wait for previous round
-    RTLX_ASSERT(mpi::waitall(reqs));
+    auto success = mpi::waitall(reqs);
+    RTLX_ASSERT(success);
 
     trace.tock(COMMUNICATION);
 
@@ -468,7 +470,7 @@ inline void scatteredPairwise(
     FMPI_DBG(sendto);
     FMPI_DBG(recvfrom);
 
-    RTLX_ASSERT(mpi::sendrecv(
+    auto success = mpi::sendrecv(
         std::next(begin, sendto * blocksize),
         blocksize,
         sendto,
@@ -477,7 +479,9 @@ inline void scatteredPairwise(
         blocksize,
         recvfrom,
         100,
-        ctx));
+        ctx);
+
+    RTLX_ASSERT(success);
   }
 
   trace.tock(COMMUNICATION);
@@ -524,8 +528,10 @@ inline void MpiAlltoAll(
 
   auto rbuf = std::unique_ptr<value_type[]>(new value_type[nr * blocksize]);
 
-  RTLX_ASSERT(mpi::alltoall(
-      std::addressof(*begin), blocksize, &rbuf[0], blocksize, ctx));
+  auto success = mpi::alltoall(
+      std::addressof(*begin), blocksize, &rbuf[0], blocksize, ctx);
+
+  RTLX_ASSERT(success);
 
   trace.tock(COMMUNICATION);
 
