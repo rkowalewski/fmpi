@@ -36,15 +36,11 @@ if(CMAKE_VERSION VERSION_GREATER 3.6 AND ENABLE_CLANG_TIDY)
 
     message(INFO "tracked files: ${TRACKED_FILES}")
 
+    # we cannot break multi line strings here
     list(APPEND RUN_CLANG_TIDY_BIN_ARGS
         -clang-tidy-binary ${CLANG_TIDY_BIN}
         "\"-header-filter=.*${CMAKE_SOURCE_DIR}.*/(include|libs|src)/.*\""
-        "\"-checks=*,\
-        -hicpp-no-array-decay,\
-        -fuchsia*,-cppcoreguidelines-pro-bounds-array-to-pointer-decay,\
-        -clang-analyzer-core.NonNull*,\
-        -clang-analyzer-core.NullDereference,\
-        -clang-analyzer-core.uninitialized.Branch\""
+        "\"-checks=*,-hicpp-no-array-decay,-fuchsia*,-cppcoreguidelines-pro-bounds-array-to-pointer-decay,-clang-analyzer-core.NonNull*,-clang-analyzer-core.NullDereference,-clang-analyzer-core.uninitialized.Branch\""
         )
 
     if (CLANG_TIDY_FIX)

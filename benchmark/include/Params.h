@@ -15,10 +15,19 @@ typedef struct Params {
   std::size_t  minblocksize{MINSZ};
   std::size_t  maxblocksize{MAXSZ};
   unsigned int nhosts{};
-  bool         check{false};
+#ifdef NDEBUG
+  unsigned int niters{10};
+#else
+  unsigned int niters{1};
+#endif
+  bool check{false};
 } Params;
 
-bool process(int /*argc*/, char* argv[], ::mpi::Context const&, Params&);
+bool process(
+    int /*argc*/,
+    char* argv[],
+    ::mpi::Context const& /*mpiCtx*/,
+    Params& /*params*/);
 
 }  // namespace benchmark
 }  // namespace fmpi

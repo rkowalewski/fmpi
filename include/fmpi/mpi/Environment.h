@@ -1,10 +1,11 @@
 #ifndef FMPI_MPI_ENVIRONMENT_H
 #define FMPI_MPI_ENVIRONMENT_H
 
+#include <cstdint>
+
 #include <mpi.h>
 
 #include <fmpi/mpi/TypeMapper.h>
-#include <cstdint>
 
 namespace mpi {
 
@@ -14,7 +15,10 @@ struct Rank {
  public:
   Rank() = default;
   explicit Rank(mpi_rank rank) noexcept;
-  operator mpi_rank() const noexcept; //NOLINT
+  operator mpi_rank() const noexcept;  // NOLINT
+
+  Rank&      operator++();
+  const Rank operator++(int) const;
 
  private:
   mpi_rank m_rank{MPI_PROC_NULL};

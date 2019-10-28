@@ -58,8 +58,7 @@ inline auto enqueueMpiOps(
 
     RTLX_ASSERT(buf);
 
-    auto success = commOp(buf, peer, idx);
-    RTLX_ASSERT(success);
+    FMPI_CHECK(commOp(buf, peer, idx));
 
     ++nreqs;
   }
@@ -110,10 +109,6 @@ inline void scatteredPairwiseWaitsome(
     s = os.str();
   }
 
-  int wait = 0;
-  while (wait)
-    ;
-
   auto trace = rtlx::TimeTrace{ctx.rank(), s};
 
   FMPI_DBG_STREAM("running algorithm " << s << ", blocksize: " << blocksize);
@@ -149,7 +144,7 @@ inline void scatteredPairwiseWaitsome(
                        auto* buf, auto peer, auto reqIdx) {
     FMPI_DBG_STREAM("receiving from " << peer << " reqIdx " << reqIdx);
 
-    return mpi::irecv(buf, blocksize, peer, 100, ctx, reqs[reqIdx]);
+    return mpi::irecv(buf, blocksize, peer, 100, ctx, &reqs[reqIdx]);
   };
 
   rphase = detail::enqueueMpiOps(
@@ -174,7 +169,7 @@ inline void scatteredPairwiseWaitsome(
 
   auto sendOp = [&reqs, blocksize, ctx](auto* buf, auto peer, auto reqIdx) {
     FMPI_DBG_STREAM("sending to " << peer << " reqIdx " << reqIdx);
-    return mpi::isend(buf, blocksize, peer, 100, ctx, reqs[reqIdx]);
+    return mpi::isend(buf, blocksize, peer, 100, ctx, &reqs[reqIdx]);
   };
 
   sphase = detail::enqueueMpiOps(
@@ -205,8 +200,7 @@ inline void scatteredPairwiseWaitsome(
   if (alreadyDone) {
     // We are already done
     // Wait for previous round
-    auto success = mpi::waitall(reqs);
-    RTLX_ASSERT(success);
+    FMPI_CHECK(mpi::waitall(reqs));
 
     trace.tock(COMMUNICATION);
 
@@ -470,7 +464,7 @@ inline void scatteredPairwise(
     FMPI_DBG(sendto);
     FMPI_DBG(recvfrom);
 
-    auto success = mpi::sendrecv(
+    FMPI_CHECK(mpi::sendrecv(
         std::next(begin, sendto * blocksize),
         blocksize,
         sendto,
@@ -479,9 +473,7 @@ inline void scatteredPairwise(
         blocksize,
         recvfrom,
         100,
-        ctx);
-
-    RTLX_ASSERT(success);
+        ctx));
   }
 
   trace.tock(COMMUNICATION);
@@ -528,10 +520,8 @@ inline void MpiAlltoAll(
 
   auto rbuf = std::unique_ptr<value_type[]>(new value_type[nr * blocksize]);
 
-  auto success = mpi::alltoall(
-      std::addressof(*begin), blocksize, &rbuf[0], blocksize, ctx);
-
-  RTLX_ASSERT(success);
+  FMPI_CHECK(mpi::alltoall(
+      std::addressof(*begin), blocksize, &rbuf[0], blocksize, ctx));
 
   trace.tock(COMMUNICATION);
 

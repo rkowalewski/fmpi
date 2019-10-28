@@ -11,22 +11,22 @@
 
 #include <fmpi/Constants.h>
 #include <fmpi/Math.h>
-#include <fmpi/mpi/PointToPoint.h>
+#include <fmpi/mpi/Algorithm.h>
+#include <fmpi/mpi/Environment.h>
 
 namespace fmpi {
 
 template <class InputIt, class OutputIt, class Op>
 inline void bruck(
-    InputIt  begin,
-    OutputIt out,
-    int      blocksize,
-    MPI_Comm comm,
-    Op&& /*unused*/)
+    InputIt             begin,
+    OutputIt            out,
+    int                 blocksize,
+    mpi::Context const& ctx,
+    Op&&                op)
 {
-  using rank_t = int;
-  rank_t me, nr;
-  MPI_Comm_rank(comm, &me);
-  MPI_Comm_size(comm, &nr);
+  using rank_t  = int;
+  auto const me = ctx.rank();
+  auto const nr = static_cast<mpi::mpi_rank>(ctx.size());
 
   using value_t = typename std::iterator_traits<InputIt>::value_type;
 
@@ -59,12 +59,13 @@ inline void bruck(
 
   auto n_rounds = std::ceil(std::log2(nr));
   for (std::size_t idx = 0; idx < n_rounds; ++idx) {
-    auto j = (1 << idx);
-    int  recvfrom, sendto;
+    auto      j = (1 << idx);
+    mpi::Rank recvfrom, sendto;
 
     // We send to (r + j)
-    std::tie(recvfrom, sendto) =
-        std::make_pair(mod(me - j, nr), mod(me + j, nr));
+    std::tie(recvfrom, sendto) = std::make_pair(
+        static_cast<mpi::Rank>(mod(me - j, nr)),
+        static_cast<mpi::Rank>(mod(me + j, nr)));
 
     // We exchange all blocks where the j-th bit is set
 
@@ -84,7 +85,7 @@ inline void bruck(
       }
     }
 
-    auto reqs = mpi::sendrecv(
+    FMPI_CHECK(mpi::sendrecv(
         sendbuf,
         blocksize * count,
         sendto,
@@ -93,12 +94,7 @@ inline void bruck(
         blocksize * count,
         recvfrom,
         100,
-        comm);
-
-    // Wait for final round
-    RTLX_ASSERT_RETURNS(
-        MPI_Waitall(reqs.size(), &(reqs[0]), MPI_STATUSES_IGNORE),
-        MPI_SUCCESS);
+        ctx));
 
     // c) unpack blocks into recv buffer
     count = 0;
@@ -132,20 +128,41 @@ inline void bruck(
         out + block * blocksize);
   }
   trace.tock(COMMUNICATION);
+  trace.tick(MERGE);
+
+  std::vector<std::pair<InputIt, InputIt>> chunks;
+  chunks.reserve(nr);
+
+  auto range = fmpi::range<uint32_t>(0, nr * blocksize, blocksize);
+
+  std::transform(
+      std::begin(range),
+      std::end(range),
+      std::back_inserter(chunks),
+      [buf = tmpbuf.get(), blocksize](auto offset) {
+        auto f = std::next(buf, offset);
+        auto l = std::next(f, blocksize);
+        return std::make_pair(f, l);
+      });
+
+  op(chunks, out);
+
+  trace.tock(MERGE);
+
+  RTLX_ASSERT(std::is_sorted(out, out + nr * blocksize));
 }
 
 template <class InputIt, class OutputIt, class Op>
 inline void bruck_mod(
-    InputIt  begin,
-    OutputIt out,
-    int      blocksize,
-    MPI_Comm comm,
-    Op&& /*unused*/)
+    InputIt             begin,
+    OutputIt            out,
+    int                 blocksize,
+    mpi::Context const& ctx,
+    Op&&                op)
 {
   using rank_t = int;
-  rank_t me, nr;
-  MPI_Comm_rank(comm, &me);
-  MPI_Comm_size(comm, &nr);
+  auto me      = ctx.rank();
+  auto nr      = static_cast<rank_t>(ctx.size());
 
   using value_t = typename std::iterator_traits<InputIt>::value_type;
 
@@ -181,18 +198,19 @@ inline void bruck_mod(
 
   // range = [0..log2(nr)]
   for (auto r = 0; r < std::ceil(std::log2(nr)); ++r) {
-    auto j = (1 << r);
-    int  recvfrom, sendto;
+    auto      j = (1 << r);
+    mpi::Rank recvfrom, sendto;
 
     // In contrast to classic Bruck, sender and receiver are swapped
-    std::tie(recvfrom, sendto) =
-        std::make_pair(mod(me + j, nr), mod(me - j, nr));
+    std::tie(recvfrom, sendto) = std::make_pair(
+        static_cast<mpi::Rank>(mod(me + j, nr)),
+        static_cast<mpi::Rank>(mod(me - j, nr)));
 
     // a) pack blocks into a contigous send buffer
     size_t count = 0;
 
     {
-      for (auto block = me; block < me + nr; ++block) {
+      for (auto block = me; static_cast<int>(block) < me + nr; ++block) {
         //
         auto myblock = block - me;
         auto myidx   = block % nr;
@@ -210,7 +228,7 @@ inline void bruck_mod(
     }
 
     // b) exchange
-    auto reqs = mpi::sendrecv(
+    FMPI_CHECK(mpi::sendrecv(
         sendbuf,
         blocksize * count,
         sendto,
@@ -219,12 +237,7 @@ inline void bruck_mod(
         blocksize * count,
         recvfrom,
         100,
-        comm);
-
-    // Wait for final round
-    RTLX_ASSERT_RETURNS(
-        MPI_Waitall(reqs.size(), &(reqs[0]), MPI_STATUSES_IGNORE),
-        MPI_SUCCESS);
+        ctx));
 
     // c) unpack blocks into recv buffer
     count = 0;
@@ -245,6 +258,29 @@ inline void bruck_mod(
     }
   }
   trace.tock(COMMUNICATION);
+
+  trace.tick(MERGE);
+
+  std::vector<std::pair<InputIt, InputIt>> chunks;
+  chunks.reserve(nr);
+
+  auto range = fmpi::range<uint32_t>(0, nr * blocksize, blocksize);
+
+  std::transform(
+      std::begin(range),
+      std::end(range),
+      std::back_inserter(chunks),
+      [buf = tmpbuf.get(), blocksize](auto offset) {
+        auto f = std::next(buf, offset);
+        auto l = std::next(f, blocksize);
+        return std::make_pair(f, l);
+      });
+
+  op(chunks, out);
+
+  trace.tock(MERGE);
+
+  RTLX_ASSERT(std::is_sorted(out, out + nr * blocksize));
 }
 }  // namespace fmpi
 

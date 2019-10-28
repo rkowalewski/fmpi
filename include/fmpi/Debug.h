@@ -1,8 +1,8 @@
 #ifndef FMPI__DETAIL__DEBUG_H
 #define FMPI__DETAIL__DEBUG_H
 
-#include <mpi.h>
 #include <dbg.h>
+#include <mpi.h>
 
 namespace fmpi::detail {
 
@@ -123,5 +123,11 @@ class DebugOutput {
 #define FMPI_DBG_STREAM(expr)
 #define FMPI_DBG_RANGE(f, l)
 #endif
+
+#define FMPI_CHECK(expr)   \
+  do {                     \
+    auto success = (expr); \
+    RTLX_ASSERT(success);  \
+  } while (0)
 
 #endif

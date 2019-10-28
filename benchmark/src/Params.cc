@@ -42,6 +42,9 @@ bool process(
         blocksizes[1],
         "Maximum block size communication to each unit.");
 
+    cp.add_uint(
+        'i', "iterations", params.niters, "Number of iterations per round.");
+
     cp.add_flag(
         'c',
         "check",
@@ -60,13 +63,22 @@ bool process(
           &good, 1, mpi::type_mapper<bool>::type(), 0, mpiCtx.mpiComm()),
       MPI_SUCCESS);
 
-  if (good == 0) {
+  if (static_cast<int>(good) == 0) {
     return false;
   }
 
   RTLX_ASSERT_RETURNS(
       MPI_Bcast(
           &params.nhosts,
+          1,
+          mpi::type_mapper<int>::type(),
+          0,
+          mpiCtx.mpiComm()),
+      MPI_SUCCESS);
+
+  RTLX_ASSERT_RETURNS(
+      MPI_Bcast(
+          &params.niters,
           1,
           mpi::type_mapper<int>::type(),
           0,

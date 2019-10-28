@@ -3,6 +3,7 @@
 #include <tlx/container/simple_vector.hpp>
 
 #include <fmpi/AlltoAll.h>
+#include <fmpi/Bruck.h>
 #include <fmpi/Math.h>
 
 #include <MPISynchronizedBarrier.h>
@@ -100,32 +101,51 @@ std::vector<std::pair<
                           iterator_t,
                           iterator_t,
                           merger_t<iterator_t, iterator_t>,
-                          16>)
+                          16>),
 #if 0
-    std::make_pair(
-        "ScatteredPairwiseWaitany16",
-        fmpi::scatteredPairwiseWaitany<iterator_t, iterator_t, merger_t, 16>),
-    std::make_pair(
-        "ScatteredPairwiseWaitany32",
-        fmpi::scatteredPairwiseWaitany<iterator_t, iterator_t, merger_t, 32>),
-    std::make_pair(
-        "ScatteredPairwiseWaitany64",
-        fmpi::scatteredPairwiseWaitany<iterator_t, iterator_t, merger_t, 64>),
-    std::make_pair(
-        "ScatteredPairwiseWaitany128",
-        fmpi::scatteredPairwiseWaitany<iterator_t, iterator_t, merger_t, 128>),
-    // Hierarchical XOR Shift Hypercube, works only if #PEs is power of two
-    std::make_pair(
-        "Hypercube", fmpi::hypercube<iterator_t, iterator_t, merger_t>),
+                  std::make_pair(
+                      "ScatteredPairwiseWaitany16",
+                      fmpi::scatteredPairwiseWaitany<
+                          iterator_t,
+                          iterator_t,
+                          merger_t,
+                          16>),
+                  std::make_pair(
+                      "ScatteredPairwiseWaitany32",
+                      fmpi::scatteredPairwiseWaitany<
+                          iterator_t,
+                          iterator_t,
+                          merger_t,
+                          32>),
+                  std::make_pair(
+                      "ScatteredPairwiseWaitany64",
+                      fmpi::scatteredPairwiseWaitany<
+                          iterator_t,
+                          iterator_t,
+                          merger_t,
+                          64>),
+                  std::make_pair(
+                      "ScatteredPairwiseWaitany128",
+                      fmpi::scatteredPairwiseWaitany<
+                          iterator_t,
+                          iterator_t,
+                          merger_t,
+                          128>),
 #endif
-// Bruck Algorithms, first the original one, then a modified version which
-// omits the last local rotation step
-#if 0
-    std::make_pair("Bruck", fmpi::bruck<iterator_t, iterator_t, merger_t>),
-    std::make_pair(
-        "Bruck_Mod", fmpi::bruck_mod<iterator_t, iterator_t, merger_t>)
-#endif
-};
+                  // Bruck Algorithms, first the original one, then a modified
+                  // version which omits the last local rotation step
+                  std::make_pair(
+                      "Bruck",
+                      fmpi::bruck<
+                          iterator_t,
+                          iterator_t,
+                          merger_t<iterator_t, iterator_t>>),
+                  std::make_pair(
+                      "Bruck_Mod",
+                      fmpi::bruck_mod<
+                          iterator_t,
+                          iterator_t,
+                          merger_t<iterator_t, iterator_t>>)};
 
 int main(int argc, char* argv[])
 {
@@ -162,7 +182,7 @@ int main(int argc, char* argv[])
   bool is_clock_synced = clock.Init(worldCtx.mpiComm());
   RTLX_ASSERT(is_clock_synced);
 
-  FMPI_DBG(niters);
+  FMPI_DBG(params.niters);
 
   for (size_t blocksize = params.minblocksize, step = 0; step <= nsteps;
        blocksize *= 2, ++step) {
@@ -182,7 +202,7 @@ int main(int argc, char* argv[])
     auto out     = storage_t(nels);
     auto correct = storage_t(0);
 
-    for (int it = 0; it < niters + nwarmup; ++it) {
+    for (auto it = 0; it < static_cast<int>(params.niters) + nwarmup; ++it) {
 #pragma omp parallel
       {
         std::mt19937_64 generator(random_seed_seq::get_instance());
@@ -220,6 +240,9 @@ int main(int argc, char* argv[])
                         std::uint16_t nthreads = 0) {
         // parallel merge does not support inplace merging
         // nels must be the number of elements in all sequences
+        RTLX_ASSERT(seqs.size());
+        RTLX_ASSERT(res);
+#if 1
         __gnu_parallel::multiway_merge(
             std::begin(seqs),
             std::end(seqs),
@@ -227,6 +250,14 @@ int main(int argc, char* argv[])
             nels,
             std::less<>{},
             __gnu_parallel::parallel_tag{nthreads});
+#else
+        static_cast<void>(nthreads);
+
+        for (auto&& seq : seqs) {
+          std::copy(seq.first, seq.second, res);
+          res += std::distance(seq.first, seq.second);
+        }
+#endif
       };
 
       // first we want to obtain the correct result which we can verify then
@@ -254,13 +285,6 @@ int main(int argc, char* argv[])
 
         // We always want to guarantee that all processors start at the same
         // time, so this is a real barrier
-
-        auto isHypercube = algo.first.find("Hypercube") != std::string::npos;
-
-        if (isHypercube && !fmpi::isPow2(static_cast<unsigned>(nr))) {
-          continue;
-        }
-
         auto barrier = clock.Barrier(worldCtx.mpiComm());
         RTLX_ASSERT(barrier.Success(worldCtx.mpiComm()));
 
@@ -278,7 +302,18 @@ int main(int argc, char* argv[])
 
           if (!check) {
             std::ostringstream os;
-            os << "[ERROR] Rank " << me << ": Not a correct sequence\n";
+            os << "[ERROR] [Rank " << me << "] " << algo.first
+               << ": incorrect sequence (";
+            std::copy(
+                out.begin(),
+                out.end(),
+                std::ostream_iterator<value_t>(os, ", "));
+            os << ") vs. (";
+            std::copy(
+                correct.begin(),
+                correct.end(),
+                std::ostream_iterator<value_t>(os, ", "));
+            os << ")\n";
             std::cout << os.str();
           }
         }

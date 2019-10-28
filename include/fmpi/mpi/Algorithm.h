@@ -14,7 +14,7 @@ inline bool irecv(
     Rank              source,
     int               tag,
     Context const& ctx,
-    MPI_Request&      req)
+    MPI_Request*      req)
 
 {
   auto type = mpi::type_mapper<T>::type();
@@ -28,7 +28,7 @@ inline bool irecv(
              source,
              tag,
              ctx.mpiComm(),
-             &req) == MPI_SUCCESS;
+             req) == MPI_SUCCESS;
 }
 
 template <class T>
@@ -38,7 +38,7 @@ inline bool isend(
     Rank              target,
     int               tag,
     Context const& ctx,
-    MPI_Request&      req)
+    MPI_Request*      req)
 
 {
   auto type = mpi::type_mapper<T>::type();
@@ -52,7 +52,7 @@ inline bool isend(
              target,
              tag,
              ctx.mpiComm(),
-             &req) == MPI_SUCCESS;
+             req) == MPI_SUCCESS;
 }
 
 template <class T, class U>

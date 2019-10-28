@@ -40,6 +40,18 @@ Rank::operator int32_t() const noexcept
   return m_rank;
 }
 
+Rank& Rank::operator++()
+{
+  ++m_rank;
+  return *this;
+}
+
+const Rank Rank::operator++(int) const
+{
+  auto tmp = *this;
+  return ++tmp;
+}
+
 bool operator==(Rank lhs, Rank rhs) noexcept
 {
   return static_cast<mpi_rank>(lhs) == static_cast<mpi_rank>(rhs);
