@@ -18,6 +18,28 @@
 
 namespace fmpi {
 
+namespace detail {
+
+template <class BidirIt, class OutputIt>
+OutputIt reverse_copy_strided(
+    BidirIt first, BidirIt last, std::size_t blocksize, OutputIt d_first)
+{
+  auto const n = std::distance(first, last);
+  RTLX_ASSERT(n % blocksize == 0);
+
+  auto const nb = n / blocksize;
+
+  for (auto&& block : range(nb)) {
+    std::copy(
+        first + (nb - block - 1) * blocksize,
+        first + (nb - block) * blocksize,
+        d_first + block * blocksize);
+  }
+
+  return d_first + n;
+}
+}  // namespace detail
+
 template <class InputIt, class OutputIt, class Op>
 inline void bruck(
     InputIt             begin,
@@ -120,13 +142,6 @@ inline void bruck(
       // out
       sendbuf);
 
-  // Reverse these blocks
-  for (std::size_t block = 0; block < nr; ++block) {
-    std::copy(
-        sendbuf + (nr - block - 1) * blocksize,
-        sendbuf + (nr - block) * blocksize,
-        out + block * blocksize);
-  }
   trace.tock(COMMUNICATION);
   trace.tick(MERGE);
 
@@ -148,8 +163,6 @@ inline void bruck(
   op(chunks, out);
 
   trace.tock(MERGE);
-
-  RTLX_ASSERT(std::is_sorted(out, out + nr * blocksize));
 }
 
 template <class InputIt, class OutputIt, class Op>
@@ -173,20 +186,29 @@ inline void bruck_mod(
   std::unique_ptr<value_t[]> tmpbuf;
 
   {
-    // Phase 1: Local Rotate, out[(me + block) % nr] = begin[(me - block) %
-    // nr] This procedure can be achieved efficiently in two substeps
+    if (isPow2(nr)) {
+      // Phase 1: Local Rotate, out[(me + block) % nr] = begin[(me - block) %
+      // nr] This procedure can be achieved efficiently in two substeps
 
-    // a) reverse_copy all blocks
-    for (std::size_t block = 0; block < nr; ++block) {
-      std::copy(
-          begin + (nr - block - 1) * blocksize,
-          begin + (nr - block) * blocksize,
-          out + block * blocksize);
+      // a) reverse_copy all blocks
+      detail::reverse_copy_strided(
+          begin, begin + nr * blocksize, blocksize, out);
+
+      // b) rotate by (n - 2 * me - 1) % n
+      auto shift = mod(nr - 2 * me - 1, nr);
+      std::rotate(out, out + shift * blocksize, out + nels);
     }
+    else {
+      for (auto&& block : range<int>(nr)) {
+        auto dst = mod<int>(me + block, nr);
+        auto src = mod<int>(me - block, nr);
 
-    // b) rotate by (n - 2 * me - 1) % n
-    auto shift = mod(nr - 2 * me - 1, nr);
-    std::rotate(out, out + shift * blocksize, out + nels);
+        std::copy(
+            begin + src * blocksize,
+            begin + (src + 1) * blocksize,
+            out + dst * blocksize);
+      }
+    }
 
     // Phase 2: Communication Rounds
     tmpbuf.reset(new value_t[nels]);
@@ -196,7 +218,7 @@ inline void bruck_mod(
   auto recvbuf = &tmpbuf[nels / 2];
 
   // range = [0..log2(nr)]
-  for (std::size_t r = 0; r < tlx::integer_log2_ceil(nr); ++r) {
+  for (auto&& r : range(tlx::integer_log2_ceil(nr))) {
     auto      j = static_cast<mpi::Rank>(1 << r);
     mpi::Rank recvfrom, sendto;
 
@@ -281,8 +303,6 @@ inline void bruck_mod(
   std::move(tmpbuf.get(), tmpbuf.get() + nels, out);
 
   trace.tock(MERGE);
-
-  RTLX_ASSERT(std::is_sorted(out, out + nr * blocksize));
 }
 }  // namespace fmpi
 
