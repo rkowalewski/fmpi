@@ -12,8 +12,9 @@ namespace fmpi {
 template <class T>
 inline constexpr T mod(T a, T b)
 {
-  RTLX_ASSERT(b > 0);
-  return (a < 0) ? (a % b + b) : (a % b);
+  auto const zero = T{0};
+  RTLX_ASSERT(b > zero);
+  return (a < zero) ? (a % b + b) : (a % b);
 }
 
 template <class T>

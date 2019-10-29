@@ -5,57 +5,61 @@ namespace fmpi {
 
 using namespace mpi;
 
-Rank FlatHandshake::sendRank(mpi::Context const& comm, mpi_rank phase) const
+Rank FlatHandshake::sendRank(mpi::Context const& comm, uint32_t phase) const
 {
-  auto r = isPow2(comm.size())
-               ? hypercube(comm, phase)
-               : mod(comm.rank() + phase, static_cast<mpi_rank>(comm.size()));
+  return isPow2(comm.size()) ? hypercube(comm, phase)
+                             : mod(comm.rank() + static_cast<Rank>(phase),
+                                   static_cast<Rank>(comm.size()));
+}
+
+Rank FlatHandshake::recvRank(mpi::Context const& comm, uint32_t phase) const
+{
+  auto r = isPow2(comm.size()) ? hypercube(comm, phase)
+                               : mod(comm.rank() - static_cast<Rank>(phase),
+                                     static_cast<Rank>(comm.size()));
   return Rank{r};
 }
 
-Rank FlatHandshake::recvRank(mpi::Context const& comm, mpi_rank phase) const
-{
-  auto r = isPow2(comm.size())
-               ? hypercube(comm, phase)
-               : mod(comm.rank() - phase, static_cast<mpi_rank>(comm.size()));
-  return Rank{r};
-}
-
-Rank FlatHandshake::hypercube(mpi::Context const& comm, mpi_rank phase) const
+Rank FlatHandshake::hypercube(mpi::Context const& comm, uint32_t phase) const
 {
   RTLX_ASSERT(isPow2(comm.size()));
-  return Rank{comm.rank() ^ phase};
+  return comm.rank() ^ static_cast<Rank>(phase);
 }
 
-Rank OneFactor::sendRank(mpi::Context const& comm, mpi_rank phase) const
+Rank OneFactor::sendRank(mpi::Context const& comm, uint32_t phase) const
 {
   return (comm.size() % 2) != 0 ? factor_odd(comm, phase)
                                 : factor_even(comm, phase);
 }
 
-Rank OneFactor::recvRank(mpi::Context const& comm, mpi_rank phase) const
+Rank OneFactor::recvRank(mpi::Context const& comm, uint32_t phase) const
 {
   return sendRank(comm, phase);
 }
 
-Rank OneFactor::factor_even(mpi::Context const& comm, mpi_rank phase) const
+Rank OneFactor::factor_even(mpi::Context const& comm, uint32_t phase) const
 {
-  Rank idle = static_cast<Rank>(
-      mod<mpi_rank>(comm.size() * phase / 2, comm.size() - 1));
+  auto idle =
+      mod(static_cast<Rank>(comm.size() * phase / 2),
+          static_cast<Rank>(comm.size() - 1));
 
-  if (comm.rank() == static_cast<mpi_rank>(comm.size()) - 1) {
+  if (comm.rank() == static_cast<Rank>(comm.size() - 1)) {
     return idle;
   }
 
   if (comm.rank() == idle) {
-    return Rank{static_cast<mpi_rank>(comm.size()) - 1};
+    return static_cast<Rank>(comm.size() - 1);
   }
 
-  return Rank{mod<mpi_rank>(phase - comm.rank(), comm.size() - 1)};
+  return mod(
+      static_cast<Rank>(phase) - comm.rank(),
+      static_cast<Rank>(comm.size() - 1));
 }
 
-Rank OneFactor::factor_odd(mpi::Context const& comm, mpi_rank phase) const
+Rank OneFactor::factor_odd(mpi::Context const& comm, uint32_t phase) const
 {
-  return Rank{mod<mpi_rank>(phase - comm.rank(), comm.size())};
+  return mod(
+      static_cast<Rank>(phase) - comm.rank(), static_cast<Rank>(comm.size()));
 }
+
 }  // namespace fmpi

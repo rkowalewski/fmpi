@@ -52,4 +52,10 @@
 #define RTLX_ASSERT_RETURNS(expr, ret) RTLX_ASSERT(((expr) == (ret)))
 #endif
 
+#ifndef NDEBUG
+#define RTLX_NOEXCEPT noexcept
+#else
+#define RTLX_NOEXCEPT
+#endif
+
 #endif

@@ -11,26 +11,26 @@ class FlatHandshake {
  public:
   static constexpr const char* NAME = "FlatHandshake";
 
-  mpi::Rank sendRank(mpi::Context const& comm, mpi::mpi_rank phase) const;
+  mpi::Rank sendRank(mpi::Context const& comm, uint32_t phase) const;
 
-  mpi::Rank recvRank(mpi::Context const& comm, mpi::mpi_rank phase) const;
+  mpi::Rank recvRank(mpi::Context const& comm, uint32_t phase) const;
 
  private:
-  mpi::Rank hypercube(mpi::Context const& comm, mpi::mpi_rank phase) const;
+  mpi::Rank hypercube(mpi::Context const& comm, uint32_t phase) const;
 };
 
 class OneFactor {
  public:
   static constexpr const char* NAME = "OneFactor";
 
-  mpi::Rank sendRank(mpi::Context const& comm, mpi::mpi_rank phase) const;
+  mpi::Rank sendRank(mpi::Context const& comm, uint32_t phase) const;
 
-  mpi::Rank recvRank(mpi::Context const& comm, mpi::mpi_rank phase) const;
+  mpi::Rank recvRank(mpi::Context const& comm, uint32_t phase) const;
 
  private:
-  mpi::Rank factor_even(mpi::Context const& comm, mpi::mpi_rank phase) const;
+  mpi::Rank factor_even(mpi::Context const& comm, uint32_t phase) const;
 
-  mpi::Rank factor_odd(mpi::Context const& comm, mpi::mpi_rank phase) const;
+  mpi::Rank factor_odd(mpi::Context const& comm, uint32_t phase) const;
 };
 
 namespace detail {

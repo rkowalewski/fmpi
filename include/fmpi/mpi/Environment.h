@@ -7,6 +7,10 @@
 
 #include <fmpi/mpi/TypeMapper.h>
 
+#include <rtlx/Assert.h>
+
+#include <iosfwd>
+
 namespace mpi {
 
 using mpi_rank = int32_t;
@@ -15,7 +19,8 @@ struct Rank {
  public:
   Rank() = default;
   explicit Rank(mpi_rank rank) noexcept;
-  operator mpi_rank() const noexcept;  // NOLINT
+           operator mpi_rank() const noexcept;  // NOLINT
+  explicit operator bool() const noexcept;
 
   Rank&      operator++();
   const Rank operator++(int) const;
@@ -24,8 +29,17 @@ struct Rank {
   mpi_rank m_rank{MPI_PROC_NULL};
 };
 
-bool operator==(Rank lhs, Rank rhs) noexcept;
-bool operator!=(Rank lhs, Rank rhs) noexcept;
+Rank operator+(Rank const& lhs, Rank const& rhs) noexcept;
+Rank operator-(Rank const& lhs, Rank const& rhs) noexcept;
+Rank operator^(Rank const& lhs, Rank const& rhs) RTLX_NOEXCEPT;
+Rank operator%(Rank const& lhs, Rank const& rhs) noexcept;
+
+bool operator==(Rank const& lhs, Rank const& rhs) noexcept;
+bool operator!=(Rank const& lhs, Rank const& rhs) noexcept;
+bool operator>(Rank const& lhs, Rank const& rhs) noexcept;
+bool operator<(Rank const& lhs, Rank const& rhs) noexcept;
+
+std::ostream& operator<<(std::ostream& os, Rank const& p);
 
 class Context {
  public:

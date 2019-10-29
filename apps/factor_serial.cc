@@ -22,7 +22,7 @@ inline constexpr T mod(T a, T b)
 {
   assert(b > 0);
   T ret = a % b;
-  return (ret >= 0) ? (ret) : (ret + b);
+  return (ret >= T{0}) ? (ret) : (ret + b);
 }
 
 inline auto oneFactor_odd(int nr)

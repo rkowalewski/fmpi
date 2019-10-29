@@ -26,8 +26,8 @@ typedef struct Params {
 bool process(
     int /*argc*/,
     char* argv[],
-    ::mpi::Context const& /*mpiCtx*/,
-    Params& /*params*/);
+    ::mpi::Context const& mpiCtx,
+    Params& params);
 
 }  // namespace benchmark
 }  // namespace fmpi

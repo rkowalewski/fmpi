@@ -14,6 +14,8 @@
 #include <fmpi/mpi/Algorithm.h>
 #include <fmpi/mpi/Environment.h>
 
+#include <tlx/math/integer_log2.hpp>
+
 namespace fmpi {
 
 template <class InputIt, class OutputIt, class Op>
@@ -24,9 +26,8 @@ inline void bruck(
     mpi::Context const& ctx,
     Op&&                op)
 {
-  using rank_t  = int;
   auto const me = ctx.rank();
-  auto const nr = static_cast<mpi::mpi_rank>(ctx.size());
+  auto const nr = ctx.size();
 
   using value_t = typename std::iterator_traits<InputIt>::value_type;
 
@@ -57,22 +58,21 @@ inline void bruck(
   auto* sendbuf = &tmpbuf[0];
   auto* recvbuf = &tmpbuf[nels / 2];
 
-  auto n_rounds = std::ceil(std::log2(nr));
-  for (std::size_t idx = 0; idx < n_rounds; ++idx) {
-    auto      j = (1 << idx);
+  for (std::size_t idx = 0; idx < tlx::integer_log2_ceil(nr); ++idx) {
+    auto      j = static_cast<mpi::Rank>(1 << idx);
     mpi::Rank recvfrom, sendto;
 
     // We send to (r + j)
     std::tie(recvfrom, sendto) = std::make_pair(
-        static_cast<mpi::Rank>(mod(me - j, nr)),
-        static_cast<mpi::Rank>(mod(me + j, nr)));
+        mod(me - j, static_cast<mpi::Rank>(nr)),
+        mod(me + j, static_cast<mpi::Rank>(nr)));
 
     // We exchange all blocks where the j-th bit is set
 
     // a) pack blocks into a contigous send buffer
     size_t count = 0;
 
-    for (rank_t block = 1; block < nr; ++block) {
+    for (std::size_t block = 1; block < nr; ++block) {
       if (block & j) {
         std::copy(
             // begin
@@ -98,7 +98,7 @@ inline void bruck(
 
     // c) unpack blocks into recv buffer
     count = 0;
-    for (rank_t block = 1; block < nr; ++block) {
+    for (std::size_t block = 1; block < nr; ++block) {
       if (block & j) {
         std::copy(
             recvbuf + count * blocksize,
@@ -121,7 +121,7 @@ inline void bruck(
       sendbuf);
 
   // Reverse these blocks
-  for (rank_t block = 0; block < nr; ++block) {
+  for (std::size_t block = 0; block < nr; ++block) {
     std::copy(
         sendbuf + (nr - block - 1) * blocksize,
         sendbuf + (nr - block) * blocksize,
@@ -160,9 +160,8 @@ inline void bruck_mod(
     mpi::Context const& ctx,
     Op&&                op)
 {
-  using rank_t = int;
-  auto me      = ctx.rank();
-  auto nr      = static_cast<rank_t>(ctx.size());
+  auto me = ctx.rank();
+  auto nr = ctx.size();
 
   using value_t = typename std::iterator_traits<InputIt>::value_type;
 
@@ -178,7 +177,7 @@ inline void bruck_mod(
     // nr] This procedure can be achieved efficiently in two substeps
 
     // a) reverse_copy all blocks
-    for (rank_t block = 0; block < nr; ++block) {
+    for (std::size_t block = 0; block < nr; ++block) {
       std::copy(
           begin + (nr - block - 1) * blocksize,
           begin + (nr - block) * blocksize,
@@ -197,20 +196,20 @@ inline void bruck_mod(
   auto recvbuf = &tmpbuf[nels / 2];
 
   // range = [0..log2(nr)]
-  for (auto r = 0; r < std::ceil(std::log2(nr)); ++r) {
-    auto      j = (1 << r);
+  for (std::size_t r = 0; r < tlx::integer_log2_ceil(nr); ++r) {
+    auto      j = static_cast<mpi::Rank>(1 << r);
     mpi::Rank recvfrom, sendto;
 
     // In contrast to classic Bruck, sender and receiver are swapped
     std::tie(recvfrom, sendto) = std::make_pair(
-        static_cast<mpi::Rank>(mod(me + j, nr)),
-        static_cast<mpi::Rank>(mod(me - j, nr)));
+        mod(me + j, static_cast<mpi::Rank>(nr)),
+        mod(me - j, static_cast<mpi::Rank>(nr)));
 
     // a) pack blocks into a contigous send buffer
     size_t count = 0;
 
     {
-      for (auto block = me; static_cast<int>(block) < me + nr; ++block) {
+      for (std::size_t block = me; block < me + nr; ++block) {
         //
         auto myblock = block - me;
         auto myidx   = block % nr;
@@ -243,7 +242,7 @@ inline void bruck_mod(
     count = 0;
 
     {
-      for (int block = recvfrom; block < recvfrom + nr; ++block) {
+      for (std::size_t block = recvfrom; block < recvfrom + nr; ++block) {
         // Map from block to their idx
         auto theirblock = block - recvfrom;
         if (theirblock & j) {
@@ -270,13 +269,16 @@ inline void bruck_mod(
       std::begin(range),
       std::end(range),
       std::back_inserter(chunks),
-      [buf = tmpbuf.get(), blocksize](auto offset) {
+      [buf = out, blocksize](auto offset) {
         auto f = std::next(buf, offset);
         auto l = std::next(f, blocksize);
         return std::make_pair(f, l);
       });
 
-  op(chunks, out);
+  op(chunks, tmpbuf.get());
+
+  // switch buffer back to output iterator
+  std::move(tmpbuf.get(), tmpbuf.get() + nels, out);
 
   trace.tock(MERGE);
 
