@@ -28,6 +28,8 @@ namespace fmpi {
 
 namespace detail {
 
+static constexpr int exch_tag = 110;
+
 template <class Schedule, class ReqIdx, class BufAlloc, class CommOp>
 inline auto enqueueMpiOps(
     uint32_t   phase,
@@ -144,7 +146,8 @@ inline void scatteredPairwiseWaitsome(
                        auto* buf, auto peer, auto reqIdx) {
     FMPI_DBG_STREAM("receiving from " << peer << " reqIdx " << reqIdx);
 
-    return mpi::irecv(buf, blocksize, peer, 100, ctx, &reqs[reqIdx]);
+    return mpi::irecv(
+        buf, blocksize, peer, detail::exch_tag, ctx, &reqs[reqIdx]);
   };
 
   rphase = detail::enqueueMpiOps(
@@ -169,7 +172,8 @@ inline void scatteredPairwiseWaitsome(
 
   auto sendOp = [&reqs, blocksize, ctx](auto* buf, auto peer, auto reqIdx) {
     FMPI_DBG_STREAM("sending to " << peer << " reqIdx " << reqIdx);
-    return mpi::isend(buf, blocksize, peer, 100, ctx, &reqs[reqIdx]);
+    return mpi::isend(
+        buf, blocksize, peer, detail::exch_tag, ctx, &reqs[reqIdx]);
   };
 
   sphase = detail::enqueueMpiOps(
@@ -207,9 +211,7 @@ inline void scatteredPairwiseWaitsome(
     trace.tick(MERGE);
 
     {
-      auto range = fmpi::range(0, static_cast<int>(reqsInFlight));
-
-      for (auto const& idx : range) {
+      for (auto&& idx : fmpi::range(0, static_cast<int>(reqsInFlight))) {
         // mark everything as completed
         commState.receive_complete(idx);
       }
@@ -468,11 +470,11 @@ inline void scatteredPairwise(
         std::next(begin, sendto * blocksize),
         blocksize,
         sendto,
-        100,
+        detail::exch_tag,
         std::next(&(rbuf[0]), recvfrom * blocksize),
         blocksize,
         recvfrom,
-        100,
+        detail::exch_tag,
         ctx));
   }
 
@@ -600,7 +602,7 @@ inline void scatteredPairwiseWaitany(
             blocksize,
             mpi_datatype,
             recvfrom,
-            100,
+            detail::exch_tag,
             comm,
             &(reqs[nrreqs])),
         MPI_SUCCESS);
@@ -619,7 +621,7 @@ inline void scatteredPairwiseWaitany(
             blocksize,
             mpi_datatype,
             sendto,
-            100,
+            detail::exch_tag,
             comm,
             &(reqs[reqIdx])),
         MPI_SUCCESS);
@@ -667,7 +669,7 @@ inline void scatteredPairwiseWaitany(
                   blocksize,
                   mpi_datatype,
                   recvfrom,
-                  100,
+                  detail::exch_tag,
                   comm,
                   &(reqs[reqCompleted])),
               MPI_SUCCESS);
@@ -688,7 +690,7 @@ inline void scatteredPairwiseWaitany(
                   blocksize,
                   mpi_datatype,
                   sendto,
-                  100,
+                  detail::exch_tag,
                   comm,
                   &(reqs[reqCompleted])),
               MPI_SUCCESS);

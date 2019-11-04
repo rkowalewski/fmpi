@@ -80,8 +80,8 @@ inline void bruck(
   auto* sendbuf = &tmpbuf[0];
   auto* recvbuf = &tmpbuf[nels / 2];
 
-  for (std::size_t idx = 0; idx < tlx::integer_log2_ceil(nr); ++idx) {
-    auto      j = static_cast<mpi::Rank>(1 << idx);
+  for (auto&& r : range(tlx::integer_log2_ceil(nr))) {
+    auto      j = static_cast<mpi::Rank>(1 << r);
     mpi::Rank recvfrom, sendto;
 
     // We send to (r + j)
@@ -222,10 +222,15 @@ inline void bruck_mod(
     auto      j = static_cast<mpi::Rank>(1 << r);
     mpi::Rank recvfrom, sendto;
 
+    FMPI_DBG(r);
+
     // In contrast to classic Bruck, sender and receiver are swapped
     std::tie(recvfrom, sendto) = std::make_pair(
         mod(me + j, static_cast<mpi::Rank>(nr)),
         mod(me - j, static_cast<mpi::Rank>(nr)));
+
+    FMPI_DBG(sendto);
+    FMPI_DBG(recvfrom);
 
     // a) pack blocks into a contigous send buffer
     size_t count = 0;
@@ -236,6 +241,8 @@ inline void bruck_mod(
         auto myblock = block - me;
         auto myidx   = block % nr;
         if (myblock & j) {
+          FMPI_DBG(myblock);
+          FMPI_DBG(myidx);
           std::copy(
               // begin
               out + myidx * blocksize,
@@ -269,6 +276,8 @@ inline void bruck_mod(
         auto theirblock = block - recvfrom;
         if (theirblock & j) {
           auto myblock = (theirblock + me) % nr;
+          FMPI_DBG(theirblock);
+          FMPI_DBG(myblock);
           std::copy(
               recvbuf + count * blocksize,
               recvbuf + count * blocksize + blocksize,
@@ -285,11 +294,11 @@ inline void bruck_mod(
   std::vector<std::pair<InputIt, InputIt>> chunks;
   chunks.reserve(nr);
 
-  auto range = fmpi::range<uint32_t>(0, nr * blocksize, blocksize);
+  auto nb = range<uint32_t>(0, nr * blocksize, blocksize);
 
   std::transform(
-      std::begin(range),
-      std::end(range),
+      std::begin(nb),
+      std::end(nb),
       std::back_inserter(chunks),
       [buf = out, blocksize](auto offset) {
         auto f = std::next(buf, offset);

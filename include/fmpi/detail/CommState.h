@@ -45,9 +45,7 @@ class CommState {
   {
     std::fill(std::begin(m_pending), std::end(m_pending), iterator_pair{});
 
-    auto r = fmpi::range<int>(MAX_FREE_CHUNKS - 1, -1, -1);
-
-    for (auto const& block : r) {
+    for (auto&& block : fmpi::range<int>(MAX_FREE_CHUNKS - 1, -1, -1)) {
       auto f = std::next(std::begin(m_buffer), block * blocksize);
       auto l = std::next(f, blocksize);
       m_freelist.push(std::make_pair(f, l));
