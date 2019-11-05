@@ -5,7 +5,8 @@
 
 #include <fmpi/NumericRange.h>
 
-namespace fmpi::detail {
+namespace fmpi {
+namespace detail {
 
 template <class T, std::size_t NReqs>
 class CommState {
@@ -116,5 +117,6 @@ class CommState {
 };
 
 }  // namespace fmpi::detail
+}
 
 #endif

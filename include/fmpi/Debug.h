@@ -4,7 +4,8 @@
 #include <dbg.h>
 #include <mpi.h>
 
-namespace fmpi::detail {
+namespace fmpi {
+  namespace detail {
 
 class DebugOutput {
  public:
@@ -91,6 +92,7 @@ class DebugOutput {
 };
 
 }  // namespace fmpi::detail
+}
 
 #ifndef NDEBUG
 

@@ -131,6 +131,7 @@ inline void bruck(
     }
   }
 
+#if 0
   // Phase 3: Process i rotates local elements by (i+1) blocks to the left in
   // a cyclic manner.
   std::rotate_copy(
@@ -141,6 +142,7 @@ inline void bruck(
       out + blocksize * nr,
       // out
       sendbuf);
+#endif
 
   trace.tock(COMMUNICATION);
   trace.tick(MERGE);
@@ -154,13 +156,15 @@ inline void bruck(
       std::begin(range),
       std::end(range),
       std::back_inserter(chunks),
-      [buf = tmpbuf.get(), blocksize](auto offset) {
+      [buf = out, blocksize](auto offset) {
         auto f = std::next(buf, offset);
         auto l = std::next(f, blocksize);
         return std::make_pair(f, l);
       });
 
-  op(chunks, out);
+  op(chunks, &tmpbuf[0]);
+
+  std::move(&tmpbuf[0], &tmpbuf[nels], out);
 
   trace.tock(MERGE);
 }

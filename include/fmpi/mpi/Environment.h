@@ -2,6 +2,7 @@
 #define FMPI_MPI_ENVIRONMENT_H
 
 #include <cstdint>
+#include <type_traits>
 
 #include <mpi.h>
 
@@ -63,5 +64,12 @@ class Context {
 Context splitSharedComm(Context const& baseComm);
 
 }  // namespace mpi
+
+namespace std {
+  template<>
+  struct is_signed<mpi::Rank> : std::true_type {};
+  template<>
+  struct is_integral<mpi::Rank> : std::true_type {};
+} // namespace detail
 
 #endif

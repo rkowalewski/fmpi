@@ -139,13 +139,16 @@ std::vector<std::pair<
                       fmpi::bruck<
                           iterator_t,
                           iterator_t,
-                          merger_t<iterator_t, iterator_t>>),
+                          merger_t<iterator_t, iterator_t>>)
+#if 0
                   std::make_pair(
                       "Bruck_Mod",
                       fmpi::bruck_mod<
                           iterator_t,
                           iterator_t,
-                          merger_t<iterator_t, iterator_t>>)};
+                          merger_t<iterator_t, iterator_t>>)
+#endif
+    };
 
 int main(int argc, char* argv[])
 {
