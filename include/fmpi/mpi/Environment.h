@@ -66,10 +66,12 @@ Context splitSharedComm(Context const& baseComm);
 }  // namespace mpi
 
 namespace std {
-  template<>
-  struct is_signed<mpi::Rank> : std::true_type {};
-  template<>
-  struct is_integral<mpi::Rank> : std::true_type {};
-} // namespace detail
+template <>
+struct is_signed<mpi::Rank> : std::true_type {
+};
+template <>
+struct is_integral<mpi::Rank> : std::true_type {
+};
+}  // namespace std
 
 #endif

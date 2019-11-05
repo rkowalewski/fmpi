@@ -5,7 +5,7 @@
 #include <mpi.h>
 
 namespace fmpi {
-  namespace detail {
+namespace detail {
 
 class DebugOutput {
  public:
@@ -91,8 +91,8 @@ class DebugOutput {
   static constexpr const char* const ANSI_RESET      = "\x1b[0m";
 };
 
-}  // namespace fmpi::detail
-}
+}  // namespace detail
+}  // namespace fmpi
 
 #ifndef NDEBUG
 

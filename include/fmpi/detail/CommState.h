@@ -116,7 +116,7 @@ class CommState {
   simple_vector m_buffer{};
 };
 
-}  // namespace fmpi::detail
-}
+}  // namespace detail
+}  // namespace fmpi
 
 #endif
