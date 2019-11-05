@@ -154,7 +154,7 @@ void printBenchmarkPreamble(
         (var.find("OMPI_") != std::string::npos ||
          var.find("I_MPI") != std::string::npos)) {
       auto key = var.substr(0, split);
-      auto val = var.substr(split);
+      auto val = var.substr(split + 1);
       trim(key);
       trim(val);
       envs.push_back(string_pair(key, val));
