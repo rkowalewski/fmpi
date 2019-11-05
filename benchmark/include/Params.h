@@ -5,6 +5,8 @@
 
 #include <fmpi/mpi/Environment.h>
 
+#include <iosfwd>
+
 namespace fmpi {
 namespace benchmark {
 
@@ -24,10 +26,9 @@ typedef struct Params {
 } Params;
 
 bool process(
-    int /*argc*/,
-    char* argv[],
-    ::mpi::Context const& mpiCtx,
-    Params& params);
+    int /*argc*/, char* argv[], ::mpi::Context const& mpiCtx, Params& params);
+
+void printBenchmarkPreamble(std::ostream& os, std::string prefix, const char* delim = "\n");
 
 }  // namespace benchmark
 }  // namespace fmpi

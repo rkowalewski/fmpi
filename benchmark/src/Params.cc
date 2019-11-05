@@ -4,6 +4,10 @@
 
 #include <rtlx/Assert.h>
 
+#include <Version.h>
+
+extern char** environ;
+
 namespace fmpi {
 namespace benchmark {
 
@@ -107,6 +111,61 @@ bool process(
   params.maxblocksize = blocksizes[1];
 
   return true;
+}
+
+static std::string& ltrim(
+    std::string& str, const std::string& chars = "\t\n\v\f\r ")
+{
+  str.erase(0, str.find_first_not_of(chars));
+  return str;
+}
+
+static std::string& rtrim(
+    std::string& str, const std::string& chars = "\t\n\v\f\r ")
+{
+  str.erase(str.find_last_not_of(chars) + 1);
+  return str;
+}
+
+static std::string& trim(
+    std::string& str, const std::string& chars = "\t\n\v\f\r ")
+{
+  return ltrim(rtrim(str, chars), chars);
+}
+
+struct string_pair : std::pair<std::string, std::string> {
+  using std::pair<std::string, std::string>::pair;
+};
+
+std::ostream& operator<<(std::ostream& os, string_pair const& p)
+{
+  os << p.first << " = " << p.second;
+  return os;
+}
+
+void printBenchmarkPreamble(
+    std::ostream& os, std::string prefix, const char* delim)
+{
+  std::vector<string_pair> envs;
+  for (auto** env = environ; *env != 0; ++env) {
+    std::string var   = *env;
+    auto        split = var.find('=');
+    if (split != std::string::npos &&
+        (var.find("OMPI_") != std::string::npos ||
+         var.find("I_MPI") != std::string::npos)) {
+      auto key = var.substr(0, split);
+      auto val = var.substr(split);
+      trim(key);
+      trim(val);
+      envs.push_back(string_pair(key, val));
+    }
+  }
+
+  os << prefix << "Git Version: " << FMPI_GIT_COMMIT << delim;
+
+  for (auto&& kv : envs) {
+    os << prefix << kv << delim;
+  }
 }
 }  // namespace benchmark
 }  // namespace fmpi

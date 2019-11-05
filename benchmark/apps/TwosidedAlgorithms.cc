@@ -139,16 +139,13 @@ std::vector<std::pair<
                       fmpi::bruck<
                           iterator_t,
                           iterator_t,
-                          merger_t<iterator_t, iterator_t>>)
-#if 0
+                          merger_t<iterator_t, iterator_t>>),
                   std::make_pair(
                       "Bruck_Mod",
                       fmpi::bruck_mod<
                           iterator_t,
                           iterator_t,
-                          merger_t<iterator_t, iterator_t>>)
-#endif
-    };
+                          merger_t<iterator_t, iterator_t>>)};
 
 int main(int argc, char* argv[])
 {
@@ -160,6 +157,18 @@ int main(int argc, char* argv[])
 
   auto me = worldCtx.rank();
   auto nr = worldCtx.size();
+
+  if (!fmpi::isPow2(nr)) {
+    // remove bruck_mod if we have not a power of 2 ranks.
+    auto it = std::find_if(
+        std::begin(ALGORITHMS), std::end(ALGORITHMS), [](auto const& algo) {
+          return algo.first == "Bruck_Mod";
+        });
+
+    if (it != std::end(ALGORITHMS)) {
+      ALGORITHMS.erase(it);
+    }
+  }
 
   fmpi::benchmark::Params params{};
 
@@ -177,6 +186,7 @@ int main(int argc, char* argv[])
   RTLX_ASSERT(params.minblocksize >= sizeof(value_t));
 
   if (me == 0) {
+    fmpi::benchmark::printBenchmarkPreamble(std::cout, "++ ", "\n");
     printMeasurementHeader(std::cout);
   }
 
