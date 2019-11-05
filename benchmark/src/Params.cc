@@ -147,6 +147,7 @@ void printBenchmarkPreamble(
     std::ostream& os, std::string prefix, const char* delim)
 {
   std::vector<string_pair> envs;
+  std::ostringstream oss;
   for (auto** env = environ; *env != 0; ++env) {
     std::string var   = *env;
     auto        split = var.find('=');
@@ -161,11 +162,13 @@ void printBenchmarkPreamble(
     }
   }
 
-  os << prefix << "Git Version: " << FMPI_GIT_COMMIT << delim;
+  oss << prefix << "Git Version: " << FMPI_GIT_COMMIT << delim;
 
   for (auto&& kv : envs) {
-    os << prefix << kv << delim;
+    oss << prefix << kv << delim;
   }
+
+  os << oss.str();
 }
 }  // namespace benchmark
 }  // namespace fmpi
