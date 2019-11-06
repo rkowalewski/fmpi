@@ -6,17 +6,19 @@
 struct Measurement {
   size_t nhosts;
   size_t nprocs;
+  int    me;
+
   size_t step;
   size_t nbytes;
   size_t blocksize;
-  int    me;
 
-  std::string                        algorithm;
-  std::tuple<double, double, double> times;
+  std::string                             algorithm;
+  double                                  total;
+  std::unordered_map<std::string, double> traces;
 };
 
 void printMeasurementHeader(std::ostream& os);
-void printMeasurementCsvLine(std::ostream& os, Measurement const& m);
+void printMeasurementCsvLine(std::ostream& os, Measurement& m);
 
 template <
     class InputIt,
@@ -24,12 +26,12 @@ template <
     class Communication,
     class Computation>
 auto run_algorithm(
-    Communication&&        f,
-    InputIt                begin,
-    OutputIt               out,
-    int                    blocksize,
+    Communication&&     f,
+    InputIt             begin,
+    OutputIt            out,
+    int                 blocksize,
     mpi::Context const& comm,
-    Computation&&          op)
+    Computation&&       op)
 {
   auto start = rtlx::ChronoClockNow();
   f(begin, out, blocksize, comm, std::forward<Computation>(op));

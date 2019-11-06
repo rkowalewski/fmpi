@@ -301,7 +301,7 @@ int main(int argc, char* argv[])
         auto barrier = clock.Barrier(worldCtx.mpiComm());
         RTLX_ASSERT(barrier.Success(worldCtx.mpiComm()));
 
-        auto t = run_algorithm(
+        m.total = run_algorithm(
             algo.second,
             data.begin(),
             out.begin(),
@@ -336,14 +336,14 @@ int main(int argc, char* argv[])
 
           m.algorithm = algo.first;
 
-          m.times = std::make_tuple(
-              t,
-              trace.lookup(fmpi::MERGE),
-              trace.lookup(fmpi::COMMUNICATION));
+          auto const& t = trace.measurements();
+
+          m.traces.insert(std::begin(t), std::end(t));
 
           printMeasurementCsvLine(std::cout, m);
 
           trace.clear();
+          m.traces.clear();
         }
       }
 
@@ -360,14 +360,48 @@ void printMeasurementHeader(std::ostream& os)
 {
   os << "Nodes, Procs, Round, NBytes, Blocksize, Algo, Rank, Ttotal, "
         "Tmerge, "
-        "Tcomm\n";
+        "Tcomm, Traces\n";
 }
 
-void printMeasurementCsvLine(std::ostream& os, Measurement const& m)
+template <class K, class V>
+static void dumpJson(std::ostream& os, std::unordered_map<K, V> const& map)
 {
-  double total, tmerge, tcomm;
-  std::tie(total, tmerge, tcomm) = m.times;
+  os << "[ ";
+
+  std::size_t count = 0;
+  for (auto&& kv : map) {
+    os << "{ ";
+    os << "'" << kv.first << "'";
+    os << ": ";
+    os << kv.second << " }";
+
+    if (++count < map.size()) {
+      os << ", ";
+    }
+  }
+
+  os << " ]";
+}
+
+void printMeasurementCsvLine(std::ostream& os, Measurement& m)
+{
   std::ostringstream myos;
+
+  double tmerge = 0, tcomm = 0;
+
+  auto itMerge = m.traces.find(fmpi::MERGE);
+  auto itComm  = m.traces.find(fmpi::COMMUNICATION);
+
+  if (itMerge != std::end(m.traces)) {
+    tmerge = itMerge->second;
+    m.traces.erase(itMerge);
+  }
+
+  if (itComm != std::end(m.traces)) {
+    tcomm = itComm->second;
+    m.traces.erase(itComm);
+  }
+
   myos << m.nhosts << ", ";
   myos << m.nprocs << ", ";
   myos << m.step << ", ";
@@ -375,8 +409,13 @@ void printMeasurementCsvLine(std::ostream& os, Measurement const& m)
   myos << m.blocksize << ", ";
   myos << m.algorithm << ", ";
   myos << m.me << ", ";
-  myos << total << ", ";
+  myos << m.total << ", ";
   myos << tmerge << ", ";
-  myos << tcomm << "\n";
+  myos << tcomm << ", ";
+
+  dumpJson(myos, m.traces);
+
+  myos << "\n";
+
   os << myos.str();
 }

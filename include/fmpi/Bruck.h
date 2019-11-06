@@ -38,6 +38,11 @@ OutputIt reverse_copy_strided(
 
   return d_first + n;
 }
+
+static constexpr const char ROTATE[] = "LocalRotate";
+static constexpr const char PACK[]   = "Pack";
+static constexpr const char UNPACK[] = "Unpack";
+
 }  // namespace detail
 
 template <class InputIt, class OutputIt, class Op>
@@ -54,10 +59,11 @@ inline void bruck(
   using value_t = typename std::iterator_traits<InputIt>::value_type;
 
   auto trace = rtlx::TimeTrace{me, "Bruck"};
-  trace.tick(COMMUNICATION);
 
   // Phase 1: Process i rotates local elements by i blocks to the left in a
   // cyclic manner.
+
+  trace.tick(detail::ROTATE);
 
   // O(p * blocksize)
   std::rotate_copy(
@@ -69,7 +75,11 @@ inline void bruck(
       // out
       out);
 
+  trace.tock(detail::ROTATE);
+
   // Phase 2: Communication Rounds
+
+  trace.tick(COMMUNICATION);
 
   // Reverse a buffer for send-recv exchanges
   // We never exchange more than (N/2) elements per round, so this buffer
@@ -94,6 +104,7 @@ inline void bruck(
     // a) pack blocks into a contigous send buffer
     size_t count = 0;
 
+    trace.tick(detail::PACK);
     for (std::size_t block = 1; block < nr; ++block) {
       if (block & j) {
         std::copy(
@@ -106,17 +117,20 @@ inline void bruck(
         ++count;
       }
     }
+    trace.tock(detail::PACK);
 
     FMPI_CHECK(mpi::sendrecv(
         sendbuf,
         blocksize * count,
         sendto,
-        100,
+        EXCH_TAG_BRUCK,
         recvbuf,
         blocksize * count,
         recvfrom,
-        100,
+        EXCH_TAG_BRUCK,
         ctx));
+
+    trace.tick(detail::UNPACK);
 
     // c) unpack blocks into recv buffer
     count = 0;
@@ -129,6 +143,8 @@ inline void bruck(
         ++count;
       }
     }
+
+    trace.tock(detail::UNPACK);
   }
 
 #if 0
@@ -183,7 +199,8 @@ inline void bruck_mod(
   using value_t = typename std::iterator_traits<InputIt>::value_type;
 
   auto trace = rtlx::TimeTrace{me, "Bruck_Mod"};
-  trace.tick(COMMUNICATION);
+
+  trace.tick(detail::ROTATE);
 
   auto nels = size_t(nr) * blocksize;
 
@@ -217,9 +234,12 @@ inline void bruck_mod(
     // Phase 2: Communication Rounds
     tmpbuf.reset(new value_t[nels]);
   }
+  trace.tock(detail::ROTATE);
 
   auto sendbuf = &tmpbuf[0];
   auto recvbuf = &tmpbuf[nels / 2];
+
+  trace.tick(COMMUNICATION);
 
   // range = [0..log2(nr)]
   for (auto&& r : range(tlx::integer_log2_ceil(nr))) {
@@ -238,6 +258,8 @@ inline void bruck_mod(
 
     // a) pack blocks into a contigous send buffer
     size_t count = 0;
+
+    trace.tick(detail::PACK);
 
     {
       for (std::size_t block = me; block < me + nr; ++block) {
@@ -259,20 +281,24 @@ inline void bruck_mod(
       }
     }
 
+    trace.tock(detail::PACK);
+
     // b) exchange
     FMPI_CHECK(mpi::sendrecv(
         sendbuf,
         blocksize * count,
         sendto,
-        100,
+        EXCH_TAG_BRUCK,
         recvbuf,
         blocksize * count,
         recvfrom,
-        100,
+        EXCH_TAG_BRUCK,
         ctx));
 
     // c) unpack blocks into recv buffer
     count = 0;
+
+    trace.tick(detail::UNPACK);
 
     {
       for (std::size_t block = recvfrom; block < recvfrom + nr; ++block) {
@@ -290,6 +316,7 @@ inline void bruck_mod(
         }
       }
     }
+    trace.tock(detail::UNPACK);
   }
   trace.tock(COMMUNICATION);
 

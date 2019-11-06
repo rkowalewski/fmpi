@@ -6,6 +6,7 @@
 #include <mutex>
 #include <string>
 #include <unordered_map>
+#include <vector>
 
 namespace rtlx {
 
@@ -45,13 +46,13 @@ class TimeTrace {
 
   bool enabled() const noexcept;
 
-  void tick(const TraceStore::key_t& key);
-  void tock(const TraceStore::key_t& key);
+  void tick(const TraceStore::key_t &key);
+  void tock(const TraceStore::key_t &key);
+
+  value_t lookup(TraceStore::key_t const &key) const;
 
   std::unordered_map<TraceStore::key_t, TraceStore::value_t> const &
   measurements() const;
-
-  value_t lookup(TraceStore::key_t const &key) const;
 
   int                pid() const noexcept;
   std::string const &context() const noexcept;
@@ -64,6 +65,6 @@ class TimeTrace {
   std::unordered_map<TraceStore::key_t, TraceStore::value_t> m_cache;
 };
 
-} // namespace rtlx
+}  // namespace rtlx
 
 #endif

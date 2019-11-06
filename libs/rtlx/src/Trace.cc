@@ -71,6 +71,7 @@ TraceStore::value_t TimeTrace::lookup(TraceStore::key_t const &key) const
   }
 
   auto const &m  = measurements();
+
   auto        it = m.find(key);
 
   if (it == m.end()) {
