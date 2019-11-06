@@ -39,9 +39,9 @@ OutputIt reverse_copy_strided(
   return d_first + n;
 }
 
-static constexpr const char ROTATE[] = "LocalRotate";
-static constexpr const char PACK[]   = "Pack";
-static constexpr const char UNPACK[] = "Unpack";
+static constexpr const char ROTATE[] = "Trotate";
+static constexpr const char PACK[]   = "Tpack";
+static constexpr const char UNPACK[] = "Tunpack";
 
 }  // namespace detail
 

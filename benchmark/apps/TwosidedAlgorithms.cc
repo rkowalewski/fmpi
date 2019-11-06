@@ -301,7 +301,7 @@ int main(int argc, char* argv[])
         auto barrier = clock.Barrier(worldCtx.mpiComm());
         RTLX_ASSERT(barrier.Success(worldCtx.mpiComm()));
 
-        m.total = run_algorithm(
+        auto total = run_algorithm(
             algo.second,
             data.begin(),
             out.begin(),
@@ -335,15 +335,16 @@ int main(int argc, char* argv[])
           auto trace = rtlx::TimeTrace{me, algo.first};
 
           m.algorithm = algo.first;
+          m.iter      = it - nwarmup + 1;
 
-          auto const& t = trace.measurements();
+          auto traces = trace.measurements();
 
-          m.traces.insert(std::begin(t), std::end(t));
+          // insert total time
+          traces.insert(std::make_pair(fmpi::TOTAL, total));
 
-          printMeasurementCsvLine(std::cout, m);
+          printMeasurementCsvLine(std::cout, m, traces);
 
           trace.clear();
-          m.traces.clear();
         }
       }
 
@@ -358,64 +359,30 @@ int main(int argc, char* argv[])
 
 void printMeasurementHeader(std::ostream& os)
 {
-  os << "Nodes, Procs, Round, NBytes, Blocksize, Algo, Rank, Ttotal, "
-        "Tmerge, "
-        "Tcomm, Traces\n";
+  os << "Nodes, Procs, Round, NBytes, Blocksize, Algo, Rank, Iteration, "
+        "Measurement, "
+        "Value\n";
 }
 
-template <class K, class V>
-static void dumpJson(std::ostream& os, std::unordered_map<K, V> const& map)
+void printMeasurementCsvLine(
+    std::ostream&                           os,
+    Measurement const&                      params,
+    std::unordered_map<std::string, double> traces)
 {
-  os << "[ ";
+  for (auto&& trace : traces) {
+    std::ostringstream myos;
+    myos << params.nhosts << ", ";
+    myos << params.nprocs << ", ";
+    myos << params.step << ", ";
+    myos << params.nbytes << ", ";
+    myos << params.blocksize << ", ";
+    myos << params.algorithm << ", ";
+    myos << params.me << ", ";
+    myos << params.iter << ", ";
+    myos << trace.first << ", ";
+    myos << trace.second << "\n";
 
-  std::size_t count = 0;
-  for (auto&& kv : map) {
-    os << "{ ";
-    os << "'" << kv.first << "'";
-    os << ": ";
-    os << kv.second << " }";
-
-    if (++count < map.size()) {
-      os << ", ";
-    }
+    os << myos.str();
   }
 
-  os << " ]";
-}
-
-void printMeasurementCsvLine(std::ostream& os, Measurement& m)
-{
-  std::ostringstream myos;
-
-  double tmerge = 0, tcomm = 0;
-
-  auto itMerge = m.traces.find(fmpi::MERGE);
-  auto itComm  = m.traces.find(fmpi::COMMUNICATION);
-
-  if (itMerge != std::end(m.traces)) {
-    tmerge = itMerge->second;
-    m.traces.erase(itMerge);
-  }
-
-  if (itComm != std::end(m.traces)) {
-    tcomm = itComm->second;
-    m.traces.erase(itComm);
-  }
-
-  myos << m.nhosts << ", ";
-  myos << m.nprocs << ", ";
-  myos << m.step << ", ";
-  myos << m.nbytes << ", ";
-  myos << m.blocksize << ", ";
-  myos << m.algorithm << ", ";
-  myos << m.me << ", ";
-  myos << m.total << ", ";
-  myos << tmerge << ", ";
-  myos << tcomm << ", ";
-
-  dumpJson(myos, m.traces);
-
-  myos << "\n";
-
-  os << myos.str();
 }

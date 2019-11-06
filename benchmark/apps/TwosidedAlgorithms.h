@@ -11,14 +11,17 @@ struct Measurement {
   size_t step;
   size_t nbytes;
   size_t blocksize;
+  size_t iter;
 
-  std::string                             algorithm;
-  double                                  total;
-  std::unordered_map<std::string, double> traces;
+  std::string algorithm;
 };
 
 void printMeasurementHeader(std::ostream& os);
-void printMeasurementCsvLine(std::ostream& os, Measurement& m);
+
+void printMeasurementCsvLine(
+    std::ostream&                           os,
+    Measurement const&                      params,
+    std::unordered_map<std::string, double> traces);
 
 template <
     class InputIt,
