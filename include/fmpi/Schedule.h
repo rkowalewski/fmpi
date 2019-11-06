@@ -9,7 +9,7 @@ enum class AllToAllAlgorithm { FLAT_HANDSHAKE, ONE_FACTOR };
 
 class FlatHandshake {
  public:
-  static constexpr const char* NAME = "FlatHandshake";
+  static constexpr const char* NAME = "Ring";
 
   mpi::Rank sendRank(mpi::Context const& comm, uint32_t phase) const;
 

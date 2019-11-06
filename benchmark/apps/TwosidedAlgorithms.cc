@@ -41,21 +41,21 @@ std::vector<std::pair<
                           iterator_t,
                           merger_t<iterator_t, iterator_t>>),
                   std::make_pair(
-                      "ScatteredPairwiseFlatHandshake",
+                      "Ring",
                       fmpi::scatteredPairwise<
                           fmpi::AllToAllAlgorithm::FLAT_HANDSHAKE,
                           iterator_t,
                           iterator_t,
                           merger_t<iterator_t, iterator_t>>),
                   std::make_pair(
-                      "ScatteredPairwiseOneFactor",
+                      "OneFactor",
                       fmpi::scatteredPairwise<
                           fmpi::AllToAllAlgorithm::ONE_FACTOR,
                           iterator_t,
                           iterator_t,
                           merger_t<iterator_t, iterator_t>>),
                   std::make_pair(
-                      "ScatteredPairwiseWaitsomeFlatHandshake4",
+                      "RingWaitsome4",
                       fmpi::scatteredPairwiseWaitsome<
                           fmpi::AllToAllAlgorithm::FLAT_HANDSHAKE,
                           iterator_t,
@@ -63,7 +63,7 @@ std::vector<std::pair<
                           merger_t<iterator_t, iterator_t>,
                           4>),
                   std::make_pair(
-                      "ScatteredPairwiseWaitsomeFlatHandshake8",
+                      "RingWaitsome8",
                       fmpi::scatteredPairwiseWaitsome<
                           fmpi::AllToAllAlgorithm::FLAT_HANDSHAKE,
                           iterator_t,
@@ -71,7 +71,7 @@ std::vector<std::pair<
                           merger_t<iterator_t, iterator_t>,
                           8>),
                   std::make_pair(
-                      "ScatteredPairwiseWaitsomeFlatHandshake16",
+                      "RingWaitsome16",
                       fmpi::scatteredPairwiseWaitsome<
                           fmpi::AllToAllAlgorithm::FLAT_HANDSHAKE,
                           iterator_t,
@@ -79,7 +79,7 @@ std::vector<std::pair<
                           merger_t<iterator_t, iterator_t>,
                           16>),
                   std::make_pair(
-                      "ScatteredPairwiseWaitsomeOneFactor4",
+                      "OneFactorWaitsome4",
                       fmpi::scatteredPairwiseWaitsome<
                           fmpi::AllToAllAlgorithm::ONE_FACTOR,
                           iterator_t,
@@ -87,7 +87,7 @@ std::vector<std::pair<
                           merger_t<iterator_t, iterator_t>,
                           4>),
                   std::make_pair(
-                      "ScatteredPairwiseWaitsomeOneFactor8",
+                      "OneFactorWaitsome8",
                       fmpi::scatteredPairwiseWaitsome<
                           fmpi::AllToAllAlgorithm::ONE_FACTOR,
                           iterator_t,
@@ -95,7 +95,7 @@ std::vector<std::pair<
                           merger_t<iterator_t, iterator_t>,
                           8>),
                   std::make_pair(
-                      "ScatteredPairwiseWaitsomeOneFactor16",
+                      "OneFactorWaitsome16",
                       fmpi::scatteredPairwiseWaitsome<
                           fmpi::AllToAllAlgorithm::ONE_FACTOR,
                           iterator_t,
@@ -104,28 +104,28 @@ std::vector<std::pair<
                           16>),
 #if 0
                   std::make_pair(
-                      "ScatteredPairwiseWaitany16",
+                      "Waitany16",
                       fmpi::scatteredPairwiseWaitany<
                           iterator_t,
                           iterator_t,
                           merger_t,
                           16>),
                   std::make_pair(
-                      "ScatteredPairwiseWaitany32",
+                      "Waitany32",
                       fmpi::scatteredPairwiseWaitany<
                           iterator_t,
                           iterator_t,
                           merger_t,
                           32>),
                   std::make_pair(
-                      "ScatteredPairwiseWaitany64",
+                      "Waitany64",
                       fmpi::scatteredPairwiseWaitany<
                           iterator_t,
                           iterator_t,
                           merger_t,
                           64>),
                   std::make_pair(
-                      "ScatteredPairwiseWaitany128",
+                      "Waitany128",
                       fmpi::scatteredPairwiseWaitany<
                           iterator_t,
                           iterator_t,

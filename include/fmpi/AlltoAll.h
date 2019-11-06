@@ -105,7 +105,7 @@ inline void scatteredPairwiseWaitsome(
 
   if (rtlx::TraceStore::GetInstance().enabled()) {
     std::ostringstream os;
-    os << "ScatteredPairwiseWaitsome" << algo_type::NAME << NReqs;
+    os << algo_type::NAME << "Waitsome" << NReqs;
     s = os.str();
   }
 
@@ -433,7 +433,7 @@ inline void scatteredPairwise(
 
   if (rtlx::TraceStore::GetInstance().enabled()) {
     std::ostringstream os;
-    os << "ScatteredPairwise" << algo_type::NAME;
+    os << algo_type::NAME;
     s = os.str();
   }
 
