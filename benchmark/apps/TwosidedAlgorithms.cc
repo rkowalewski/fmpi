@@ -13,6 +13,8 @@
 #include <Random.h>
 #include <TwosidedAlgorithms.h>
 
+#include <regex>
+
 #ifdef NDEBUG
 constexpr int nwarmup = 1;
 constexpr int niters  = 10;
@@ -174,6 +176,18 @@ int main(int argc, char* argv[])
 
   if (!fmpi::benchmark::process(argc, argv, worldCtx, params)) {
     return -1;
+  }
+
+  if (!params.pattern.empty()) {
+    // remove algorithms not matching a pattern
+    ALGORITHMS.erase(
+        std::remove_if(
+            std::begin(ALGORITHMS),
+            std::end(ALGORITHMS),
+            [regex = std::regex(params.pattern)](auto const& algo) {
+              return !std::regex_match(algo.first, regex);
+            }),
+        ALGORITHMS.end());
   }
 
   RTLX_ASSERT((nr % params.nhosts) == 0);
@@ -384,5 +398,4 @@ void printMeasurementCsvLine(
 
     os << myos.str();
   }
-
 }

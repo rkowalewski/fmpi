@@ -10,8 +10,8 @@
 namespace fmpi {
 namespace benchmark {
 
-constexpr size_t MINSZ = 128;
-constexpr size_t MAXSZ = 256;
+constexpr size_t MINSZ = 32;
+constexpr size_t MAXSZ = 128;
 
 typedef struct Params {
   std::size_t  minblocksize{MINSZ};
@@ -22,6 +22,7 @@ typedef struct Params {
 #else
   unsigned int niters{1};
 #endif
+  std::string pattern{};
   bool check{false};
 } Params;
 
