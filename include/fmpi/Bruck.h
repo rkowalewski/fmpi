@@ -94,6 +94,9 @@ inline void bruck(
     auto      j = static_cast<mpi::Rank>(1 << r);
     mpi::Rank recvfrom, sendto;
 
+    auto reqs =
+        std::array<MPI_Request, 2>{MPI_REQUEST_NULL, MPI_REQUEST_NULL};
+
     // We send to (r + j)
     std::tie(recvfrom, sendto) = std::make_pair(
         mod(me - j, static_cast<mpi::Rank>(nr)),
@@ -119,6 +122,15 @@ inline void bruck(
     }
     trace.tock(detail::PACK);
 
+    FMPI_CHECK(mpi::isend(
+        sendbuf, blocksize * count, sendto, EXCH_TAG_BRUCK, ctx, &reqs[0]));
+
+    FMPI_CHECK(mpi::irecv(
+        recvbuf, blocksize * count, recvfrom, EXCH_TAG_BRUCK, ctx, &reqs[1]));
+
+    FMPI_CHECK(mpi::waitall(reqs));
+
+#if 0
     FMPI_CHECK(mpi::sendrecv(
         sendbuf,
         blocksize * count,
@@ -129,6 +141,7 @@ inline void bruck(
         recvfrom,
         EXCH_TAG_BRUCK,
         ctx));
+#endif
 
     trace.tick(detail::UNPACK);
 

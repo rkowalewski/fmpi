@@ -49,39 +49,20 @@ repair_facet <- function(x) {
 args = commandArgs(trailingOnly=TRUE)
 
 if (length(args)< 1) {
-    stop("Usage: ./plots.R <infile> <outfile...>", call.=FALSE)
+    stop("Usage: ./plots.R <infile>", call.=FALSE)
 }
 
 csv <- args[1]
 
 data <- read.csv(file=csv, header=TRUE, sep=",")
-#head(data)
+
+data <- data %>% filter(Algo != "AlltoAll")
+
+head(data)
 
 plotName <- paste(
                   sub(pattern = "(.*)\\..*$", replacement = "\\1", basename(csv)),
                   ".pdf", sep="")
-
-sel <- "ScatteredPairwiseWaitsomeFlatHandshake"
-
-
-patterns <-
-c("ScatteredPairwiseWaitsomeFlatHandshake16" = "ScatteredRing16",
-  "ScatteredPairwiseOneFactor" = "OneFactor",
-  "ScatteredPairwiseFlatHandshake" = "Ring",
-  "ScatteredPairwiseWaitsomeFlatHandshake4" = "ScatteredRing4"
-)
-
-
-selected <- data %>% filter(
-                            Algo == "ScatteredPairwiseOneFactor"
-                            | Algo == "ScatteredPairwiseFlatHandshake"
-                            | Algo == paste(sel, 16, sep="")
-                            | Algo == paste(sel, 4, sep="")
-                            | Algo == "AlltoAll"
-                            ) %>%
-                        arrange(Blocksize, Procs, Ttotal_median) %>%
-                        mutate(Algo = str_replace_all(Algo, patterns))
-
 
 #cbPalette <- c("#999999", "#E69F00", "#56B4E9", "#009E73", "#F0E442", "#0072B2", "#D55E00", "#CC79A7")
 
@@ -92,20 +73,25 @@ pd <- position_dodge(0.1) # move them .05 to the left and right
 pdf(plotName,paper="a4")
 
 mylimit <- function(x) {
-    limits <- c(0, max(x) + .2)
+    limits <- c(min(x) - .2, max(x) + .2)
     limits
 }
 
-p <- ggplot(selected, aes(x=factor(Nodes), y=Ttotal_speedup, colour=Algo, group=Algo)) +
+
+p <- ggplot(data, aes(x=factor(Blocksize), y=Ttotal_speedup, colour=Algo, group=Algo)) +
     #geom_errorbar(aes(ymin=Ttotal_med_lowerCI, ymax=Ttotal_med_upperCI), colour="black", width=.1, position=pd) +
     geom_line(position=pd) +
     geom_point(position=pd, size=2) +
     theme_bw() +
     # To use for line and point colors, add
     scale_colour_brewer(type="qal", palette="Paired") +
-    scale_y_continuous(breaks=seq(0, 2, by=.2),  limits=mylimit)+
-    #facet_zoom(xy = Nodes <= 32, horizontal=FALSE)
-    facet_wrap_paginate( ~Blocksize, ncol=1, nrow=3, scales="free_y", page=NULL)
+    scale_y_continuous(breaks=seq(0,5,by=.2),limits=mylimit) +
+    xlab("Blocksize") +
+    ylab("Speedup")+
+    geom_hline(yintercept = 1) +
+    #annotate("text", min(the.data$year), 50, vjust = -1, label = "Cutoff")
+    # + facet_zoom(xy = Nodes <= 32, horizontal=FALSE)
+    facet_wrap_paginate( ~Nodes, ncol=1, nrow=3, scales="free_y", page=NULL)
 
 
 # Here we add our special class

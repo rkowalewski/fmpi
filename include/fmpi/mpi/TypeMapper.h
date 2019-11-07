@@ -12,12 +12,21 @@ namespace detail {
 template <class T>
 struct type_mapper {
   static_assert(
+      !std::is_trivially_copyable<T>::value,
+      "MPI always requires trivially copyable types");
+
+  static_assert(
       !std::is_arithmetic<T>::value,
       "arithmetic types can be perfectly matched to MPI Types");
 
   static constexpr MPI_Datatype type()
   {
     return MPI_BYTE;
+  }
+
+  static constexpr std::size_t factor()
+  {
+    return sizeof(T);
   }
 };
 
@@ -27,6 +36,10 @@ struct type_mapper {
     static constexpr MPI_Datatype type()                  \
     {                                                     \
       return mpi_type;                                    \
+    }                                                     \
+    static constexpr std::size_t factor()                 \
+    {                                                     \
+      return 1;                                           \
     }                                                     \
   };
 
