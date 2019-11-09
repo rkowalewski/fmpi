@@ -193,8 +193,8 @@ inline void bruck_interleave(
     mpi::Context const& ctx,
     Op&&                op)
 {
-  auto const me = ctx.rank();
-  auto const nr = ctx.size();
+  auto const        me = ctx.rank();
+  std::size_t const nr = ctx.size();
 
   using value_t = typename std::iterator_traits<InputIt>::value_type;
   using simple_vector =
@@ -202,7 +202,7 @@ inline void bruck_interleave(
 
   std::vector<std::pair<InputIt, InputIt>> chunks;
 
-  auto const    nels = size_t(nr) * blocksize;
+  auto const    nels = nr * blocksize;
   simple_vector buffer{nels};
 
   if (nr < 3) {
@@ -335,10 +335,13 @@ inline void bruck_interleave(
     if (r > 0) {
       trace.tick(MERGE);
       // merge chunks of last iteration...
-      auto const op_first = (r == 1) ? 0 : one << (r - 1);
+      auto const op_first = (r == 1) ? 0 : (one << (r - 1)) * blocksize;
       FMPI_DBG(op_first);
+      FMPI_DBG(chunks.size());
       op(chunks, std::next(buffer.begin(), op_first));
       chunks.clear();
+      FMPI_DBG("merge_buffer");
+      FMPI_DBG_RANGE(buffer.begin(), buffer.end());
       trace.tock(MERGE);
     }
 
@@ -355,7 +358,7 @@ inline void bruck_interleave(
           1,  // init with 1
           [](auto const cur, auto const v) { return cur + (1 << v); });
 
-      auto const nmerges = std::min(nels - sumPow2, (one << r));
+      auto const nmerges = std::min(nr - sumPow2, (one << r));
       FMPI_DBG(nmerges);
 
       for (auto&& b : range<std::size_t>(nmerges)) {
@@ -366,9 +369,6 @@ inline void bruck_interleave(
 
       FMPI_DBG(chunks);
     }
-
-    FMPI_DBG("merge_buffer");
-    FMPI_DBG_RANGE(buffer.begin(), buffer.end());
 
     {
       // c) unpack blocks which will be forwarded to other processors
@@ -397,7 +397,6 @@ inline void bruck_interleave(
   auto const nchunks = niter;
 
   if (nchunks > 1) {
-    //chunks.resize(nchunks);
 
     auto mid = buffer.begin() + 2 * blocksize;
 
