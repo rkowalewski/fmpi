@@ -94,6 +94,16 @@ class DebugOutput {
 }  // namespace detail
 }  // namespace fmpi
 
+namespace std {
+
+template <class F, class T>
+std::ostream& operator<<(std::ostream& os, std::pair<F, T> const& p)
+{
+  os << "(" << p.first << ", " << p.second << ")";
+  return os;
+}
+}  // namespace std
+
 #ifndef NDEBUG
 
 #define FMPI_DBG(...)                                                   \

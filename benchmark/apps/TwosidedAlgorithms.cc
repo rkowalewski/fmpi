@@ -143,6 +143,12 @@ std::vector<std::pair<
                           iterator_t,
                           merger_t<iterator_t, iterator_t>>),
                   std::make_pair(
+                      "Bruck_interleave",
+                      fmpi::bruck_interleave<
+                          iterator_t,
+                          iterator_t,
+                          merger_t<iterator_t, iterator_t>>),
+                  std::make_pair(
                       "Bruck_Mod",
                       fmpi::bruck_mod<
                           iterator_t,

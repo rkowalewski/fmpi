@@ -130,19 +130,6 @@ inline void bruck(
 
     FMPI_CHECK(mpi::waitall(reqs));
 
-#if 0
-    FMPI_CHECK(mpi::sendrecv(
-        sendbuf,
-        blocksize * count,
-        sendto,
-        EXCH_TAG_BRUCK,
-        recvbuf,
-        blocksize * count,
-        recvfrom,
-        EXCH_TAG_BRUCK,
-        ctx));
-#endif
-
     trace.tick(detail::UNPACK);
 
     // c) unpack blocks into recv buffer
@@ -194,6 +181,247 @@ inline void bruck(
   op(chunks, &tmpbuf[0]);
 
   std::move(&tmpbuf[0], &tmpbuf[nels], out);
+
+  trace.tock(MERGE);
+}
+
+template <class InputIt, class OutputIt, class Op>
+inline void bruck_interleave(
+    InputIt             begin,
+    OutputIt            out,
+    int                 blocksize,
+    mpi::Context const& ctx,
+    Op&&                op)
+{
+  auto const me = ctx.rank();
+  auto const nr = ctx.size();
+
+  using value_t = typename std::iterator_traits<InputIt>::value_type;
+  using simple_vector =
+      tlx::SimpleVector<value_t, tlx::SimpleVectorMode::Normal>;
+
+  std::vector<std::pair<InputIt, InputIt>> chunks;
+
+  auto const    nels = size_t(nr) * blocksize;
+  simple_vector buffer{nels};
+
+  if (nr < 3) {
+    chunks.emplace_back(
+        std::make_pair(begin + me * blocksize, begin + (me + 1) * blocksize));
+
+    if (nr == 1) {
+      op(chunks, out);
+      return;
+    }
+
+    auto other = static_cast<mpi::Rank>(1 - me);
+
+    FMPI_CHECK(mpi::sendrecv(
+        begin + other * blocksize,
+        blocksize,
+        other,
+        EXCH_TAG_BRUCK,
+        out + other * blocksize,
+        blocksize,
+        other,
+        EXCH_TAG_BRUCK,
+        ctx));
+
+    chunks.emplace_back(std::make_pair(
+        out + other * blocksize, out + (other + 1) * blocksize));
+
+    op(chunks, buffer.begin());
+    std::move(buffer.begin(), buffer.end(), out);
+    return;
+  }
+
+  auto trace = rtlx::TimeTrace{me, "Bruck_interleave"};
+
+  // Phase 1: Process i rotates local elements by i blocks to the left in a
+  // cyclic manner.
+
+  trace.tick(detail::ROTATE);
+
+  // O(p * blocksize)
+  std::rotate_copy(
+      begin,
+      // n_first
+      begin + me * blocksize,
+      // last
+      begin + blocksize * nr,
+      // out
+      out);
+
+  trace.tock(detail::ROTATE);
+
+  // Phase 2: Communication Rounds
+
+  trace.tick(COMMUNICATION);
+
+  simple_vector tmpbuf{nels + nels / 2};
+
+  auto* sendbuf  = &tmpbuf[0];
+  auto* recvbuf  = &tmpbuf[nels / 2];
+  auto* mergebuf = &tmpbuf[nels];
+
+  // We never copy more than (nr/2) blocks
+  std::vector<std::size_t> blocks;
+  blocks.reserve(nr / 2);
+
+  chunks.reserve(nr);
+  chunks.emplace_back(std::make_pair(out, out + blocksize));
+
+  auto const       niter = tlx::integer_log2_ceil(nr);
+  constexpr size_t one   = 1;
+  for (auto&& r : range(niter)) {
+    auto const j = static_cast<mpi::Rank>(one << r);
+
+    FMPI_DBG(r);
+
+    mpi::Rank recvfrom, sendto;
+
+    auto reqs =
+        std::array<MPI_Request, 2>{MPI_REQUEST_NULL, MPI_REQUEST_NULL};
+
+    // We send to (r + j)
+    std::tie(recvfrom, sendto) = std::make_pair(
+        mod(me - j, static_cast<mpi::Rank>(nr)),
+        mod(me + j, static_cast<mpi::Rank>(nr)));
+
+    // a) pack blocks into a contigous send buffer
+    trace.tick(detail::PACK);
+
+    auto rng = range<std::size_t>(one, nr);
+
+    // We exchange all blocks where the j-th bit is set
+    std::copy_if(
+        std::begin(rng),
+        std::end(rng),
+        std::back_inserter(blocks),
+        [j](auto idx) { return idx & j; });
+
+    for (std::size_t b = 0; b < blocks.size(); ++b) {
+      auto const block = blocks[b];
+      std::copy(
+          // begin
+          out + block * blocksize,
+          // end
+          out + block * blocksize + blocksize,
+          // tmp buf
+          sendbuf + b * blocksize);
+    }
+
+    trace.tock(detail::PACK);
+
+    FMPI_DBG("send_buffer");
+    FMPI_DBG_RANGE(sendbuf, sendbuf + blocksize * blocks.size());
+
+    FMPI_CHECK(mpi::irecv(
+        recvbuf,
+        blocksize * blocks.size(),
+        recvfrom,
+        EXCH_TAG_BRUCK,
+        ctx,
+        &reqs[1]));
+
+    FMPI_CHECK(mpi::isend(
+        sendbuf,
+        blocksize * blocks.size(),
+        sendto,
+        EXCH_TAG_BRUCK,
+        ctx,
+        &reqs[0]));
+
+    if (r > 0) {
+      trace.tick(MERGE);
+      // merge chunks of last iteration...
+      auto const op_first = (r == 1) ? 0 : one << (r - 1);
+      FMPI_DBG(op_first);
+      op(chunks, std::next(buffer.begin(), op_first));
+      chunks.clear();
+      trace.tock(MERGE);
+    }
+
+    FMPI_CHECK(mpi::waitall(reqs));
+
+    FMPI_DBG("recv_buffer");
+    FMPI_DBG_RANGE(recvbuf, recvbuf + blocksize * blocks.size());
+
+    {
+      auto rng     = range<std::size_t>(r);
+      auto sumPow2 = std::accumulate(
+          std::begin(rng),
+          std::end(rng),
+          1,  // init with 1
+          [](auto const cur, auto const v) { return cur + (1 << v); });
+
+      auto const nmerges = std::min(nels - sumPow2, (one << r));
+      FMPI_DBG(nmerges);
+
+      for (auto&& b : range<std::size_t>(nmerges)) {
+        auto f = b * blocksize;
+        auto l = (b + 1) * blocksize;
+        chunks.emplace_back(std::make_pair(recvbuf + f, recvbuf + l));
+      }
+
+      FMPI_DBG(chunks);
+    }
+
+    FMPI_DBG("merge_buffer");
+    FMPI_DBG_RANGE(buffer.begin(), buffer.end());
+
+    {
+      // c) unpack blocks which will be forwarded to other processors
+      trace.tick(detail::UNPACK);
+
+      for (auto&& b : range(one << r, std::max(one << r, blocks.size()))) {
+        std::copy(
+            recvbuf + b * blocksize,
+            recvbuf + b * blocksize + blocksize,
+            out + blocks[b] * blocksize);
+      }
+
+      FMPI_DBG("out_buffer");
+      FMPI_DBG_RANGE(out, out + nels);
+
+      trace.tock(detail::UNPACK);
+    }
+
+    std::swap(recvbuf, mergebuf);
+
+    blocks.clear();
+  }
+
+  trace.tick(MERGE);
+
+  auto const nchunks = niter;
+
+  if (nchunks > 1) {
+    //chunks.resize(nchunks);
+
+    auto mid = buffer.begin() + 2 * blocksize;
+
+    // the first (already merged) two chunks
+    chunks.emplace_back(std::make_pair(buffer.begin(), mid));
+
+    if (nchunks > 2) {
+      // the second (already merged) two chunks
+      auto last = buffer.begin() + 4 * blocksize;
+      chunks.emplace_back(std::make_pair(mid, last));
+    }
+
+    auto last_chunk = std::max(2, std::int32_t(nchunks) - 1);
+
+    RTLX_ASSERT(2 <= last_chunk);
+
+    for (auto&& r : range<std::size_t>(2, last_chunk)) {
+      auto f    = (one << r) * blocksize;
+      auto l    = std::min(nels, f + blocksize);
+      chunks[r] = std::make_pair(buffer.begin() + f, buffer.begin() + l);
+    }
+
+    op(chunks, out);
+  }
 
   trace.tock(MERGE);
 }
@@ -331,6 +559,7 @@ inline void bruck_mod(
     }
     trace.tock(detail::UNPACK);
   }
+
   trace.tock(COMMUNICATION);
 
   trace.tick(MERGE);
