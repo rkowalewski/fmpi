@@ -3,34 +3,34 @@
 suppressMessages(library(readr))
 suppressMessages(library(dplyr))
 suppressMessages(library(tidyr))
-suppressMessages(library(DescTools))
+#suppressMessages(library(DescTools))
 
 f <- file("stdin")
 df.in <- read_csv(paste(collapse = "\n", readLines(f)), col_names=TRUE, col_types="iii?iciicd")
 close(f)
 
-ci <- function(x, prob = .95) {
-  n <- sum(!is.na(x))
-  sd_x <- sd(x, na.rm = TRUE)
-  z_t <- qt(1 - (1 - prob) / 2, df = n - 1)
-  z_t * sd_x / sqrt(n)
-}
-
-lower <- function(x, prob = 0.95) {
-  mean(x, na.rm = TRUE) - ci(x, prob)
-}
-
-upper <- function(x, prob = 0.95) {
-  mean(x, na.rm = TRUE) + ci(x, prob)
-}
-
-medianCI <- function(x, prob=.95) {
-    MedianCI(x,
-         conf.level = 0.95,
-         na.rm = TRUE,
-         method = "exact",
-         R = 10000)
-}
+#ci <- function(x, prob = .95) {
+#  n <- sum(!is.na(x))
+#  sd_x <- sd(x, na.rm = TRUE)
+#  z_t <- qt(1 - (1 - prob) / 2, df = n - 1)
+#  z_t * sd_x / sqrt(n)
+#}
+#
+#lower <- function(x, prob = 0.95) {
+#  mean(x, na.rm = TRUE) - ci(x, prob)
+#}
+#
+#upper <- function(x, prob = 0.95) {
+#  mean(x, na.rm = TRUE) + ci(x, prob)
+#}
+#
+#medianCI <- function(x, prob=.95) {
+#    MedianCI(x,
+#         conf.level = 0.95,
+#         na.rm = TRUE,
+#         method = "exact",
+#         R = 10000)
+#}
 
 
 ci_prob <- .95
