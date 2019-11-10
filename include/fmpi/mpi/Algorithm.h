@@ -9,12 +9,12 @@ namespace mpi {
 
 template <class T>
 inline bool irecv(
-    T*                buf,
-    std::size_t       count,
-    Rank              source,
-    int               tag,
+    T*             buf,
+    std::size_t    count,
+    Rank           source,
+    int            tag,
     Context const& ctx,
-    MPI_Request*      req)
+    MPI_Request*   req)
 
 {
   auto type = mpi::type_mapper<T>::type();
@@ -33,12 +33,12 @@ inline bool irecv(
 
 template <class T>
 inline bool isend(
-    T const*          buf,
-    std::size_t       count,
-    Rank              target,
-    int               tag,
+    T const*       buf,
+    std::size_t    count,
+    Rank           target,
+    int            tag,
     Context const& ctx,
-    MPI_Request*      req)
+    MPI_Request*   req)
 
 {
   auto type = mpi::type_mapper<T>::type();
@@ -55,16 +55,34 @@ inline bool isend(
              req) == MPI_SUCCESS;
 }
 
+bool isend_type(
+    void const*    buf,
+    std::size_t    count,
+    MPI_Datatype   type,
+    Rank           target,
+    int            tag,
+    Context const& ctx,
+    MPI_Request*   req);
+
+bool irecv_type(
+    void*          buf,
+    std::size_t    count,
+    MPI_Datatype   type,
+    Rank           source,
+    int            tag,
+    Context const& ctx,
+    MPI_Request*   req);
+
 template <class T, class U>
 inline bool sendrecv(
-    T const*          sendbuf,
-    std::size_t       sendcount,
-    Rank              dest,
-    int               sendtag,
-    U*                recvbuf,
-    std::size_t       recvcount,
-    Rank              source,
-    int               recvtag,
+    T const*       sendbuf,
+    std::size_t    sendcount,
+    Rank           dest,
+    int            sendtag,
+    U*             recvbuf,
+    std::size_t    recvcount,
+    Rank           source,
+    int            recvtag,
     Context const& ctx)
 {
   RTLX_ASSERT(sendcount < std::numeric_limits<int>::max());
@@ -87,10 +105,10 @@ inline bool sendrecv(
 
 template <class T, class U>
 inline bool alltoall(
-    T const*          sendbuf,
-    std::size_t       sendcount,
-    U*                recvbuf,
-    std::size_t       recvcount,
+    T const*       sendbuf,
+    std::size_t    sendcount,
+    U*             recvbuf,
+    std::size_t    recvcount,
     Context const& ctx)
 {
   RTLX_ASSERT(sendcount < std::numeric_limits<int>::max());

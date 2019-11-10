@@ -79,16 +79,18 @@ inline void bruck(
 
   // Phase 2: Communication Rounds
 
-  trace.tick(COMMUNICATION);
-
   // Reverse a buffer for send-recv exchanges
   // We never exchange more than (N/2) elements per round, so this buffer
   // suffices
-  auto                       nels = size_t(nr) * blocksize;
+  auto const                 nels = size_t(nr) * blocksize;
   std::unique_ptr<value_t[]> tmpbuf{new value_t[nels]};
 
-  auto* sendbuf = &tmpbuf[0];
-  auto* recvbuf = &tmpbuf[nels / 2];
+  // auto* sendbuf = &tmpbuf[0];
+  // auto* recvbuf = &tmpbuf[nels / 2];
+
+  std::vector<int> displs(nr / 2);
+
+  auto const type = mpi::type_mapper<value_t>::type();
 
   for (auto&& r : range(tlx::integer_log2_ceil(nr))) {
     auto      j = static_cast<mpi::Rank>(1 << r);
@@ -110,26 +112,75 @@ inline void bruck(
     trace.tick(detail::PACK);
     for (std::size_t block = 1; block < nr; ++block) {
       if (block & j) {
-        std::copy(
-            // begin
-            out + block * blocksize,
-            // end
-            out + block * blocksize + blocksize,
-            // tmp buf
-            sendbuf + count * blocksize);
+        // std::copy(
+        //    // begin
+        //    out + block * blocksize,
+        //    // end
+        //    out + block * blocksize + blocksize,
+        //    // tmp buf
+        //    sendbuf + count * blocksize);
+
+        displs[count] = block * blocksize;
         ++count;
       }
     }
+
+    FMPI_DBG(count);
+
+    MPI_Datatype packed;
+    MPI_Type_create_indexed_block(
+        count, blocksize, displs.data(), type, &packed);
+    MPI_Type_commit(&packed);
+
+    MPI_Count mysize;
+    MPI_Type_size_x(packed, &mysize);
+    FMPI_DBG(mysize);
+
+    RTLX_ASSERT(
+        static_cast<size_t>(mysize) == count * blocksize * sizeof(value_t));
+
+    RTLX_ASSERT_RETURNS(
+        MPI_Sendrecv(
+            out,
+            1,
+            packed,
+            me,
+            EXCH_TAG_BRUCK,
+            tmpbuf.get(),
+            mysize,
+            MPI_BYTE,
+            me,
+            EXCH_TAG_BRUCK,
+            ctx.mpiComm(),
+            MPI_STATUS_IGNORE),
+        MPI_SUCCESS);
     trace.tock(detail::PACK);
 
-    FMPI_CHECK(mpi::isend(
-        sendbuf, blocksize * count, sendto, EXCH_TAG_BRUCK, ctx, &reqs[0]));
+    FMPI_DBG("tmpbuf");
+    FMPI_DBG_RANGE(tmpbuf.get(), tmpbuf.get() + count * blocksize);
 
-    FMPI_CHECK(mpi::irecv(
-        recvbuf, blocksize * count, recvfrom, EXCH_TAG_BRUCK, ctx, &reqs[1]));
+    trace.tick(COMMUNICATION);
+
+    FMPI_CHECK(mpi::irecv_type(
+        out, 1, packed, recvfrom, EXCH_TAG_BRUCK, ctx, &reqs[0]));
+
+    FMPI_CHECK(mpi::isend_type(
+        tmpbuf.get(),
+        mysize,
+        MPI_BYTE,
+        sendto,
+        EXCH_TAG_BRUCK,
+        ctx,
+        &reqs[1]));
 
     FMPI_CHECK(mpi::waitall(reqs));
+    trace.tock(COMMUNICATION);
 
+    FMPI_DBG("out");
+    FMPI_DBG_RANGE(out, out + nels);
+
+    MPI_Type_free(&packed);
+#if 0
     trace.tick(detail::UNPACK);
 
     // c) unpack blocks into recv buffer
@@ -145,6 +196,7 @@ inline void bruck(
     }
 
     trace.tock(detail::UNPACK);
+#endif
   }
 
 #if 0
@@ -160,7 +212,6 @@ inline void bruck(
       sendbuf);
 #endif
 
-  trace.tock(COMMUNICATION);
   trace.tick(MERGE);
 
   std::vector<std::pair<InputIt, InputIt>> chunks;

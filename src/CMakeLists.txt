@@ -1,4 +1,4 @@
-add_library(fmpi mpi/Environment.cc Schedule.cc)
+add_library(fmpi mpi/Environment.cc mpi/Algorithm.cc Schedule.cc)
 
 target_include_directories(fmpi PUBLIC ../include)
 
