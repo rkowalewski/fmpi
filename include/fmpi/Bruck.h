@@ -108,7 +108,6 @@ inline void bruck(
     // We exchange all blocks where the j-th bit is set
     auto rng = range<std::size_t>(1, nr);
 
-    // We exchange all blocks where the j-th bit is set
     std::copy_if(
         std::begin(rng),
         std::end(rng),
@@ -329,19 +328,6 @@ inline void bruck_indexed(
 
     MPI_Type_free(&packed);
   }
-
-#if 0
-  // Phase 3: Process i rotates local elements by (i+1) blocks to the left in
-  // a cyclic manner.
-  std::rotate_copy(
-      out,
-      // n_first
-      out + (me + 1) * blocksize,
-      // last
-      out + blocksize * nr,
-      // out
-      sendbuf);
-#endif
 
   trace.tick(MERGE);
 
