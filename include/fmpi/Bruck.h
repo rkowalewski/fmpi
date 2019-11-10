@@ -82,11 +82,167 @@ inline void bruck(
   // Reverse a buffer for send-recv exchanges
   // We never exchange more than (N/2) elements per round, so this buffer
   // suffices
-  auto const                 nels = size_t(nr) * blocksize;
+  auto                       nels = size_t(nr) * blocksize;
   std::unique_ptr<value_t[]> tmpbuf{new value_t[nels]};
 
-  // auto* sendbuf = &tmpbuf[0];
-  // auto* recvbuf = &tmpbuf[nels / 2];
+  auto* sendbuf = &tmpbuf[0];
+  auto* recvbuf = &tmpbuf[nels / 2];
+
+  std::vector<std::size_t> blocks;
+  blocks.reserve(nr / 2);
+
+  for (auto&& r : range(tlx::integer_log2_ceil(nr))) {
+    auto      j = static_cast<mpi::Rank>(1 << r);
+    mpi::Rank recvfrom, sendto;
+
+    auto reqs =
+        std::array<MPI_Request, 2>{MPI_REQUEST_NULL, MPI_REQUEST_NULL};
+
+    // We send to (r + j)
+    std::tie(recvfrom, sendto) = std::make_pair(
+        mod(me - j, static_cast<mpi::Rank>(nr)),
+        mod(me + j, static_cast<mpi::Rank>(nr)));
+
+    trace.tick(detail::PACK);
+
+    // We exchange all blocks where the j-th bit is set
+    auto rng = range<std::size_t>(1, nr);
+
+    // We exchange all blocks where the j-th bit is set
+    std::copy_if(
+        std::begin(rng),
+        std::end(rng),
+        std::back_inserter(blocks),
+        [j](auto idx) { return idx & j; });
+
+    // a) pack blocks into a contigous send buffer
+
+    for (std::size_t b = 0; b < blocks.size(); ++b) {
+      auto const block = blocks[b];
+      std::copy(
+          // begin
+          out + block * blocksize,
+          // end
+          out + block * blocksize + blocksize,
+          // tmp buf
+          sendbuf + b * blocksize);
+    }
+
+    trace.tock(detail::PACK);
+
+    trace.tick(COMMUNICATION);
+
+    FMPI_CHECK(mpi::isend(
+        sendbuf,
+        blocksize * blocks.size(),
+        sendto,
+        EXCH_TAG_BRUCK,
+        ctx,
+        &reqs[0]));
+
+    FMPI_CHECK(mpi::irecv(
+        recvbuf,
+        blocksize * blocks.size(),
+        recvfrom,
+        EXCH_TAG_BRUCK,
+        ctx,
+        &reqs[1]));
+
+    FMPI_CHECK(mpi::waitall(reqs));
+    trace.tock(COMMUNICATION);
+
+    trace.tick(detail::UNPACK);
+
+    // c) unpack blocks into recv buffer
+    for (std::size_t b = 0; b < blocks.size(); ++b) {
+      auto const block = blocks[b];
+      std::copy(
+          recvbuf + b * blocksize,
+          recvbuf + b * blocksize + blocksize,
+          out + block * blocksize);
+    }
+
+    blocks.clear();
+  }
+
+  trace.tock(detail::UNPACK);
+
+#if 0
+  // Phase 3: Process i rotates local elements by (i+1) blocks to the left in
+  // a cyclic manner.
+  std::rotate_copy(
+      out,
+      // n_first
+      out + (me + 1) * blocksize,
+      // last
+      out + blocksize * nr,
+      // out
+      sendbuf);
+#endif
+
+  trace.tick(MERGE);
+
+  std::vector<std::pair<InputIt, InputIt>> chunks;
+  chunks.reserve(nr);
+
+  auto range = fmpi::range<uint32_t>(0, nr * blocksize, blocksize);
+
+  std::transform(
+      std::begin(range),
+      std::end(range),
+      std::back_inserter(chunks),
+      [buf = out, blocksize](auto offset) {
+        auto f = std::next(buf, offset);
+        auto l = std::next(f, blocksize);
+        return std::make_pair(f, l);
+      });
+
+  op(chunks, &tmpbuf[0]);
+
+  std::move(&tmpbuf[0], &tmpbuf[nels], out);
+
+  trace.tock(MERGE);
+}
+
+template <class InputIt, class OutputIt, class Op>
+inline void bruck_indexed(
+    InputIt             begin,
+    OutputIt            out,
+    int                 blocksize,
+    mpi::Context const& ctx,
+    Op&&                op)
+{
+  auto const me = ctx.rank();
+  auto const nr = ctx.size();
+
+  using value_t = typename std::iterator_traits<InputIt>::value_type;
+
+  auto trace = rtlx::TimeTrace{me, "Bruck_indexed"};
+
+  // Phase 1: Process i rotates local elements by i blocks to the left in a
+  // cyclic manner.
+
+  trace.tick(detail::ROTATE);
+
+  // O(p * blocksize)
+  std::rotate_copy(
+      begin,
+      // n_first
+      begin + me * blocksize,
+      // last
+      begin + blocksize * nr,
+      // out
+      out);
+
+  trace.tock(detail::ROTATE);
+
+  // Phase 2: Communication Rounds
+
+  // Reverse a buffer for send-recv exchanges
+  // We never exchange more than (N/2) elements per round, so this buffer
+  // suffices
+  auto const                 nels = size_t(nr) * blocksize;
+  std::unique_ptr<value_t[]> tmpbuf{new value_t[nels]};
 
   std::vector<int> displs(nr / 2);
 
@@ -112,14 +268,6 @@ inline void bruck(
     trace.tick(detail::PACK);
     for (std::size_t block = 1; block < nr; ++block) {
       if (block & j) {
-        // std::copy(
-        //    // begin
-        //    out + block * blocksize,
-        //    // end
-        //    out + block * blocksize + blocksize,
-        //    // tmp buf
-        //    sendbuf + count * blocksize);
-
         displs[count] = block * blocksize;
         ++count;
       }
@@ -180,23 +328,6 @@ inline void bruck(
     FMPI_DBG_RANGE(out, out + nels);
 
     MPI_Type_free(&packed);
-#if 0
-    trace.tick(detail::UNPACK);
-
-    // c) unpack blocks into recv buffer
-    count = 0;
-    for (std::size_t block = 1; block < nr; ++block) {
-      if (block & j) {
-        std::copy(
-            recvbuf + count * blocksize,
-            recvbuf + count * blocksize + blocksize,
-            out + block * blocksize);
-        ++count;
-      }
-    }
-
-    trace.tock(detail::UNPACK);
-#endif
   }
 
 #if 0
