@@ -162,9 +162,9 @@ inline void bruck(
     }
 
     blocks.clear();
-  }
 
-  trace.tock(detail::UNPACK);
+    trace.tock(detail::UNPACK);
+  }
 
 #if 0
   // Phase 3: Process i rotates local elements by (i+1) blocks to the left in
@@ -247,6 +247,9 @@ inline void bruck_indexed(
 
   auto const type = mpi::type_mapper<value_t>::type();
 
+  std::vector<std::size_t> blocks;
+  blocks.reserve(nr / 2);
+
   for (auto&& r : range(tlx::integer_log2_ceil(nr))) {
     auto      j = static_cast<mpi::Rank>(1 << r);
     mpi::Rank recvfrom, sendto;
@@ -259,32 +262,34 @@ inline void bruck_indexed(
         mod(me - j, static_cast<mpi::Rank>(nr)),
         mod(me + j, static_cast<mpi::Rank>(nr)));
 
+    trace.tick(detail::PACK);
+
     // We exchange all blocks where the j-th bit is set
+    auto rng = range<std::size_t>(1, nr);
+
+    std::copy_if(
+        std::begin(rng),
+        std::end(rng),
+        std::back_inserter(blocks),
+        [j](auto idx) { return idx & j; });
 
     // a) pack blocks into a contigous send buffer
-    size_t count = 0;
+    FMPI_DBG(blocks.size());
 
-    trace.tick(detail::PACK);
-    for (std::size_t block = 1; block < nr; ++block) {
-      if (block & j) {
-        displs[count] = block * blocksize;
-        ++count;
-      }
+    for (std::size_t b = 0; b < blocks.size(); ++b) {
+      auto const block = blocks[b];
+      displs[b]        = block * blocksize;
+
+      //We can also use MPI, see below but it seems to be quite slow
+      std::copy(
+          // begin
+          out + block * blocksize,
+          // end
+          out + block * blocksize + blocksize,
+          // tmp buf
+          tmpbuf.get() + b * blocksize);
     }
-
-    FMPI_DBG(count);
-
-    MPI_Datatype packed;
-    MPI_Type_create_indexed_block(
-        count, blocksize, displs.data(), type, &packed);
-    MPI_Type_commit(&packed);
-
-    MPI_Count mysize;
-    MPI_Type_size_x(packed, &mysize);
-    FMPI_DBG(mysize);
-
-    RTLX_ASSERT(
-        static_cast<size_t>(mysize) == count * blocksize * sizeof(value_t));
+#if 0
 
     RTLX_ASSERT_RETURNS(
         MPI_Sendrecv(
@@ -301,10 +306,22 @@ inline void bruck_indexed(
             ctx.mpiComm(),
             MPI_STATUS_IGNORE),
         MPI_SUCCESS);
-    trace.tock(detail::PACK);
+#endif
 
-    FMPI_DBG("tmpbuf");
-    FMPI_DBG_RANGE(tmpbuf.get(), tmpbuf.get() + count * blocksize);
+
+    MPI_Datatype packed;
+    MPI_Type_create_indexed_block(
+        blocks.size(), blocksize, displs.data(), type, &packed);
+    MPI_Type_commit(&packed);
+
+    MPI_Count mysize;
+    MPI_Type_size_x(packed, &mysize);
+
+    RTLX_ASSERT(
+        static_cast<size_t>(mysize) ==
+        blocks.size() * blocksize * sizeof(value_t));
+
+    trace.tock(detail::PACK);
 
     trace.tick(COMMUNICATION);
 
@@ -323,10 +340,8 @@ inline void bruck_indexed(
     FMPI_CHECK(mpi::waitall(reqs));
     trace.tock(COMMUNICATION);
 
-    FMPI_DBG("out");
-    FMPI_DBG_RANGE(out, out + nels);
-
     MPI_Type_free(&packed);
+    blocks.clear();
   }
 
   trace.tick(MERGE);
