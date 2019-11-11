@@ -134,9 +134,13 @@ df.bruck <- df.in %>%
 write_csv(df.stats, csv_out, na = "NA", append = FALSE, col_names = TRUE,
             quote_escape = "double")
 
-csv_bruck <- paste(
+logdir <- dirname(csv_out)
+
+csv_bruck <- paste0(
+                  logdir,
+                  "/",
                   sub(pattern = "(.*)\\..*$", replacement = "\\1", basename(csv_out)),
-                  ".bruck.csv", sep="")
+                  ".bruck.csv")
 
 print(paste0("--writing file: ", csv_bruck))
 
