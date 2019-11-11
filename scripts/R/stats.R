@@ -9,6 +9,39 @@ f <- file("stdin")
 df.in <- read_csv(paste(collapse = "\n", readLines(f)), col_names=TRUE, col_types="iii?iciicd")
 close(f)
 
+# Convert str input to boolean
+str2bool = function(input_str)
+{
+  if(input_str == "0")
+  {
+    input_str = FALSE
+  }
+  else if(input_str == "1")
+  {
+    input_str = TRUE
+  }
+  return(input_str)
+}
+
+args = commandArgs(trailingOnly=TRUE)
+
+if (length(args) < 2) {
+    stop("Usage: ./plots.R <outfile> <append?>", call.=FALSE)
+}
+
+csv_file <- args[1]
+append <- str2bool(args[2])
+
+{ if (append == TRUE){
+    print(paste("appending to: ", csv_file))
+  }
+  else {
+    print(paste("writing to: ", csv_file))
+  }
+}
+
+
+
 #ci <- function(x, prob = .95) {
 #  n <- sum(!is.na(x))
 #  sd_x <- sd(x, na.rm = TRUE)
@@ -80,6 +113,8 @@ df.stats <- df.stats %>%
            #Ttotal_med_lowerCI,Ttotal_med_upperCI,
            everything())
 
+write_csv(df.stats, csv_file, na = "NA", append = append, col_names = !append,
+            quote_escape = "double")
 
-cat(format_csv(df.stats))
+# cat(format_csv(df.stats))
 
