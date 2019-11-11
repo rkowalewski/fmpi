@@ -459,8 +459,6 @@ inline void bruck_interleave(
   merged.reserve(nr);
   merged.push_back(0);
 
-  // std::size_t lastCopied = 0;
-
   for (auto&& r : range(niter)) {
     auto const j = static_cast<mpi::Rank>(one << r);
 
@@ -526,10 +524,6 @@ inline void bruck_interleave(
 
     if (r > 0) {
       trace.tick(MERGE);
-
-#if 0
-      if (chunks.size() > 3) {
-#endif
       // merge chunks of last iteration...
       // auto const op_first = (r == 1) ? 0 : (one << (r - 1)) * blocksize;
       auto const op_first = merged.back();
@@ -540,22 +534,6 @@ inline void bruck_interleave(
       chunks.clear();
       FMPI_DBG("merge_buffer");
       FMPI_DBG_RANGE(buffer.begin(), buffer.end());
-#if 0
-      } else {
-        std::size_t count = 0;
-        for (auto& c : chunks) {
-          auto const dist =std::distance(c.first, c.second);
-          FMPI_DBG(dist);
-          FMPI_DBG(lastCopied);
-          auto const target = out + count;
-          std::move(c.first, c.second, target);
-          c.first = target;
-          c.second = target + dist;
-          count += dist;
-        }
-      lastCopied += count;
-      }
-#endif
       trace.tock(MERGE);
     }
 
