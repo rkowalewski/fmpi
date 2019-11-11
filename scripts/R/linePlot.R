@@ -58,11 +58,9 @@ data <- read.csv(file=csv, header=TRUE, sep=",")
 
 data <- data %>% filter(Algo != "AlltoAll")
 
-head(data)
+plotTitle <- sub(pattern = "(.*)\\..*$", replacement = "\\1", basename(csv))
 
-plotName <- paste(
-                  sub(pattern = "(.*)\\..*$", replacement = "\\1", basename(csv)),
-                  ".pdf", sep="")
+plotName <- paste0(plotTitle, ".pdf")
 
 #cbPalette <- c("#999999", "#E69F00", "#56B4E9", "#009E73", "#F0E442", "#0072B2", "#D55E00", "#CC79A7")
 
@@ -70,7 +68,7 @@ plotName <- paste(
 pd <- position_dodge(0.1) # move them .05 to the left and right
 
 # bars won't be dodged!
-pdf(plotName,paper="a4")
+pdf(plotName,paper="a4", title=plotTitle)
 
 mylimit <- function(x) {
     limits <- c(min(x) - .2, max(x) + .2)
@@ -78,7 +76,7 @@ mylimit <- function(x) {
 }
 
 
-p <- ggplot(data, aes(x=factor(Blocksize), y=Ttotal_speedup, colour=Algo, group=Algo)) +
+p <- ggplot(data, aes(x=factor(Nodes), y=Ttotal_speedup, colour=Algo, group=Algo)) +
     #geom_errorbar(aes(ymin=Ttotal_med_lowerCI, ymax=Ttotal_med_upperCI), colour="black", width=.1, position=pd) +
     geom_line(position=pd) +
     geom_point(position=pd, size=2) +
@@ -86,12 +84,12 @@ p <- ggplot(data, aes(x=factor(Blocksize), y=Ttotal_speedup, colour=Algo, group=
     # To use for line and point colors, add
     scale_colour_brewer(type="qal", palette="Paired") +
     scale_y_continuous(breaks=seq(0,5,by=.2),limits=mylimit) +
-    xlab("Blocksize") +
+    xlab("Nodes") +
     ylab("Speedup")+
     geom_hline(yintercept = 1) +
     #annotate("text", min(the.data$year), 50, vjust = -1, label = "Cutoff")
     # + facet_zoom(xy = Nodes <= 32, horizontal=FALSE)
-    facet_wrap_paginate( ~Nodes, ncol=1, nrow=3, scales="free_y", page=NULL)
+    facet_wrap_paginate( ~Blocksize, ncol=1, nrow=3, scales="free_y", page=NULL, labeller="label_both")
 
 
 # Here we add our special class
