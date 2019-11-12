@@ -31,6 +31,7 @@ module load slurm_setup
 
 export A2A_ENABLE_TRACE=1
 
-export OMP_NUM_THREADS=<<NUM_THREADS>>
+export OMP_NUM_THREADS="$((96/<<NUM_PROCS>>))"
+export OMP_PLACES="threads"
 
 mpiexec -n "$((<<NUM_NODES>> * <<NUM_PROCS>>))" ./build.impi/MpiAlltoAllBench $SLURM_JOB_NUM_NODES
