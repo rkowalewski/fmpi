@@ -80,6 +80,7 @@ p <- ggplot(data, aes(x=factor(Nodes), y=Ttotal_speedup, colour=Algo, group=Algo
     #geom_errorbar(aes(ymin=Ttotal_med_lowerCI, ymax=Ttotal_med_upperCI), colour="black", width=.1, position=pd) +
     geom_line(position=pd) +
     geom_point(position=pd, size=2) +
+    ggtitle(plotTitle) +
     theme_bw() +
     # To use for line and point colors, add
     scale_colour_brewer(type="qal", palette="Paired") +

@@ -1,13 +1,7 @@
 #!/usr/bin/env Rscript
 
-library(dplyr)
-library(ggplot2)
-library(RColorBrewer)
-library(tikzDevice)
-library(extrafont)
-suppressMessages(library(readr))
-suppressMessages(library(ggforce))
 suppressMessages(library(tidyverse))
+suppressMessages(library(ggforce))
 
 print.gg_multiple <- function(x, page, ...) {
   # Get total number of pages
@@ -46,67 +40,50 @@ repair_facet <- function(x) {
   x
 }
 
-f <- file("stdin")
-df.in <- read_csv(paste(collapse = "\n", readLines(f)), col_names=TRUE, col_types="iii?iciicd")
-close(f)
+args = commandArgs(trailingOnly=TRUE)
 
-#args = commandArgs(trailingOnly=TRUE)
-#
-#if (length(args)< 1) {
-#    stop("Usage: ./plots.R <infile>", call.=FALSE)
-#}
-#
-#csv <- args[1]
-#
-#data <- read.csv(file=csv, header=TRUE, sep=",")
+if (length(args)< 1) {
+    stop("Usage: ./plots.R <infile>", call.=FALSE)
+}
 
-cols <- c("Bruck", "Bruck_Mod", "Bruck_interleave")
+csv <- args[1]
 
-df.stats <- df.in %>%
-        filter(Algo %in% cols) %>%
-    group_by(Nodes, Procs, Round, NBytes, Blocksize, Algo, Measurement) %>%
-    summarise(median=median(Value, na.rm = T)) %>%
-    mutate(
-           Percent = median/median[Measurement=="Ttotal"]
-          )
+df.in <- read_csv(csv, col_names=TRUE, col_types="iii?iccdd")
 
-cat(format_csv(df.stats))
+df.bar <- df.in %>% filter(Measurement != "Ttotal")
+df.pnt <- df.in %>% filter(Measurement == "Ttotal")
 
-stop()
+basename <- sub(pattern = "(.*)\\..*$", replacement = "\\1", basename(csv))
 
-plotName <- paste(
-                  sub(pattern = "(.*)\\..*$", replacement = "\\1", basename(csv)),
-                  ".pdf", sep="")
-
-#cbPalette <- c("#999999", "#E69F00", "#56B4E9", "#009E73", "#F0E442", "#0072B2", "#D55E00", "#CC79A7")
-
-# The errorbars overlapped, so use position_dodge to move them horizontally
-pd <- position_dodge(0.1) # move them .05 to the left and right
+plotName <- paste0(basename,".pdf")
 
 # bars won't be dodged!
 pdf(plotName,paper="a4")
 
-mylimit <- function(x) {
-    limits <- c(min(x) - .2, max(x) + .2)
-    limits
-}
+ngroups <- nrow(df.bar %>% distinct(Blocksize))
+nrow <- ceiling(ngroups/3)
 
+theme <- theme_bw()
+# change xaxis text
+theme$axis.text.x <- element_text(angle = 45)
 
-p <- ggplot(data, aes(x=factor(Blocksize), y=Ttotal_speedup, colour=Algo, group=Algo)) +
-    #geom_errorbar(aes(ymin=Ttotal_med_lowerCI, ymax=Ttotal_med_upperCI), colour="black", width=.1, position=pd) +
-    geom_line(position=pd) +
-    geom_point(position=pd, size=2) +
-    theme_bw() +
+my_labeller <- label_bquote(
+  cols = .(Blocksize) / .(Nodes)
+)
+
+# df.pnt, aes(x=Algo, y=median, group=Nodes, )
+p <- ggplot(data=df.bar) +
+  geom_bar(aes(y = median, x = Algo, fill = Measurement), stat="identity",
+           position='stack', alpha=0.8) +
     # To use for line and point colors, add
-    scale_colour_brewer(type="qal", palette="Paired") +
-    scale_y_continuous(breaks=seq(0,5,by=.2),limits=mylimit) +
-    xlab("Blocksize") +
-    ylab("Speedup")+
-    geom_hline(yintercept = 1) +
-    #annotate("text", min(the.data$year), 50, vjust = -1, label = "Cutoff")
-    # + facet_zoom(xy = Nodes <= 32, horizontal=FALSE)
-    facet_wrap_paginate( ~Nodes, ncol=1, nrow=3, scales="free_y", page=NULL)
+    scale_fill_brewer(type="qal", palette="Paired") +
+  theme +
+  facet_wrap_paginate(Blocksize~Nodes, ncol=3, nrow=3,
+                      scales="free_y", page=NULL, labeller = my_labeller)
 
+# other labeller are:
+# label_wrap_gen(multi_line=FALSE)
+#
 
 # Here we add our special class
 class(p) <- c('gg_multiple', class(p))
