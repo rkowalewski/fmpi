@@ -281,7 +281,7 @@ int main(int argc, char* argv[])
         // nels must be the number of elements in all sequences
         RTLX_ASSERT(seqs.size());
         RTLX_ASSERT(res);
-#if 1
+
         __gnu_parallel::multiway_merge(
             std::begin(seqs),
             std::end(seqs),
@@ -289,14 +289,6 @@ int main(int argc, char* argv[])
             nels,
             std::less<>{},
             __gnu_parallel::parallel_tag{nthreads});
-#else
-        static_cast<void>(nthreads);
-
-        for (auto&& seq : seqs) {
-          std::copy(seq.first, seq.second, res);
-          res += std::distance(seq.first, seq.second);
-        }
-#endif
       };
 
       // first we want to obtain the correct result which we can verify then
