@@ -654,8 +654,6 @@ inline void bruck_mod(
 
   auto const nels = size_t(nr) * blocksize;
 
-  std::unique_ptr<value_t[]> tmpbuf;
-
   {
     // TODO: this can be more efficient
     if (isPow2(nr)) {
@@ -684,9 +682,9 @@ inline void bruck_mod(
     }
 #endif
 
-    // Phase 2: Communication Rounds
-    tmpbuf.reset(new value_t[nels]);
   }
+
+  std::unique_ptr<value_t[]> tmpbuf{new value_t[nels]};
   trace.tock(detail::ROTATE);
 
   auto sendbuf = &tmpbuf[0];
