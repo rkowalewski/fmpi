@@ -5,8 +5,6 @@
 
 namespace fmpi {
 
-enum class AllToAllAlgorithm { FLAT_HANDSHAKE, ONE_FACTOR };
-
 class FlatHandshake {
  public:
   static constexpr const char* NAME = "Ring";
@@ -33,17 +31,6 @@ class OneFactor {
   mpi::Rank factor_odd(mpi::Context const& comm, uint32_t phase) const;
 };
 
-namespace detail {
-template <AllToAllAlgorithm algo>
-struct selectAlgorithm {
-  using type = FlatHandshake;
-};
-
-template <>
-struct selectAlgorithm<AllToAllAlgorithm::ONE_FACTOR> {
-  using type = OneFactor;
-};
-}  // namespace detail
 }  // namespace fmpi
 
 #endif

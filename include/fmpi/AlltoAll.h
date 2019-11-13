@@ -68,7 +68,7 @@ inline auto enqueueMpiOps(
 }  // namespace detail
 
 template <
-    AllToAllAlgorithm algo,
+    class schedule,
     class InputIt,
     class OutputIt,
     class Op,
@@ -95,7 +95,6 @@ inline void scatteredPairwiseWaitsome(
   static_assert(
       utilization_threshold, "at least two concurrent receives required");
 
-  using algo_type  = typename detail::selectAlgorithm<algo>::type;
   using value_type = typename std::iterator_traits<InputIt>::value_type;
 
   auto const nr = ctx.size();
@@ -105,7 +104,7 @@ inline void scatteredPairwiseWaitsome(
 
   if (rtlx::TraceStore::GetInstance().enabled()) {
     std::ostringstream os;
-    os << algo_type::NAME << "Waitsome" << NReqs;
+    os << schedule::NAME << "Waitsome" << NReqs;
     s = os.str();
   }
 
@@ -132,7 +131,7 @@ inline void scatteredPairwiseWaitsome(
   std::size_t nsreqs = 0, nrreqs = 0, sphase = 0, rphase = 0;
 
   auto rschedule = [&ctx](auto phase) {
-    algo_type commAlgo{};
+    schedule commAlgo{};
     return commAlgo.recvRank(ctx, phase);
   };
 
@@ -160,7 +159,7 @@ inline void scatteredPairwiseWaitsome(
   nrreqs += reqsInFlight;
 
   auto sschedule = [&ctx](auto phase) {
-    algo_type commAlgo{};
+    schedule commAlgo{};
     return commAlgo.sendRank(ctx, phase);
   };
 
@@ -413,7 +412,7 @@ inline void scatteredPairwiseWaitsome(
   RTLX_ASSERT(std::is_sorted(out, out + nr * blocksize));
 }
 
-template <AllToAllAlgorithm algo, class InputIt, class OutputIt, class Op>
+template <class schedule, class InputIt, class OutputIt, class Op>
 inline void scatteredPairwise(
     InputIt             begin,
     OutputIt            out,
@@ -424,7 +423,6 @@ inline void scatteredPairwise(
   auto nr = ctx.size();
   auto me = ctx.rank();
 
-  using algo_type  = typename detail::selectAlgorithm<algo>::type;
   using value_type = typename std::iterator_traits<InputIt>::value_type;
 
   auto rbuf = std::unique_ptr<value_type[]>(new value_type[nr * blocksize]);
@@ -433,7 +431,7 @@ inline void scatteredPairwise(
 
   if (rtlx::TraceStore::GetInstance().enabled()) {
     std::ostringstream os;
-    os << algo_type::NAME;
+    os << schedule::NAME;
     s = os.str();
   }
 
@@ -445,7 +443,9 @@ inline void scatteredPairwise(
       begin + me * blocksize + blocksize,
       &rbuf[0] + me * blocksize);
 
-  auto commAlgo = algo_type{};
+  auto commAlgo = schedule{};
+
+  std::vector<MPI_Request> reqs(nr * 2, MPI_REQUEST_NULL);
 
 
   std::vector<MPI_Request> reqs(nr * 2, MPI_REQUEST_NULL);
@@ -481,7 +481,7 @@ inline void scatteredPairwise(
         sendto,
         EXCH_TAG_RING,
         ctx,
-        &reqs[nr+r]));
+        &reqs[nr + r]));
   }
 
   mpi::waitall(&(*reqs.begin()), &(*reqs.end()));

@@ -45,21 +45,21 @@ std::vector<std::pair<
                   std::make_pair(
                       "Ring",
                       fmpi::scatteredPairwise<
-                          fmpi::AllToAllAlgorithm::FLAT_HANDSHAKE,
+                          fmpi::FlatHandshake,
                           iterator_t,
                           iterator_t,
                           merger_t<iterator_t, iterator_t>>),
                   std::make_pair(
                       "OneFactor",
                       fmpi::scatteredPairwise<
-                          fmpi::AllToAllAlgorithm::ONE_FACTOR,
+                          fmpi::OneFactor,
                           iterator_t,
                           iterator_t,
                           merger_t<iterator_t, iterator_t>>),
                   std::make_pair(
                       "RingWaitsome4",
                       fmpi::scatteredPairwiseWaitsome<
-                          fmpi::AllToAllAlgorithm::FLAT_HANDSHAKE,
+                          fmpi::FlatHandshake,
                           iterator_t,
                           iterator_t,
                           merger_t<iterator_t, iterator_t>,
@@ -67,7 +67,7 @@ std::vector<std::pair<
                   std::make_pair(
                       "RingWaitsome8",
                       fmpi::scatteredPairwiseWaitsome<
-                          fmpi::AllToAllAlgorithm::FLAT_HANDSHAKE,
+                          fmpi::FlatHandshake,
                           iterator_t,
                           iterator_t,
                           merger_t<iterator_t, iterator_t>,
@@ -75,7 +75,7 @@ std::vector<std::pair<
                   std::make_pair(
                       "RingWaitsome16",
                       fmpi::scatteredPairwiseWaitsome<
-                          fmpi::AllToAllAlgorithm::FLAT_HANDSHAKE,
+                          fmpi::FlatHandshake,
                           iterator_t,
                           iterator_t,
                           merger_t<iterator_t, iterator_t>,
@@ -83,7 +83,7 @@ std::vector<std::pair<
                   std::make_pair(
                       "OneFactorWaitsome4",
                       fmpi::scatteredPairwiseWaitsome<
-                          fmpi::AllToAllAlgorithm::ONE_FACTOR,
+                          fmpi::OneFactor,
                           iterator_t,
                           iterator_t,
                           merger_t<iterator_t, iterator_t>,
@@ -91,7 +91,7 @@ std::vector<std::pair<
                   std::make_pair(
                       "OneFactorWaitsome8",
                       fmpi::scatteredPairwiseWaitsome<
-                          fmpi::AllToAllAlgorithm::ONE_FACTOR,
+                          fmpi::OneFactor,
                           iterator_t,
                           iterator_t,
                           merger_t<iterator_t, iterator_t>,
@@ -99,7 +99,7 @@ std::vector<std::pair<
                   std::make_pair(
                       "OneFactorWaitsome16",
                       fmpi::scatteredPairwiseWaitsome<
-                          fmpi::AllToAllAlgorithm::ONE_FACTOR,
+                          fmpi::OneFactor,
                           iterator_t,
                           iterator_t,
                           merger_t<iterator_t, iterator_t>,
