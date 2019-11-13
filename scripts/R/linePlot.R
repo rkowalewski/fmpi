@@ -1,49 +1,20 @@
 #!/usr/bin/env Rscript
 
-library(dplyr)
-library(ggplot2)
-library(RColorBrewer)
-library(tikzDevice)
-library(extrafont)
-suppressMessages(library(readr))
 suppressMessages(library(ggforce))
 suppressMessages(library(tidyverse))
 
-print.gg_multiple <- function(x, page, ...) {
-  # Get total number of pages
-  page_tot <- ggforce::n_pages(repair_facet(x))
 
-  # Get and check the page number to be drawn
-  if (!missing(page)) {
-    page_2_draw <- page
-  } else {
-    page_2_draw <- 1:page_tot
-  }
-
-  # Prevent issue with repair_facet when page = NULL
-  x$facet$params$page <- page_2_draw
-
-  # Begin multiple page ploting
-  n_page_2_draw <- length(page_2_draw)
-
-  # Draw all pages
-  for (p in seq_along(page_2_draw)) {
-    x$facet$params$page <- page_2_draw[p]
-    ggplot2:::print.ggplot(x = repair_facet(x), ...)
-
-  }
-
-  # Prevent ggforce from droping multiple pages value
-  x$facet$params$page <- page_2_draw
-}
-
-# Fix for ggforce facet_wrap_paginate
-repair_facet <- function(x) {
-  if (class(x$facet)[1] == 'FacetWrapPaginate' &&
-      !'nrow' %in% names(x$facet$params)) {
-    x$facet$params$nrow <- x$facet$params$max_row
-  }
-  x
+thisFile <- function() {
+        cmdArgs <- commandArgs(trailingOnly = FALSE)
+        needle <- "--file="
+        match <- grep(needle, cmdArgs)
+        if (length(match) > 0) {
+                # Rscript
+                return(normalizePath(sub(needle, "", cmdArgs[match])))
+        } else {
+                # 'source'd via R console
+                return(normalizePath(sys.frames()[[1]]$ofile))
+        }
 }
 
 args = commandArgs(trailingOnly=TRUE)
@@ -94,6 +65,9 @@ p <- ggplot(data, aes(x=factor(Nodes), y=Ttotal_speedup, colour=Algo, group=Algo
 
 
 # Here we add our special class
+if(!exists("print.gg_multiple", mode="function")) {
+    source(paste0(dirname(thisFile()), "/internal/", "gg_multiple.R"))
+}
 class(p) <- c('gg_multiple', class(p))
 
 #print(p, page=2)

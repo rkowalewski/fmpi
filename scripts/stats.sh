@@ -7,6 +7,12 @@ SCRIPTPATH=$(dirname "$SCRIPT")
 
 OUTFILE="$1"
 
+if [[ "$#" < 2 ]]
+then
+  echo "usage: <outfile.csv> <input...>"
+  exit 1
+fi
+
 if [[ ! -x "$(command -v Rscript)" ]]
 then
   echo "R seems not to be installed on your system"
