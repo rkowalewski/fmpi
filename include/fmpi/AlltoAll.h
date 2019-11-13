@@ -202,7 +202,7 @@ inline void scatteredPairwiseWaitsome(
   if (alreadyDone) {
     // We are already done
     // Wait for previous round
-    FMPI_CHECK(mpi::waitall(reqs));
+    FMPI_CHECK(mpi::waitall(reqs.begin(), reqs.end()));
 
     trace.tock(COMMUNICATION);
 
@@ -447,6 +447,9 @@ inline void scatteredPairwise(
 
   auto commAlgo = algo_type{};
 
+
+  std::vector<MPI_Request> reqs(nr * 2, MPI_REQUEST_NULL);
+
   for (int r = 0; r < static_cast<int>(nr); ++r) {
     auto sendto   = commAlgo.sendRank(ctx, r);
     auto recvfrom = commAlgo.recvRank(ctx, r);
@@ -464,17 +467,25 @@ inline void scatteredPairwise(
     FMPI_DBG(sendto);
     FMPI_DBG(recvfrom);
 
-    FMPI_CHECK(mpi::sendrecv(
+    FMPI_CHECK(mpi::isend(
         std::next(begin, sendto * blocksize),
         blocksize,
         sendto,
         EXCH_TAG_RING,
+        ctx,
+        &reqs[r]));
+
+
+    FMPI_CHECK(mpi::irecv(
         std::next(&(rbuf[0]), recvfrom * blocksize),
         blocksize,
         recvfrom,
         EXCH_TAG_RING,
-        ctx));
+        ctx,
+        &reqs[r+1]));
   }
+
+  mpi::waitall(&(*reqs.begin()), &(*reqs.end()));
 
   trace.tock(COMMUNICATION);
 

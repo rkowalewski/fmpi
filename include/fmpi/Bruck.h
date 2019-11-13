@@ -147,7 +147,7 @@ inline void bruck(
         ctx,
         &reqs[1]));
 
-    FMPI_CHECK(mpi::waitall(reqs));
+    FMPI_CHECK(mpi::waitall(reqs.begin(), reqs.end()));
     trace.tock(COMMUNICATION);
 
     trace.tick(detail::UNPACK);
@@ -338,7 +338,7 @@ inline void bruck_indexed(
         ctx,
         &reqs[1]));
 
-    FMPI_CHECK(mpi::waitall(reqs));
+    FMPI_CHECK(mpi::waitall(reqs.begin(), reqs.end()));
     RTLX_ASSERT_RETURNS(MPI_Type_free(&packed), MPI_SUCCESS);
     trace.tock(COMMUNICATION);
 
@@ -539,7 +539,7 @@ inline void bruck_interleave(
     }
 
     trace.tick(COMMUNICATION);
-    FMPI_CHECK(mpi::waitall(reqs));
+    FMPI_CHECK(mpi::waitall(reqs.begin(), reqs.end()));
 
     FMPI_DBG("recv_buffer");
     FMPI_DBG_RANGE(recvbuf, recvbuf + blocksize * blocks.size());

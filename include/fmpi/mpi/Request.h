@@ -37,12 +37,8 @@ inline std::vector<int> waitsome(std::array<MPI_Request, N>& pending)
       std::begin(indices), std::next(std::begin(indices), completed));
 }
 
-template <std::size_t N>
-inline bool waitall(std::array<MPI_Request, N>& pending)
-{
-  return MPI_Waitall(pending.size(), &(pending[0]), MPI_STATUSES_IGNORE) ==
-         MPI_SUCCESS;
-}
+bool waitall(MPI_Request* begin, MPI_Request* end);
+
 }  // namespace mpi
 
 #endif
