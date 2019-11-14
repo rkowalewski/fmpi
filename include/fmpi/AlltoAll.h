@@ -467,22 +467,21 @@ inline void scatteredPairwise(
     FMPI_DBG(sendto);
     FMPI_DBG(recvfrom);
 
-    FMPI_CHECK(mpi::isend(
-        std::next(begin, sendto * blocksize),
-        blocksize,
-        sendto,
-        EXCH_TAG_RING,
-        ctx,
-        &reqs[r]));
-
-
     FMPI_CHECK(mpi::irecv(
         std::next(&(rbuf[0]), recvfrom * blocksize),
         blocksize,
         recvfrom,
         EXCH_TAG_RING,
         ctx,
-        &reqs[r+1]));
+        &reqs[r]));
+
+    FMPI_CHECK(mpi::isend(
+        std::next(begin, sendto * blocksize),
+        blocksize,
+        sendto,
+        EXCH_TAG_RING,
+        ctx,
+        &reqs[nr+r]));
   }
 
   mpi::waitall(&(*reqs.begin()), &(*reqs.end()));
