@@ -412,7 +412,12 @@ inline void scatteredPairwiseWaitsome(
   RTLX_ASSERT(std::is_sorted(out, out + nr * blocksize));
 }
 
-template <class schedule, class InputIt, class OutputIt, class Op>
+template <
+    class schedule,
+    bool isBlocking,
+    class InputIt,
+    class OutputIt,
+    class Op>
 inline void scatteredPairwise(
     InputIt             begin,
     OutputIt            out,
@@ -432,6 +437,9 @@ inline void scatteredPairwise(
   if (rtlx::TraceStore::GetInstance().enabled()) {
     std::ostringstream os;
     os << schedule::NAME;
+    if (isBlocking) {
+      os << "Blocking";
+    }
     s = os.str();
   }
 
@@ -445,7 +453,8 @@ inline void scatteredPairwise(
 
   auto commAlgo = schedule{};
 
-  std::vector<MPI_Request> reqs(nr * 2, MPI_REQUEST_NULL);
+  std::size_t              nreqs = isBlocking ? 2 : nr * 2;
+  std::vector<MPI_Request> reqs(nreqs, MPI_REQUEST_NULL);
 
   for (int r = 0; r < static_cast<int>(nr); ++r) {
     auto sendto   = commAlgo.sendRank(ctx, r);
@@ -470,7 +479,7 @@ inline void scatteredPairwise(
         recvfrom,
         EXCH_TAG_RING,
         ctx,
-        &reqs[r]));
+        &reqs[isBlocking ? 0 : r]));
 
     FMPI_CHECK(mpi::isend(
         std::next(begin, sendto * blocksize),
@@ -478,10 +487,16 @@ inline void scatteredPairwise(
         sendto,
         EXCH_TAG_RING,
         ctx,
-        &reqs[nr + r]));
+        &reqs[isBlocking ? 1 : nr + r]));
+
+    if (isBlocking) {
+      mpi::waitall(&(*reqs.begin()), &(*reqs.end()));
+    }
   }
 
-  mpi::waitall(&(*reqs.begin()), &(*reqs.end()));
+  if (!isBlocking) {
+    mpi::waitall(&(*reqs.begin()), &(*reqs.end()));
+  }
 
   trace.tock(COMMUNICATION);
 

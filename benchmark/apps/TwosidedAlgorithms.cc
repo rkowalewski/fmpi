@@ -46,6 +46,7 @@ std::vector<std::pair<
                       "Ring",
                       fmpi::scatteredPairwise<
                           fmpi::FlatHandshake,
+                          false,
                           iterator_t,
                           iterator_t,
                           merger_t<iterator_t, iterator_t>>),
@@ -53,6 +54,7 @@ std::vector<std::pair<
                       "OneFactor",
                       fmpi::scatteredPairwise<
                           fmpi::OneFactor,
+                          false,
                           iterator_t,
                           iterator_t,
                           merger_t<iterator_t, iterator_t>>),
@@ -60,6 +62,31 @@ std::vector<std::pair<
                       "Linear",
                       fmpi::scatteredPairwise<
                           fmpi::Linear,
+                          false,
+                          iterator_t,
+                          iterator_t,
+                          merger_t<iterator_t, iterator_t>>),
+                  std::make_pair(
+                      "RingBlocking",
+                      fmpi::scatteredPairwise<
+                          fmpi::FlatHandshake,
+                          true,
+                          iterator_t,
+                          iterator_t,
+                          merger_t<iterator_t, iterator_t>>),
+                  std::make_pair(
+                      "OneFactorBlocking",
+                      fmpi::scatteredPairwise<
+                          fmpi::OneFactor,
+                          true,
+                          iterator_t,
+                          iterator_t,
+                          merger_t<iterator_t, iterator_t>>),
+                  std::make_pair(
+                      "LinearBlocking",
+                      fmpi::scatteredPairwise<
+                          fmpi::Linear,
+                          true,
                           iterator_t,
                           iterator_t,
                           merger_t<iterator_t, iterator_t>>),
