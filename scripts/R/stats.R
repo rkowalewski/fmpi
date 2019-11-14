@@ -80,19 +80,8 @@ df.stats <- df.in %>%
                   )
                 ) %>%
     ungroup() %>%
-    mutate(avg_ci = ci(n, sd, ci_prob))
-
-#df.stats$PPN <- df.stats$Procs / df.stats$Nodes
-
-#df.stats <- df.stats %>%
-#    select(Nodes, Procs, PPN, Round, NBytes, Blocksize,# Cat,
-#           Algo,
-#           Ttotal_speedup, Ttotal_median,
-#           Tcomm_median, Tcomp_median,
-#           Ttotal_min, Ttotal_max,
-#           #Ttotal_med_lowerCI,Ttotal_med_upperCI,
-#           everything())
-
+    mutate(avg_ci = ci(n, sd, ci_prob),
+           PPN = Procs / Nodes)
 
 { if (append == TRUE){
     print(paste0("--appending file: ", csv_out))

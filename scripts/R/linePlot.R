@@ -25,13 +25,18 @@ if (length(args)< 1) {
 
 csv <- args[1]
 
-data <- read.csv(file=csv, header=TRUE, sep=",")
+data <- read.csv(file=csv, header=TRUE, sep=",") %>%
+    filter(Measurement == 'Ttotal') %>%
+    group_by(Nodes,Procs,Blocksize) %>%
+    mutate(Ttotal_speedup = median[Algo == "AlltoAll"] / median) %>%
+    ungroup() %>%
+    filter(Algo != "AlltoAll")
 
-data <- data %>% filter(Algo != "AlltoAll")
+file <- sub(pattern = "(.*)\\..*$", replacement = "\\1", basename(csv))
 
-plotTitle <- sub(pattern = "(.*)\\..*$", replacement = "\\1", basename(csv))
+plotTitle <- paste0(file, ": (Processors per Node / Blocksize in Bytes)")
 
-plotName <- paste0(plotTitle, ".pdf")
+plotName <- paste0(file, ".pdf")
 
 #cbPalette <- c("#999999", "#E69F00", "#56B4E9", "#009E73", "#F0E442", "#0072B2", "#D55E00", "#CC79A7")
 
@@ -46,9 +51,11 @@ mylimit <- function(x) {
     limits
 }
 
+my_labeller <- label_bquote(
+  cols = .(PPN) / .(Blocksize)
+)
 
 p <- ggplot(data, aes(x=factor(Nodes), y=Ttotal_speedup, colour=Algo, group=Algo)) +
-    #geom_errorbar(aes(ymin=Ttotal_med_lowerCI, ymax=Ttotal_med_upperCI), colour="black", width=.1, position=pd) +
     geom_line(position=pd) +
     geom_point(position=pd, size=2) +
     ggtitle(plotTitle) +
@@ -61,7 +68,7 @@ p <- ggplot(data, aes(x=factor(Nodes), y=Ttotal_speedup, colour=Algo, group=Algo
     geom_hline(yintercept = 1) +
     #annotate("text", min(the.data$year), 50, vjust = -1, label = "Cutoff")
     # + facet_zoom(xy = Nodes <= 32, horizontal=FALSE)
-    facet_wrap_paginate( ~Blocksize, ncol=1, nrow=3, scales="free_y", page=NULL, labeller="label_both")
+    facet_wrap_paginate(PPN~Blocksize, ncol=1, nrow=3, scales="free_y", page=NULL, labeller = my_labeller)
 
 
 # Here we add our special class

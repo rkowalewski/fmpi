@@ -24,38 +24,49 @@ if (length(args)< 1) {
 
 csv <- args[1]
 
-df.in <- read_csv(csv, col_names=TRUE, col_types="iii?iccdd")
+levels <- c("Tcomm", "Tcomp", "Trotate", "Tpack", "Tunpack", "Ttotal")
 
-df.bar <- df.in %>% filter(Measurement != "Ttotal")
-df.pnt <- df.in %>% filter(Measurement == "Ttotal")
+df.in <- read_csv(csv, col_names=TRUE, col_types="iiiccidddddddddi") %>%
+    filter(grepl("^Bruck", Algo) | Algo=="AlltoAll") %>%
+    group_by(Nodes,Procs,Blocksize) %>%
+    mutate(PPN = Procs / Nodes, Measurement=parse_factor(Measurement, levels)) %>%
+    ungroup()
 
-basename <- sub(pattern = "(.*)\\..*$", replacement = "\\1", basename(csv))
+df.bar <- df.in %>% filter(Measurement != "Ttotal" & Algo != "AlltoAll")
+df.pnt <- df.in %>% filter(Measurement == "Ttotal" & Algo != "AlltoAll")
+df.a2a <- df.in %>% filter(Measurement == "Ttotal" & Algo == "AlltoAll")
 
-plotName <- paste0(basename,".pdf")
+file <- sub(pattern = "(.*)\\..*$", replacement = "\\1", basename(csv))
 
-# bars won't be dodged!
+plotName <- paste0(file,".bruck.pdf")
+
 pdf(plotName,paper="a4")
-
-ngroups <- nrow(df.bar %>% distinct(Blocksize))
-nrow <- ceiling(ngroups/3)
 
 theme <- theme_bw()
 # change xaxis text
 theme$axis.text.x <- element_text(angle = 45)
 
 my_labeller <- label_bquote(
-  cols = .(Blocksize) / .(Nodes)
+  cols = .(Nodes) / .(PPN) / .(Blocksize)
 )
 
-# df.pnt, aes(x=Algo, y=median, group=Nodes, )
-p <- ggplot(data=df.bar) +
-  geom_bar(aes(y = median, x = Algo, fill = Measurement), stat="identity",
-           position='stack', alpha=0.8) +
+pd <- position_dodge(0.1)
+
+p <- ggplot(data=df.pnt, aes(x=Algo, y=median, group=Algo)) +
+    # Bar Plot
+    geom_bar(data=df.bar, aes(y = median, x = Algo, fill = Measurement), stat="identity",
+        position='stack', alpha=0.8) +
+    # Errorbars for confidence interval
+    geom_errorbar(
+        aes(ymin=med_lowerCI, ymax=med_upperCI), colour="black", width=.1, position=pd) +
+    # Plotting the median of all algorithms
+    geom_point(position=pd, size=1, shape=21) +
+    geom_hline(data=df.a2a, aes(yintercept=median), colour="black", linetype="dashed") +
     # To use for line and point colors, add
     scale_fill_brewer(type="qal", palette="Paired") +
-  theme +
-  facet_wrap_paginate(Blocksize~Nodes, ncol=3, nrow=3,
-                      scales="free_y", page=NULL, labeller = my_labeller)
+    theme +
+    facet_wrap_paginate(PPN~Blocksize~Nodes, ncol=3, nrow=3,
+        scales="free_y", page=NULL, labeller = my_labeller)
 
 # other labeller are:
 # label_wrap_gen(multi_line=FALSE)
