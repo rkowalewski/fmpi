@@ -31,6 +31,15 @@ class OneFactor {
   mpi::Rank factor_odd(mpi::Context const& comm, uint32_t phase) const;
 };
 
+class Linear {
+ public:
+  static constexpr const char* NAME = "Linear";
+
+  mpi::Rank sendRank(mpi::Context const& comm, uint32_t phase) const noexcept;
+
+  mpi::Rank recvRank(mpi::Context const& comm, uint32_t phase) const noexcept;
+};
+
 }  // namespace fmpi
 
 #endif

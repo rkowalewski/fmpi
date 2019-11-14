@@ -57,6 +57,13 @@ std::vector<std::pair<
                           iterator_t,
                           merger_t<iterator_t, iterator_t>>),
                   std::make_pair(
+                      "Linear",
+                      fmpi::scatteredPairwise<
+                          fmpi::Linear,
+                          iterator_t,
+                          iterator_t,
+                          merger_t<iterator_t, iterator_t>>),
+                  std::make_pair(
                       "RingWaitsome4",
                       fmpi::scatteredPairwiseWaitsome<
                           fmpi::FlatHandshake,

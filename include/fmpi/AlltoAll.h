@@ -447,9 +447,6 @@ inline void scatteredPairwise(
 
   std::vector<MPI_Request> reqs(nr * 2, MPI_REQUEST_NULL);
 
-
-  std::vector<MPI_Request> reqs(nr * 2, MPI_REQUEST_NULL);
-
   for (int r = 0; r < static_cast<int>(nr); ++r) {
     auto sendto   = commAlgo.sendRank(ctx, r);
     auto recvfrom = commAlgo.recvRank(ctx, r);

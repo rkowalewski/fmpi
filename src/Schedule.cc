@@ -62,4 +62,12 @@ Rank OneFactor::factor_odd(mpi::Context const& comm, uint32_t phase) const
       static_cast<Rank>(phase) - comm.rank(), static_cast<Rank>(comm.size()));
 }
 
+mpi::Rank Linear::sendRank(mpi::Context const& /* unused */, uint32_t phase) const noexcept {
+  return static_cast<Rank>(phase);
+}
+
+mpi::Rank Linear::recvRank(mpi::Context const& /* unused */, uint32_t phase) const noexcept {
+  return static_cast<Rank>(phase);
+}
+
 }  // namespace fmpi
