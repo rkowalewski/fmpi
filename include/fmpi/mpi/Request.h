@@ -13,32 +13,9 @@
 
 namespace mpi {
 
-template <std::size_t N>
-inline std::vector<int> waitsome(std::array<MPI_Request, N>& pending)
-{
-  std::array<int, N> indices{};
-
-  int completed;
-
-  using vector = std::vector<int>;
-
-  FMPI_DBG(pending);
-
-  RTLX_ASSERT_RETURNS(
-      MPI_Waitsome(
-          N, &(pending[0]), &completed, &(indices[0]), MPI_STATUSES_IGNORE),
-      MPI_SUCCESS);
-
-  if (completed == MPI_UNDEFINED) {
-    return vector(0);
-  }
-
-  return vector(
-      std::begin(indices), std::next(std::begin(indices), completed));
-}
+int* waitsome(MPI_Request* begin, MPI_Request* end, int* indices);
 
 bool waitall(MPI_Request* begin, MPI_Request* end);
-
 }  // namespace mpi
 
 #endif
