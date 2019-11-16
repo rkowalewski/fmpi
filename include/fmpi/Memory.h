@@ -1,20 +1,25 @@
 #ifndef FMPI__MEMORY_H
 #define FMPI__MEMORY_H
 
+#include <algorithm>
 #include <vector>
 
 #include <tlx/stack_allocator.hpp>
 
 namespace fmpi {
 
-template <std::size_t N>
-using stack_arena = tlx::StackArena<N>;
+static constexpr std::size_t MAX_STACK_SIZE_BUF = 1024;
 
 template <class T, std::size_t N>
-using stack_allocator = tlx::StackAllocator<T, N>;
+struct SmallVector {
+ private:
+  static constexpr std::size_t nbytes = std::min(MAX_STACK_SIZE_BUF, N);
 
-template <class T, std::size_t StackSize>
-using small_vector = std::vector<T, tlx::StackAllocator<T, StackSize>>;
+ public:
+  using arena     = tlx::StackArena<nbytes>;
+  using allocator = tlx::StackAllocator<T, nbytes>;
+  using vector    = std::vector<T, allocator>;
+};
 
 }  // namespace fmpi
 #endif

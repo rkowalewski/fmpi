@@ -122,10 +122,11 @@ inline void scatteredPairwiseWaitsome(
   constexpr auto nPendingReqs = 2 * NReqs;
   constexpr auto mpiReqBytes  = nPendingReqs * sizeof(MPI_Request);
 
-  stack_arena<mpiReqBytes> reqs_arena{};
+  using req_buffer_t = SmallVector<MPI_Request, mpiReqBytes>;
 
-  auto reqs_alloc = stack_allocator<MPI_Request, mpiReqBytes>{reqs_arena};
-  auto reqs       = small_vector<MPI_Request, mpiReqBytes>(
+  typename req_buffer_t::arena     reqs_arena{};
+  typename req_buffer_t::allocator reqs_alloc{reqs_arena};
+  typename req_buffer_t::vector    reqs(
       nPendingReqs, MPI_REQUEST_NULL, reqs_alloc);
 
   auto const totalExchanges = static_cast<size_t>(nr - 1);
@@ -241,6 +242,10 @@ inline void scatteredPairwiseWaitsome(
     using merge_buffer_t =
         tlx::SimpleVector<value_type, tlx::SimpleVectorMode::NoInitNoDestroy>;
 
+    using index_type = int;
+    using indices_buffer_t =
+        SmallVector<index_type, nPendingReqs * sizeof(index_type)>;
+
     size_t ncReqs = 0, nrecvTotal = 0;
     auto   outIt = out;
 
@@ -248,14 +253,12 @@ inline void scatteredPairwiseWaitsome(
     mergedChunksPsum.reserve(nr);
     mergedChunksPsum.push_back(0);
 
-    using index_type     = int;
-    constexpr auto bytes = nPendingReqs * sizeof(index_type);
 
-    stack_arena<bytes> indices_arena{};
+    typename indices_buffer_t::arena     indices_arena{};
+    typename indices_buffer_t::allocator indices_alloc{indices_arena};
+    typename indices_buffer_t::vector    indices(indices_alloc);
 
-    auto indices_alloc = stack_allocator<index_type, bytes>{indices_arena};
-    auto indices       = small_vector<index_type, bytes>(
-        std::distance(reqs.begin(), reqs.end()), indices_alloc);
+    indices.resize(std::distance(reqs.begin(), reqs.end()));
 
     RTLX_ASSERT(indices.size() <= nPendingReqs);
 
