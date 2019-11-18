@@ -268,7 +268,7 @@ inline void scatteredPairwiseWaitsome(
     while (ncReqs < totalReqs) {
       trace.tick(COMMUNICATION);
 
-      auto* lastIdx = mpi::waitsome(
+      auto* lastIdx = mpi::testsome(
           &(*reqs.begin()), &(*reqs.end()), &(*indices.begin()));
 
       auto const nCompleted = std::distance(&(*indices.begin()), lastIdx);
