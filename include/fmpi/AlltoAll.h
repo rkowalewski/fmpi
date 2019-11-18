@@ -95,7 +95,7 @@ inline void scatteredPairwiseWaitsome(
   // local computation
   constexpr auto utilization_threshold = (NReqs / 2);
   static_assert(
-      utilization_threshold, "at least two concurrent receives required");
+      utilization_threshold > 1, "at least two concurrent receives required");
 
   using value_type = typename std::iterator_traits<InputIt>::value_type;
 
@@ -388,41 +388,8 @@ inline void scatteredPairwiseWaitsome(
 
         trace.tock(MERGE);
       }
-#if 0
-      else {
-        auto const sentReqsOpen    = allReceivesDone && (ncReqs < totalReqs);
-        auto const needsFinalMerge = mergedChunksPsum.size() > 2;
-
-        if (sentReqsOpen && needsFinalMerge) {
-          RTLX_ASSERT(chunks_to_merge.empty());
-
-          auto mergeBuffer = merge_buffer_t{std::size_t(nr) * blocksize};
-
-          std::transform(
-              std::begin(mergedChunksPsum),
-              std::prev(std::end(mergedChunksPsum)),
-              std::next(std::begin(mergedChunksPsum)),
-              std::back_inserter(chunks_to_merge),
-              [rbuf = out](auto first, auto last) {
-                return std::make_pair(
-                    std::next(rbuf, first), std::next(rbuf, last));
-              });
-
-          FMPI_DBG(chunks_to_merge.size());
-
-          op(chunks_to_merge, mergeBuffer.begin());
-          chunks_to_merge.clear();
-          mergedChunksPsum.erase(
-              std::next(std::begin(mergedChunksPsum)),
-              std::prev(std::end(mergedChunksPsum)));
-
-          FMPI_DBG(mergedChunksPsum);
-
-          std::move(mergeBuffer.begin(), mergeBuffer.end(), out);
-        }
-      }
-#endif
     }
+
     trace.tick(MERGE);
     auto const needsFinalMerge = mergedChunksPsum.size() > 2;
     if (needsFinalMerge) {
