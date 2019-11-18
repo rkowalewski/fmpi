@@ -14,6 +14,7 @@
 namespace mpi {
 
 int* waitsome(MPI_Request* begin, MPI_Request* end, int* indices);
+int* testsome(MPI_Request* begin, MPI_Request* end, int* indices);
 
 bool waitall(MPI_Request* begin, MPI_Request* end);
 }  // namespace mpi

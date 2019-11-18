@@ -345,8 +345,6 @@ inline void scatteredPairwiseWaitsome(
 
       trace.tock(COMMUNICATION);
 
-      trace.tick(MERGE);
-
       auto const allReceivesDone = nrecvTotal == totalExchanges;
 
       auto const mergeCount =
@@ -354,13 +352,14 @@ inline void scatteredPairwiseWaitsome(
 
       // minimum number of chunks to merge: ideally we have a full level2
       // cache
-      bool const enough_merges_available =
-          mergeCount >= utilization_threshold;
+      bool const enough_work = mergeCount >= utilization_threshold;
 
       FMPI_DBG_STREAM("ready chunks: " << mergeCount);
 
-      if (enough_merges_available || (allReceivesDone && mergeCount)) {
+      if (enough_work || (allReceivesDone && mergeCount)) {
         // 1) copy completed chunks into std::vector (API requirements)
+
+        trace.tick(MERGE);
 
         auto const& completedChunks = commState.completed_receives();
 
@@ -377,14 +376,19 @@ inline void scatteredPairwiseWaitsome(
         op(chunks_to_merge, outIt);
 
         // 3) increase out iterator
-        outIt += chunks_to_merge.size() * blocksize;
-        mergedChunksPsum.push_back(
-            mergedChunksPsum.back() + chunks_to_merge.size() * blocksize);
+        auto const nmerged = chunks_to_merge.size() * blocksize;
+
+        outIt += nmerged;
+
+        mergedChunksPsum.push_back(mergedChunksPsum.back() + nmerged);
 
         // 4) reset all completed Chunks
         commState.release_completed();
         chunks_to_merge.clear();
+
+        trace.tock(MERGE);
       }
+#if 0
       else {
         auto const sentReqsOpen    = allReceivesDone && (ncReqs < totalReqs);
         auto const needsFinalMerge = mergedChunksPsum.size() > 2;
@@ -417,10 +421,11 @@ inline void scatteredPairwiseWaitsome(
           std::move(mergeBuffer.begin(), mergeBuffer.end(), out);
         }
       }
-      trace.tock(MERGE);
+#endif
     }
     trace.tick(MERGE);
-    if (mergedChunksPsum.size() > 2) {
+    auto const needsFinalMerge = mergedChunksPsum.size() > 2;
+    if (needsFinalMerge) {
       RTLX_ASSERT(chunks_to_merge.empty());
 
       auto mergeBuffer = merge_buffer_t{std::size_t(nr) * blocksize};
@@ -446,7 +451,6 @@ inline void scatteredPairwiseWaitsome(
 
     FMPI_DBG(mergedChunksPsum);
   }
-  RTLX_ASSERT(std::is_sorted(out, out + nr * blocksize));
 }
 
 template <
@@ -557,7 +561,6 @@ inline void scatteredPairwise(
   op(chunks, out);
 
   trace.tock(MERGE);
-  RTLX_ASSERT(std::is_sorted(out, out + nr * blocksize));
 }
 
 #if 0
@@ -763,8 +766,6 @@ inline void MpiAlltoAll(
   op(chunks, out);
 
   trace.tock(MERGE);
-
-  RTLX_ASSERT(std::is_sorted(out, out + nr * blocksize));
 }
 }  // namespace fmpi
 #endif
