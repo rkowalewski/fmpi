@@ -1,8 +1,11 @@
 #ifndef FMPI__DETAIL__COMM_STATE_H
 #define FMPI__DETAIL__COMM_STATE_H
 
+#include <list>
+
 #include <fmpi/Debug.h>
 
+#include <fmpi/Memory.h>
 #include <fmpi/NumericRange.h>
 
 namespace fmpi {
@@ -16,105 +19,133 @@ class CommState {
 
   using size_type     = typename simple_vector::size_type;
   using iterator_type = typename simple_vector::iterator;
-  using iterator_pair = std::pair<iterator_type, iterator_type>;
 
-  // Buffer for up to 2 * NReqs pending chunks
-  static constexpr size_t MAX_FREE_CHUNKS      = 2 * NReqs;
-  static constexpr size_t MAX_COMPLETED_CHUNKS = MAX_FREE_CHUNKS;
+  // Buffer for up to 2 * NReqs occupied chunks
+  static constexpr size_t MAX_FREE      = 2 * NReqs;
+  static constexpr size_t MAX_COMPLETED = MAX_FREE;
 
-  template <class _T, std::size_t N>
-  using stack_arena = tlx::StackArena<N * sizeof(_T)>;
+  static_assert(MAX_FREE > 0, "buffer size must be > 0");
 
-  template <class _T, std::size_t N>
-  using stack_allocator = tlx::StackAllocator<_T, N * sizeof(_T)>;
+  template <std::size_t N>
+  using small_vector = SmallVector<iterator_type, N * sizeof(iterator_type)>;
 
-  template <class _T, std::size_t N>
-  using stack_vector = std::vector<_T, stack_allocator<_T, N>>;
+  union Chunk {
+    T*     storage;
+    Chunk* next;
+  };
 
  public:
   explicit CommState(size_type blocksize)
-    : m_completed(
-          0,
-          iterator_pair{},
-          stack_allocator<iterator_pair, MAX_COMPLETED_CHUNKS>{
-              m_arena_completed})
-    , m_freelist(stack_vector<iterator_pair, MAX_FREE_CHUNKS>{
-          0,
-          iterator_pair{},
-          stack_allocator<iterator_pair, MAX_FREE_CHUNKS>{m_arena_freelist}})
-    , m_buffer(blocksize * MAX_FREE_CHUNKS)
+    : m_occupied(typename small_vector<NReqs>::allocator{m_arena_occupied})
+    , m_completed(typename small_vector<MAX_COMPLETED>::allocator{m_arena_completed})
+    , m_blocksize(blocksize)
+    , m_buffer(blocksize * MAX_FREE)
   {
-    std::fill(std::begin(m_pending), std::end(m_pending), iterator_pair{});
+    // here we explicitly resize the container
+    m_occupied.resize(NReqs);
 
-    for (auto&& block : fmpi::range<int>(MAX_FREE_CHUNKS - 1, -1, -1)) {
-      auto f = std::next(std::begin(m_buffer), block * blocksize);
-      auto l = std::next(f, blocksize);
-      m_freelist.push(std::make_pair(f, l));
-    }
+    // explicitly reserve memory prevent future memory reallocation
+    m_completed.reserve(MAX_COMPLETED);
+
+    fill_freelist();
+
+    RTLX_ASSERT(blocksize > 0);
   }
 
   iterator_type receive_allocate(int key)
   {
-    RTLX_ASSERT(m_arena_freelist.size() > 0);
     RTLX_ASSERT(0 <= key && std::size_t(key) < NReqs);
-    RTLX_ASSERT(!m_freelist.empty() && m_freelist.size() <= MAX_FREE_CHUNKS);
 
     // access last block remove it from stack
-    auto freeBlock = m_freelist.top();
-    m_freelist.pop();
+    auto* freeBlock = pop_freelist();
 
-    m_pending[key] = freeBlock;
-    return freeBlock.first;
+    if (!freeBlock) {
+      throw std::bad_alloc();
+    }
+
+    m_occupied[key] = freeBlock;
+    return freeBlock;
   }
 
   void receive_complete(int key)
   {
-    RTLX_ASSERT(m_arena_completed.size() > 0);
     RTLX_ASSERT(0 <= key && std::size_t(key) < NReqs);
-    RTLX_ASSERT(m_completed.size() < MAX_COMPLETED_CHUNKS);
+    RTLX_ASSERT(m_completed.size() < MAX_COMPLETED);
 
-    auto block = m_pending[key];
-    m_completed.push_back(block);
+    m_completed.push_back(m_occupied[key]);
+    m_occupied[key] = nullptr;
   }
 
   void release_completed()
   {
-    RTLX_ASSERT(m_arena_freelist.size() > 0);
-    RTLX_ASSERT(m_completed.size() <= MAX_COMPLETED_CHUNKS);
+    RTLX_ASSERT(m_completed.size() <= MAX_COMPLETED);
 
-    for (auto const& completed : m_completed) {
-      m_freelist.push(completed);
+    for (auto&& b : m_completed) {
+      push_freelist(b);
     }
 
     // 2) reset completed receives
     m_completed.clear();
-
-    RTLX_ASSERT(!m_freelist.empty() && m_freelist.size() <= MAX_FREE_CHUNKS);
   }
 
   std::size_t available_slots() const noexcept
   {
-    return m_freelist.size();
+    return m_free;
   }
 
-  stack_vector<iterator_pair, MAX_COMPLETED_CHUNKS> const&
-  completed_receives() const noexcept
+  auto const& completed_receives() const noexcept
   {
     return m_completed;
   }
 
  private:
-  stack_arena<iterator_pair, MAX_COMPLETED_CHUNKS>  m_arena_completed{};
-  stack_vector<iterator_pair, MAX_COMPLETED_CHUNKS> m_completed{};
+  void push_freelist(T* block)
+  {
+    RTLX_ASSERT(block);
 
-  stack_arena<iterator_pair, MAX_FREE_CHUNKS> m_arena_freelist{};
-  std::stack<iterator_pair, stack_vector<iterator_pair, MAX_FREE_CHUNKS>>
-      m_freelist{};
+    auto* chunk = reinterpret_cast<Chunk*>(block);
+    chunk->next = m_freelist;
+    m_freelist  = chunk;
+    ++m_free;
+  }
 
-  std::array<iterator_pair, NReqs> m_pending{};
+  T* pop_freelist()
+  {
+    if (!m_freelist) return nullptr;
 
+    auto* chunk = m_freelist;
+    m_freelist  = chunk->next;
+    --m_free;
+    return reinterpret_cast<T*>(chunk);
+  }
+
+  void fill_freelist()
+  {
+    RTLX_ASSERT(m_buffer.size());
+
+    for (auto&& i : range<std::size_t>(0, MAX_FREE)) {
+      auto b = std::prev(std::end(m_buffer), (i + 1) * m_blocksize);
+      push_freelist(&*b);
+    }
+  }
+
+ private:
+  // occupied request slots
+  typename small_vector<NReqs>::arena  m_arena_occupied{};
+  typename small_vector<NReqs>::vector m_occupied{};
+
+  // completed requests
+  typename small_vector<MAX_COMPLETED>::arena  m_arena_completed{};
+  typename small_vector<MAX_COMPLETED>::vector m_completed{};
+
+  // freelist
+  std::size_t m_free{};
+  Chunk*      m_freelist{};
+
+  // buffer which contains both occupied and completed slots
+  std::size_t   m_blocksize{};
   simple_vector m_buffer{};
-};
+};  // namespace detail
 
 }  // namespace detail
 }  // namespace fmpi

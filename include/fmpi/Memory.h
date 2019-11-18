@@ -2,6 +2,7 @@
 #define FMPI__MEMORY_H
 
 #include <algorithm>
+#include <list>
 #include <vector>
 
 #include <tlx/stack_allocator.hpp>

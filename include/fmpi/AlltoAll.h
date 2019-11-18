@@ -124,10 +124,11 @@ inline void scatteredPairwiseWaitsome(
 
   using req_buffer_t = SmallVector<MPI_Request, mpiReqBytes>;
 
-  typename req_buffer_t::arena     reqs_arena{};
-  typename req_buffer_t::allocator reqs_alloc{reqs_arena};
-  typename req_buffer_t::vector    reqs(
-      nPendingReqs, MPI_REQUEST_NULL, reqs_alloc);
+  typename req_buffer_t::arena  reqs_arena{};
+  typename req_buffer_t::vector reqs(
+      nPendingReqs,
+      MPI_REQUEST_NULL,
+      typename req_buffer_t::allocator{reqs_arena});
 
   auto const totalExchanges = static_cast<size_t>(nr - 1);
   auto const totalReqs      = 2 * totalExchanges;
@@ -225,12 +226,13 @@ inline void scatteredPairwiseWaitsome(
         commState.receive_complete(idx);
       }
 
-      auto& completedChunks = commState.completed_receives();
+      auto const& completedChunks = commState.completed_receives();
 
-      std::copy(
+      std::transform(
           std::begin(completedChunks),
           std::end(completedChunks),
-          std::back_inserter(chunks_to_merge));
+          std::back_inserter(chunks_to_merge),
+          [blocksize](auto b) { return std::make_pair(b, b + blocksize); });
 
       op(chunks_to_merge, out);
     }
@@ -253,10 +255,9 @@ inline void scatteredPairwiseWaitsome(
     mergedChunksPsum.reserve(nr);
     mergedChunksPsum.push_back(0);
 
-
-    typename indices_buffer_t::arena     indices_arena{};
-    typename indices_buffer_t::allocator indices_alloc{indices_arena};
-    typename indices_buffer_t::vector    indices(indices_alloc);
+    typename indices_buffer_t::arena  indices_arena{};
+    typename indices_buffer_t::vector indices(
+        typename indices_buffer_t::allocator{indices_arena});
 
     indices.resize(std::distance(reqs.begin(), reqs.end()));
 
@@ -267,10 +268,10 @@ inline void scatteredPairwiseWaitsome(
     while (ncReqs < totalReqs) {
       trace.tick(COMMUNICATION);
 
-      auto* lastReq = mpi::waitsome(
+      auto* lastIdx = mpi::waitsome(
           &(*reqs.begin()), &(*reqs.end()), &(*indices.begin()));
 
-      auto const nCompleted = std::distance(&(*indices.begin()), lastReq);
+      auto const nCompleted = std::distance(&(*indices.begin()), lastIdx);
 
       ncReqs += nCompleted;
 
@@ -289,9 +290,7 @@ inline void scatteredPairwiseWaitsome(
             return req < static_cast<int>(reqsInFlight);
           });
 
-      auto fstRecvIdx = reqsCompleted.first;
-
-      auto const nrecv = std::distance(fstRecvIdx, fstSentIdx);
+      auto const nrecv = std::distance(reqsCompleted.first, fstSentIdx);
 
       auto const nsent = nCompleted - nrecv;
 
@@ -300,9 +299,10 @@ inline void scatteredPairwiseWaitsome(
              << commState.completed_receives().size() + nrecv);
 
       // mark all receives
-      std::for_each(fstRecvIdx, fstSentIdx, [&commState](auto reqIdx) {
-        commState.receive_complete(reqIdx);
-      });
+      std::for_each(
+          reqsCompleted.first, fstSentIdx, [&commState](auto reqIdx) {
+            commState.receive_complete(reqIdx);
+          });
 
       nrecvTotal += nrecv;
 
@@ -314,14 +314,16 @@ inline void scatteredPairwiseWaitsome(
 
       FMPI_DBG(nslotsRecv);
 
-      RTLX_ASSERT((fstRecvIdx + nslotsRecv) <= fstSentIdx);
+      RTLX_ASSERT((reqsCompleted.first + nslotsRecv) <= fstSentIdx);
 
       rphase = detail::enqueueMpiOps(
           rphase,
           me,
           nslotsRecv,
           rschedule,
-          [fstRecvIdx](auto nreqs) { return *std::next(fstRecvIdx, nreqs); },
+          [fstRecvIdx = reqsCompleted.first](auto nreqs) {
+            return *std::next(fstRecvIdx, nreqs);
+          },
           rbufAlloc,
           receiveOp);
 
@@ -359,10 +361,14 @@ inline void scatteredPairwiseWaitsome(
 
       if (enough_merges_available || (allReceivesDone && mergeCount)) {
         // 1) copy completed chunks into std::vector (API requirements)
-        std::copy(
-            std::begin(commState.completed_receives()),
-            std::end(commState.completed_receives()),
-            std::back_inserter(chunks_to_merge));
+
+        auto const& completedChunks = commState.completed_receives();
+
+        std::transform(
+            std::begin(completedChunks),
+            std::end(completedChunks),
+            std::back_inserter(chunks_to_merge),
+            [blocksize](auto b) { return std::make_pair(b, b + blocksize); });
 
         FMPI_DBG_STREAM(
             me << " merging " << chunks_to_merge.size() << " chunks");
