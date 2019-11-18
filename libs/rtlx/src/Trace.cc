@@ -1,5 +1,6 @@
 #include <cstring>
 #include <iostream>
+#include <memory>
 #include <mutex>
 
 #include <rtlx/Assert.h>
@@ -100,7 +101,7 @@ static bool isTraceEnvironFlagEnabled()
 TraceStore &TraceStore::GetInstance()
 {
   std::call_once(m_onceFlag, [] {
-    m_instance.reset(new TraceStore);
+    m_instance              = std::make_unique<TraceStore>();
     (*m_instance).m_enabled = isTraceEnvironFlagEnabled();
   });
   return *m_instance;

@@ -1,5 +1,5 @@
-#ifndef FMPI__MEMORY_H
-#define FMPI__MEMORY_H
+#ifndef FMPI_MEMORY_H
+#define FMPI_MEMORY_H
 
 #include <algorithm>
 #include <list>

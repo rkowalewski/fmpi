@@ -1,5 +1,5 @@
-#ifndef MPI__REQUEST_H
-#define MPI__REQUEST_H
+#ifndef FMPI_MPI_REQUEST_H
+#define FMPI_MPI_REQUEST_H
 
 #include <mpi.h>
 

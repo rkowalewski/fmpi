@@ -15,7 +15,9 @@ int* waitsome(MPI_Request* begin, MPI_Request* end, int* indices)
 
   auto const n = std::distance(begin, end);
 
-  if (!n) return indices;
+  if (n == 0) {
+    return indices;
+  }
 
   RTLX_ASSERT_RETURNS(
       MPI_Waitsome(n, begin, &completed, indices, MPI_STATUSES_IGNORE),
@@ -30,7 +32,9 @@ int* testsome(MPI_Request* begin, MPI_Request* end, int* indices)
 
   auto const n = std::distance(begin, end);
 
-  if (!n) return indices;
+  if (n == 0) {
+    return indices;
+  }
 
   RTLX_ASSERT_RETURNS(
       MPI_Testsome(n, begin, &completed, indices, MPI_STATUSES_IGNORE),

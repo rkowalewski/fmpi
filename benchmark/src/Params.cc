@@ -13,7 +13,7 @@ namespace benchmark {
 
 template <class cT, class traits = std::char_traits<cT> >
 class basic_nullbuf : public std::basic_streambuf<cT, traits> {
-  typename traits::int_type overflow(typename traits::int_type c)
+  typename traits::int_type overflow(typename traits::int_type c) override
   {
     return traits::not_eof(c);  // indicate success
   }
@@ -34,8 +34,8 @@ class basic_onullstream : public std::basic_ostream<cT, traits> {
   basic_nullbuf<cT, traits> m_sbuf;
 };
 
-typedef basic_onullstream<char>    onullstream;
-typedef basic_onullstream<wchar_t> wonullstream;
+using onullstream  = basic_onullstream<char>;
+using wonullstream = basic_onullstream<wchar_t>;
 
 bool process(
     int argc, char* argv[], ::mpi::Context const& mpiCtx, Params& params)
@@ -125,11 +125,11 @@ std::ostream& operator<<(std::ostream& os, string_pair const& p)
 }
 
 void printBenchmarkPreamble(
-    std::ostream& os, std::string prefix, const char* delim)
+    std::ostream& os, const std::string& prefix, const char* delim)
 {
   std::vector<string_pair> envs;
   std::ostringstream       oss;
-  for (auto** env = environ; *env != 0; ++env) {
+  for (auto** env = environ; *env != nullptr; ++env) {
     std::string var   = *env;
     auto        split = var.find('=');
     if (split != std::string::npos &&
@@ -140,7 +140,7 @@ void printBenchmarkPreamble(
       auto val = var.substr(split + 1);
       trim(key);
       trim(val);
-      envs.push_back(string_pair(key, val));
+      envs.emplace_back(key, val);
     }
   }
 

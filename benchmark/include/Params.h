@@ -29,7 +29,8 @@ typedef struct Params {
 bool process(
     int /*argc*/, char* argv[], ::mpi::Context const& mpiCtx, Params& params);
 
-void printBenchmarkPreamble(std::ostream& os, std::string prefix, const char* delim = "\n");
+void printBenchmarkPreamble(
+    std::ostream& os, const std::string& prefix, const char* delim = "\n");
 
 }  // namespace benchmark
 }  // namespace fmpi

@@ -1,5 +1,5 @@
-#ifndef FMPI__DETAIL__DEBUG_H
-#define FMPI__DETAIL__DEBUG_H
+#ifndef FMPI_DEBUG_H
+#define FMPI_DEBUG_H
 
 #include <dbg.h>
 #include <mpi.h>
@@ -69,9 +69,8 @@ class DebugOutput {
     if (m_use_colorized_output) {
       return code;
     }
-    else {
-      return ANSI_EMPTY;
-    }
+
+    return ANSI_EMPTY;
   }
 
   const bool m_use_colorized_output;
@@ -110,12 +109,12 @@ std::ostream& operator<<(std::ostream& os, std::pair<F, T> const& p)
   fmpi::detail::DebugOutput(__FILE__, __LINE__, __func__, #__VA_ARGS__) \
       .print(dbg_macro::type_name<decltype(__VA_ARGS__)>(), (__VA_ARGS__))
 
-#define FMPI_DBG_STREAM(expr) \
-  do {                        \
-    std::ostringstream os;    \
-    os << expr;               \
-    auto msg = os.str();      \
-    FMPI_DBG(msg);            \
+#define FMPI_DBG_STREAM(expr)  \
+  do {                         \
+    std::ostringstream os;     \
+    os << expr; /* NOLINT */ \
+    auto msg = os.str();       \
+    FMPI_DBG(msg);             \
   } while (0)
 
 #define FMPI_DBG_RANGE(f, l)                                                \

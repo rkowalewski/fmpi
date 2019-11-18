@@ -19,11 +19,11 @@ class TraceStore {
 
   friend class TimeTrace;
 
+ public:
   TraceStore()                      = default;
   TraceStore(const TraceStore &src) = delete;
   TraceStore &operator=(const TraceStore &rhs) = delete;
 
- public:
   static TraceStore &                 GetInstance();
   std::unordered_map<key_t, value_t> &get(context_t const &ctx);
   void                                clear();
