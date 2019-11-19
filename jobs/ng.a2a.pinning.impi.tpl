@@ -23,14 +23,17 @@
 #Number of nodes and MPI tasks per node:
 #SBATCH --ntasks=<<NUM_TASKS>>
 #SBATCH --nodes=<<NUM_NODES>>
-#SBATCH --ntasks-per-core=1
 #SBATCH --ntasks-per-node=<<NUM_PROCS>>
 
 #Important
 module load slurm_setup
 
-export RTLX_ENABLE_TRACE=1
+# Note: We do not need any additional pinning here.
+# Intel MPI is smart enough and can handle both hyperthreading and
+# non hyperthreading cases here
 
-mpiexec \
-    -n $((<<NUM_PROCS>> * <<NUM_NODES>>)) build/benchmark/twoSidedAlgorithms.d \
-    $SLURM_JOB_NUM_NODES <<ARGS>>
+export OMP_NUM_THREADS=<<NUM_THREADS>>
+export I_MPI_DEBUG=4
+
+mpiexec -n $((<<NUM_PROCS>> * <<NUM_NODES>>)) \
+    ./build.release/apps/mpiPinning
