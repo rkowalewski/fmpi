@@ -60,6 +60,7 @@ class CommState {
     auto* freeBlock = pop_freelist();
 
     if (!freeBlock) {
+      FMPI_DBG(m_completed.size());
       throw std::bad_alloc();
     }
 
@@ -90,7 +91,7 @@ class CommState {
 
   std::size_t available_slots() const noexcept
   {
-    return m_free;
+    return m_freelist.size();
   }
 
   auto const& completed_receives() const noexcept
@@ -103,29 +104,33 @@ class CommState {
   {
     RTLX_ASSERT(block);
 
-    auto* chunk = reinterpret_cast<Chunk*>(block);
-    chunk->next = m_freelist;
-    m_freelist  = chunk;
-    ++m_free;
+    m_freelist.push_front(block);
   }
 
   T* pop_freelist()
   {
-    if (!m_freelist) return nullptr;
+    if (m_freelist.empty()) return nullptr;
 
-    auto* chunk = m_freelist;
-    m_freelist  = chunk->next;
-    --m_free;
-    return reinterpret_cast<T*>(chunk);
+    auto* block = m_freelist.front();
+
+    m_freelist.pop_front();
+
+    return block;
   }
 
   void fill_freelist()
   {
     RTLX_ASSERT(m_buffer.size());
 
-    for (auto&& i : range<std::size_t>(0, MAX_FREE)) {
+    for (auto&& i : range<std::size_t>(1, MAX_FREE)) {
       auto b = std::prev(std::end(m_buffer), (i + 1) * m_blocksize);
+      FMPI_DBG(&*b);
       push_freelist(&*b);
+    }
+
+
+    for(auto&& b : m_freelist) {
+      FMPI_DBG(b);
     }
   }
 
@@ -139,8 +144,7 @@ class CommState {
   typename small_vector<MAX_COMPLETED>::vector m_completed{};
 
   // freelist
-  std::size_t m_free{};
-  Chunk*      m_freelist{};
+  std::list<T*> m_freelist{};
 
   // buffer which contains both occupied and completed slots
   std::size_t   m_blocksize{};

@@ -273,6 +273,8 @@ inline void scatteredPairwiseWaitsome(
 
       auto const nCompleted = std::distance(&(*indices.begin()), lastIdx);
 
+      FMPI_DBG(nCompleted);
+
       ncReqs += nCompleted;
 
       auto const reqsCompleted =
