@@ -14,7 +14,8 @@ static constexpr std::size_t MAX_STACK_SIZE_BUF = 1024;
 template <class T, std::size_t N>
 struct SmallVector {
  private:
-  static constexpr std::size_t nbytes = std::min(MAX_STACK_SIZE_BUF, N);
+  static constexpr std::size_t nbytes =
+      (MAX_STACK_SIZE_BUF < N) ? MAX_STACK_SIZE_BUF : N;
 
  public:
   using arena     = tlx::StackArena<nbytes>;

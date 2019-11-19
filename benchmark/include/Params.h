@@ -13,7 +13,7 @@ namespace benchmark {
 constexpr size_t MINSZ = 32;
 constexpr size_t MAXSZ = 128;
 
-typedef struct Params {
+struct Params {
   std::size_t  minblocksize{MINSZ};
   std::size_t  maxblocksize{MAXSZ};
   unsigned int nhosts{};
@@ -23,11 +23,14 @@ typedef struct Params {
   unsigned int niters{1};
 #endif
   std::string pattern{};
-  bool check{false};
-} Params;
+  bool        check{false};
+};
 
 bool process(
-    int /*argc*/, char* argv[], ::mpi::Context const& mpiCtx, Params& params);
+    int /*argc*/,
+    char*                 argv[],
+    ::mpi::Context const& mpiCtx,
+    struct Params&        params);
 
 void printBenchmarkPreamble(
     std::ostream& os, const std::string& prefix, const char* delim = "\n");

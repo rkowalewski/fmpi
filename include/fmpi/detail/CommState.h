@@ -29,15 +29,11 @@ class CommState {
   template <std::size_t N>
   using small_vector = SmallVector<iterator_type, N * sizeof(iterator_type)>;
 
-  union Chunk {
-    T*     storage;
-    Chunk* next;
-  };
-
  public:
   explicit CommState(size_type blocksize)
     : m_occupied(typename small_vector<NReqs>::allocator{m_arena_occupied})
-    , m_completed(typename small_vector<MAX_COMPLETED>::allocator{m_arena_completed})
+    , m_completed(
+          typename small_vector<MAX_COMPLETED>::allocator{m_arena_completed})
     , m_blocksize(blocksize)
     , m_buffer(blocksize * MAX_FREE)
   {
@@ -128,8 +124,7 @@ class CommState {
       push_freelist(&*b);
     }
 
-
-    for(auto&& b : m_freelist) {
+    for (auto&& b : m_freelist) {
       FMPI_DBG(b);
     }
   }

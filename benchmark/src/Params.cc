@@ -38,7 +38,10 @@ using onullstream  = basic_onullstream<char>;
 using wonullstream = basic_onullstream<wchar_t>;
 
 bool process(
-    int argc, char* argv[], ::mpi::Context const& mpiCtx, Params& params)
+    int                   argc,
+    char*                 argv[],
+    ::mpi::Context const& mpiCtx,
+    struct Params&        params)
 {
   bool good;
 

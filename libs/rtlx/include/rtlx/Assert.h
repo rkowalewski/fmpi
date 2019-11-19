@@ -53,9 +53,9 @@
 #endif
 
 #ifdef NDEBUG
-#define RTLX_NOEXCEPT
-#else
 #define RTLX_NOEXCEPT noexcept
+#else
+#define RTLX_NOEXCEPT
 #endif
 
 #endif
