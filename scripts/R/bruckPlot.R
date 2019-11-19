@@ -27,13 +27,16 @@ csv <- args[1]
 levels <- c("Tcomm", "Tcomp", "Trotate", "Tpack", "Tunpack", "Ttotal")
 
 df.in <- read_csv(csv, col_names=TRUE, col_types="iiiccidddddddddi") %>%
-    filter(grepl("^Bruck", Algo) | Algo=="AlltoAll") %>%
-    group_by(Nodes,Procs,Blocksize) %>%
-    mutate(PPN = Procs / Nodes, Measurement=parse_factor(Measurement, levels)) %>%
+    filter(grepl("^(Ring|OneFactor|AlltoAll)$", Algo)) %>%
+    mutate(Measurement=parse_factor(Measurement, levels)) %>%
     ungroup()
 
-df.bar <- df.in %>% filter(Measurement != "Ttotal" & Algo != "AlltoAll")
-df.pnt <- df.in %>% filter(Measurement == "Ttotal" & Algo != "AlltoAll")
+if (!("PPN" %in% colnames(df.in))) {
+    df.in <- df.in %>% mutate(PPN = Procs / Nodes)
+}
+
+df.bar <- df.in %>% filter(Measurement != "Ttotal" )
+df.pnt <- df.in %>% filter(Measurement == "Ttotal" )
 df.a2a <- df.in %>% filter(Measurement == "Ttotal" & Algo == "AlltoAll")
 
 file <- sub(pattern = "(.*)\\..*$", replacement = "\\1", basename(csv))
@@ -61,7 +64,7 @@ p <- ggplot(data=df.pnt, aes(x=Algo, y=median, group=Algo)) +
         aes(ymin=med_lowerCI, ymax=med_upperCI), colour="black", width=.1, position=pd) +
     # Plotting the median of all algorithms
     geom_point(position=pd, size=1, shape=21) +
-    geom_hline(data=df.a2a, aes(yintercept=median), colour="black", linetype="dashed") +
+    #geom_hline(data=df.a2a, aes(yintercept=median), colour="black", linetype="dashed") +
     # To use for line and point colors, add
     scale_fill_brewer(type="qal", palette="Paired") +
     theme +
