@@ -29,7 +29,8 @@ constexpr OutputIt reverse_copy_strided(
 
   auto const nb = n / blocksize;
 
-  for (auto&& block : range(nb)) {
+#pragma omp parallel for
+  for (std::size_t block = 0; block < nb; ++block) {
     std::copy(
         first + (nb - block - 1) * blocksize,
         first + (nb - block) * blocksize,
@@ -116,6 +117,7 @@ inline void bruck(
 
     // a) pack blocks into a contigous send buffer
 
+#pragma omp parallel for
     for (std::size_t b = 0; b < blocks.size(); ++b) {
       auto const block = blocks[b];
       std::copy(
@@ -153,6 +155,7 @@ inline void bruck(
     trace.tick(detail::UNPACK);
 
     // c) unpack blocks into recv buffer
+#pragma omp parallel for
     for (std::size_t b = 0; b < blocks.size(); ++b) {
       auto const block = blocks[b];
       std::copy(
@@ -276,6 +279,7 @@ inline void bruck_indexed(
     // a) pack blocks into a contigous send buffer
     FMPI_DBG(blocks.size());
 
+#pragma omp parallel for
     for (std::size_t b = 0; b < blocks.size(); ++b) {
       auto const block = blocks[b];
       displs[b]        = block * blocksize;
@@ -487,6 +491,7 @@ inline void bruck_interleave(
         std::back_inserter(blocks),
         [j](auto idx) { return idx & j; });
 
+#pragma omp parallel for
     for (std::size_t b = 0; b < blocks.size(); ++b) {
       auto const block = blocks[b];
       std::copy(
@@ -569,8 +574,10 @@ inline void bruck_interleave(
       // c) unpack blocks which will be forwarded to other processors
       trace.tick(detail::UNPACK);
 
-      for (auto&& block :
-           range(one << r, std::max(one << r, blocks.size()))) {
+#pragma omp parallel for
+      for (std::size_t block = one << r;
+           block < std::max(one << r, blocks.size());
+           ++block) {
         FMPI_DBG(block);
         std::copy(
             recvbuf + block * blocksize,
@@ -681,7 +688,6 @@ inline void bruck_mod(
       }
     }
 #endif
-
   }
 
   std::unique_ptr<value_t[]> tmpbuf{new value_t[nels]};
@@ -734,6 +740,7 @@ inline void bruck_mod(
 
       FMPI_DBG(blocks);
 
+#pragma omp parallel for
       for (std::size_t i = 0; i < blocks.size(); ++i) {
         auto myidx = blocks[i];
         std::copy(
@@ -773,6 +780,7 @@ inline void bruck_mod(
             return idx & static_cast<std::size_t>(j);
           });
 
+#pragma omp parallel for
       for (std::size_t i = 0; i < blocks.size(); ++i) {
         auto const myblock = (blocks[i] + me) % nr;
 

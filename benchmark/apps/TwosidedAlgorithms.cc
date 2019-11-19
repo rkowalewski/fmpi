@@ -197,31 +197,32 @@ std::vector<std::pair<
 
 int main(int argc, char* argv[])
 {
-  MPI_Init(&argc, &argv);
+  constexpr auto required = MPI_THREAD_FUNNELED;
 
-  auto finalizer = rtlx::scope_exit([]() { MPI_Finalize(); });
+  int provided;
+
+  RTLX_ASSERT_RETURNS(
+      MPI_Init_thread(&argc, &argv, required, &provided), MPI_SUCCESS);
+
+  auto finalizer = rtlx::scope_exit(
+      []() { RTLX_ASSERT_RETURNS(MPI_Finalize(), MPI_SUCCESS); });
 
   mpi::Context worldCtx{MPI_COMM_WORLD};
 
   auto me = worldCtx.rank();
   auto nr = worldCtx.size();
 
-  if (!fmpi::isPow2(nr)) {
-    // remove bruck_mod if we have not a power of 2 ranks.
-    auto it = std::find_if(
-        std::begin(ALGORITHMS), std::end(ALGORITHMS), [](auto const& algo) {
-          return algo.first == "Bruck_Mod";
-        });
-
-    if (it != std::end(ALGORITHMS)) {
-      ALGORITHMS.erase(it);
+  if (provided < required) {
+    if (me == 0) {
+      std::cout << "MPI_THREAD_FUNNELED is not supported!\n";
+      return 1;
     }
   }
 
   fmpi::benchmark::Params params{};
 
   if (!fmpi::benchmark::process(argc, argv, worldCtx, params)) {
-    return -1;
+    return 1;
   }
 
   if (!params.pattern.empty()) {
@@ -234,6 +235,19 @@ int main(int argc, char* argv[])
               return !std::regex_match(algo.first, regex);
             }),
         ALGORITHMS.end());
+  }
+
+
+  if (!fmpi::isPow2(nr)) {
+    // remove bruck_mod if we have not a power of 2 ranks.
+    auto it = std::find_if(
+        std::begin(ALGORITHMS), std::end(ALGORITHMS), [](auto const& algo) {
+          return algo.first == "Bruck_Mod";
+        });
+
+    if (it != std::end(ALGORITHMS)) {
+      ALGORITHMS.erase(it);
+    }
   }
 
   RTLX_ASSERT((nr % params.nhosts) == 0);
