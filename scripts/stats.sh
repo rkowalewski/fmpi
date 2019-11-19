@@ -7,8 +7,9 @@ SCRIPTPATH=$(dirname "$SCRIPT")
 
 OUTFILE="$1"
 
-if [[ "$#" < 2 ]]
+if [[ "$#" -lt 2 ]]
 then
+  echo "arguments: $#: $@"
   echo "usage: <outfile.csv> <input...>"
   exit 1
 fi
