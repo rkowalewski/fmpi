@@ -7,75 +7,66 @@ SCRIPTPATH=$(dirname "$SCRIPT")
 
 OUTFILE="$1"
 
-if [[ "$#" -lt 2 ]]
-then
+if [[ "$#" -lt 2 ]]; then
   echo "arguments: $#: $@"
   echo "usage: <outfile.csv> <input...>"
   exit 1
 fi
 
-if [[ ! -x "$(command -v Rscript)" ]]
-then
+if [[ ! -x "$(command -v Rscript)" ]]; then
   echo "R seems not to be installed on your system"
   exit 1
 fi
 
 shift # remove file
 
-if [[ -f "$OUTFILE" && ! -w "$OUTFILE" ]]
-then
+if [[ -f "$OUTFILE" && ! -w "$OUTFILE" ]]; then
   echo "file not writable: $OUTFILE"
   exit 1
 fi
 
-if [[ ! -e "$OUTFILE" ]]
-then
-  if [[ "${OUTFILE##*.}" != "csv" ]]
-  then
+if [[ ! -e "$OUTFILE" ]]; then
+  if [[ "${OUTFILE##*.}" != "csv" ]]; then
     echo "output file must be csv: $OUTFILE"
     exit 1
-  elif [[ ! -w "$(dirname "$OUTFILE")" ]]
-  then
+  elif [[ ! -w "$(dirname "$OUTFILE")" ]]; then
     echo "path to file $OUTFILE not writable"
     exit 1
   fi
 fi
 
-
 append="0"
-if [[ -w "$OUTFILE" ]]
-then
+if [[ -w "$OUTFILE" ]]; then
   append="1"
 fi
 
 TMPDIR="/tmp"
 
-if [[ -n "$SCRATCH" && -d "$SCRATCH" ]]
-then
+if [[ -n "$SCRATCH" && -d "$SCRATCH" ]]; then
   TMPDIR="$SCRATCH/tmp"
   mkdir -p "$TMPDIR"
 fi
 
-
 files=($(ls -1 "$@"))
 
-if [[ ${#files[@]} -lt 1 ]]
-then
+if [[ ${#files[@]} -lt 1 ]]; then
   echo "no log files to process"
   exit 0
 fi
 
 echo "list of files:"
 
-for f in "${files[@]}"
-do
+for f in "${files[@]}"; do
   echo "${f}"
 done
 
 echo ""
 
-TMPF=$(mktemp --tmpdir=$TMPDIR XXXXXX --suffix=".csv") || \
-  { echo "Failed to create temp file"; exit 1; }
+TMPF=$(mktemp --tmpdir=$TMPDIR XXXXXX --suffix=".csv") ||
+  {
+    echo "Failed to create temp file"
+    exit 1
+  }
 
 # 1: get relevant csv lines (header + data)
 # 2: remove duplicate headers
@@ -84,8 +75,8 @@ TMPF=$(mktemp --tmpdir=$TMPDIR XXXXXX --suffix=".csv") || \
 
 echo "-- collecting statistics in $TMPF"
 
-grep -h '^\(Nodes\|[0-9]\+,\)' "${files[@]}" \
-  | sed '2,${/^Nodes/d;}' > "$TMPF"
+grep -h '^\(Nodes\|[0-9]\+,\)' "${files[@]}" |
+  sed '2,${/^Nodes/d;}' >"$TMPF"
 
 echo "-- summarizing statistics in $OUTFILE"
 
