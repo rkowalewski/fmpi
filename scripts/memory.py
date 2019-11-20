@@ -42,12 +42,14 @@ algos = ["AlltoAll", "ScatterPairwise", "Bruck"]
 def bruck(blocksize, nr):
     return blocksize * ceil(nr / 2)
 
-def scatterPairwiseBuf(blocksize, nr, n, sendcount, nreqs):
-    return blocksize * reqwin * 2
+def scatterPairwiseBuf(blocksize, winsize):
+    return blocksize * winsize * 2
 
 
 
 iterations = []
+
+algos = ["ScatterPairwise", "Bruck"]
 
 for i in range(len(bsizes)):
     blocksize = bsizes[i]
@@ -56,7 +58,7 @@ for i in range(len(bsizes)):
     recvcount = sendcount
     mergebuf = recvcount
 
-    reqwin = 4
+    reqwin = 8
 
     d = {}
     d["nprocs"] = nr
@@ -64,7 +66,7 @@ for i in range(len(bsizes)):
     d["blocksize"] = blocksize
     d["sendcount"] = sendcount
     d["recvcount"] = recvcount
-    d["commbuf"] = scatterPairwiseBuf(blocksize, sendcount, reqwin)
+    d["commbuf"] = scatterPairwiseBuf(blocksize, reqwin)
     d["mergebuf"] = mergebuf
     d["total"] = d["commbuf"] + sendcount + recvcount + mergebuf
     d["total"] /= 1024 # calculate everything in KB
