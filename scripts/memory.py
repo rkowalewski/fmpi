@@ -2,7 +2,7 @@
 
 import argparse
 import numpy as np
-from math import log2,ceil
+from math import log2, ceil
 import sys
 import csv
 
@@ -40,11 +40,13 @@ algos = ["AlltoAll", "ScatterPairwise", "Bruck"]
 
 
 def bruck(blocksize, nr):
-    return blocksize * ceil(nr / 2)
+    # we exchange ceil(nr / 2) blocks per round
+    # but we need contiguous pack and unpack buffers
+    return blocksize * nr
+
 
 def scatterPairwiseBuf(blocksize, winsize):
     return blocksize * winsize * 2
-
 
 
 iterations = []
@@ -60,17 +62,24 @@ for i in range(len(bsizes)):
 
     reqwin = 8
 
-    d = {}
-    d["nprocs"] = nr
-    d["algorithm"] = "ScatterPairwise"
-    d["blocksize"] = blocksize
-    d["sendcount"] = sendcount
-    d["recvcount"] = recvcount
-    d["commbuf"] = scatterPairwiseBuf(blocksize, reqwin)
-    d["mergebuf"] = mergebuf
-    d["total"] = d["commbuf"] + sendcount + recvcount + mergebuf
-    d["total"] /= 1024 # calculate everything in KB
-    iterations.append(d)
+    for (algo in algos):
+        d = {}
+        d["nprocs"] = nr
+        d["algorithm"] = "ScatterPairwise"
+        d["blocksize"] = blocksize
+        d["sendcount"] = sendcount
+        d["recvcount"] = recvcount
+        d["mergebuf"] = mergebuf
+
+        if (algo == "ScatterPairwise"):
+            d["commbuf"] = scatterPairwiseBuf(blocksize, reqwin)
+        elif (algo == "Bruck"):
+            d["commbuf"] = Bruck(blocksize, nr)
+
+        d["totalKB"] = d["commbuf"] + sendcount + recvcount
+        d["totalKB"] /= 1024  # calculate everything in KB
+
+        iterations.append(d)
 
 if len(iterations) > 1:
     keys = iterations[0].keys()

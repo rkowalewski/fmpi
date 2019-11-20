@@ -249,8 +249,6 @@ inline void bruck_indexed(
 
   std::vector<int> displs(nr / 2);
 
-  auto const type = mpi::type_mapper<value_t>::type();
-
   std::vector<std::size_t> blocks;
   blocks.reserve(nr / 2);
 
@@ -316,14 +314,17 @@ inline void bruck_indexed(
 #endif
 
     MPI_Datatype packed;
-    RTLX_ASSERT_RETURNS(
-        MPI_Type_create_indexed_block(
-            blocks.size(), blocksize, displs.data(), type, &packed),
-        MPI_SUCCESS);
-    RTLX_ASSERT_RETURNS(MPI_Type_commit(&packed), MPI_SUCCESS);
+    FMPI_CHECK_MPI(MPI_Type_create_indexed_block(
+        blocks.size(),
+        blocksize,
+        displs.data(),
+        mpi::type_mapper<value_t>::type(),
+        &packed));
+
+    FMPI_CHECK_MPI(MPI_Type_commit(&packed));
 
     MPI_Count mysize;
-    RTLX_ASSERT_RETURNS(MPI_Type_size_x(packed, &mysize), MPI_SUCCESS);
+    FMPI_CHECK_MPI(MPI_Type_size_x(packed, &mysize));
 
     RTLX_ASSERT(
         static_cast<size_t>(mysize) ==
@@ -346,7 +347,7 @@ inline void bruck_indexed(
         &reqs[1]));
 
     FMPI_CHECK(mpi::waitall(reqs.begin(), reqs.end()));
-    RTLX_ASSERT_RETURNS(MPI_Type_free(&packed), MPI_SUCCESS);
+    FMPI_CHECK_MPI(MPI_Type_free(&packed));
     trace.tock(COMMUNICATION);
 
     blocks.clear();

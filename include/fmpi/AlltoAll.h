@@ -243,8 +243,9 @@ inline void scatteredPairwiseWaitsome(
     using indices_buffer_t =
         SmallVector<index_type, nPendingReqs * sizeof(index_type)>;
 
-    size_t ncReqs = 0, nrecvTotal = 0;
-    auto   outIt = out;
+    size_t ncReqs     = 0;
+    size_t nrecvTotal = 0;
+    auto   outIt      = out;
 
     std::vector<std::size_t> mergedChunksPsum;
     mergedChunksPsum.reserve(nr);

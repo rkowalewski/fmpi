@@ -141,4 +141,10 @@ std::ostream& operator<<(std::ostream& os, std::pair<F, T> const& p)
     RTLX_ASSERT(success);  \
   } while (0)
 
+#define FMPI_CHECK_MPI(expr)   \
+  do {                     \
+    auto success = (expr); \
+    RTLX_ASSERT(success == MPI_SUCCESS);  \
+  } while (0)
+
 #endif
