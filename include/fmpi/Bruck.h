@@ -44,6 +44,9 @@ static constexpr const char ROTATE[] = "Trotate";
 static constexpr const char PACK[]   = "Tpack";
 static constexpr const char UNPACK[] = "Tunpack";
 
+template <class T>
+using buffer_t = tlx::SimpleVector<T, tlx::SimpleVectorMode::Normal>;
+
 }  // namespace detail
 
 template <class InputIt, class OutputIt, class Op>
@@ -81,8 +84,8 @@ inline void bruck(
   // Reverse a buffer for send-recv exchanges
   // We never exchange more than (N/2) elements per round, so this buffer
   // suffices
-  auto                       nels = size_t(nr) * blocksize;
-  std::unique_ptr<value_t[]> tmpbuf{new value_t[nels]};
+  auto const                nels = size_t(nr) * blocksize;
+  detail::buffer_t<value_t> tmpbuf{nels};
 
   auto* sendbuf = &tmpbuf[0];
   auto* recvbuf = &tmpbuf[nels / 2];
@@ -241,8 +244,8 @@ inline void bruck_indexed(
   // Reverse a buffer for send-recv exchanges
   // We never exchange more than (N/2) elements per round, so this buffer
   // suffices
-  auto const                 nels = size_t(nr) * blocksize;
-  std::unique_ptr<value_t[]> tmpbuf{new value_t[nels]};
+  auto const                nels = size_t(nr) * blocksize;
+  detail::buffer_t<value_t> tmpbuf{nels};
 
   std::vector<int> displs(nr / 2);
 
@@ -291,7 +294,7 @@ inline void bruck_indexed(
           // end
           out + block * blocksize + blocksize,
           // tmp buf
-          tmpbuf.get() + b * blocksize);
+          tmpbuf.begin() + b * blocksize);
     }
 #if 0
 
@@ -334,7 +337,7 @@ inline void bruck_indexed(
         out, 1, packed, recvfrom, EXCH_TAG_BRUCK, ctx, &reqs[0]));
 
     FMPI_CHECK(mpi::isend_type(
-        tmpbuf.get(),
+        tmpbuf.begin(),
         mysize,
         MPI_BYTE,
         sendto,
@@ -385,13 +388,11 @@ inline void bruck_interleave(
   std::size_t const nr = ctx.size();
 
   using value_t = typename std::iterator_traits<InputIt>::value_type;
-  using simple_vector =
-      tlx::SimpleVector<value_t, tlx::SimpleVectorMode::Normal>;
 
   std::vector<std::pair<InputIt, InputIt>> chunks;
 
-  auto const    nels = nr * blocksize;
-  simple_vector buffer{nels};
+  auto const                nels = nr * blocksize;
+  detail::buffer_t<value_t> buffer{nels};
 
   if (nr < 3) {
     chunks.emplace_back(
@@ -444,7 +445,7 @@ inline void bruck_interleave(
 
   // Phase 2: Communication Rounds
 
-  simple_vector tmpbuf{nels + nels / 2};
+  detail::buffer_t<value_t> tmpbuf{nels + nels / 2};
 
   auto* sendbuf  = &tmpbuf[0];
   auto* recvbuf  = &tmpbuf[nels / 2];
@@ -690,7 +691,7 @@ inline void bruck_mod(
 #endif
   }
 
-  std::unique_ptr<value_t[]> tmpbuf{new value_t[nels]};
+  detail::buffer_t<value_t> tmpbuf{nels};
   trace.tock(detail::ROTATE);
 
   auto sendbuf = &tmpbuf[0];
@@ -813,10 +814,10 @@ inline void bruck_mod(
         return std::make_pair(f, l);
       });
 
-  op(chunks, tmpbuf.get());
+  op(chunks, tmpbuf.begin());
 
   // switch buffer back to output iterator
-  std::move(tmpbuf.get(), tmpbuf.get() + nels, out);
+  std::move(tmpbuf.begin(), tmpbuf.begin() + nels, out);
 
   trace.tock(MERGE);
 }

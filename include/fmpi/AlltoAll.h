@@ -239,11 +239,6 @@ inline void scatteredPairwiseWaitsome(
     trace.tock(MERGE);
   }
   else {
-    // receives are done but we still wait for send requests
-    // Let's merge a deeper level in the tree
-    using merge_buffer_t =
-        tlx::SimpleVector<value_type, tlx::SimpleVectorMode::NoInitNoDestroy>;
-
     using index_type = int;
     using indices_buffer_t =
         SmallVector<index_type, nPendingReqs * sizeof(index_type)>;
@@ -396,6 +391,9 @@ inline void scatteredPairwiseWaitsome(
     auto const needsFinalMerge = mergedChunksPsum.size() > 2;
     if (needsFinalMerge) {
       RTLX_ASSERT(chunks_to_merge.empty());
+
+      using merge_buffer_t = tlx::
+          SimpleVector<value_type, tlx::SimpleVectorMode::NoInitNoDestroy>;
 
       auto mergeBuffer = merge_buffer_t{std::size_t(nr) * blocksize};
       // generate pairs of chunks to merge

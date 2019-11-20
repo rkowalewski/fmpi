@@ -120,12 +120,7 @@ class CommState {
 
     for (auto&& i : range<std::size_t>(1, MAX_FREE)) {
       auto b = std::prev(std::end(m_buffer), (i + 1) * m_blocksize);
-      FMPI_DBG(&*b);
       push_freelist(&*b);
-    }
-
-    for (auto&& b : m_freelist) {
-      FMPI_DBG(b);
     }
   }
 
