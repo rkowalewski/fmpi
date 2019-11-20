@@ -1,6 +1,7 @@
 #ifndef FMPI_DEBUG_H
 #define FMPI_DEBUG_H
 
+#ifndef NDEBUG
 #include <dbg.h>
 #include <mpi.h>
 
@@ -92,6 +93,7 @@ class DebugOutput {
 
 }  // namespace detail
 }  // namespace fmpi
+#endif
 
 namespace std {
 
