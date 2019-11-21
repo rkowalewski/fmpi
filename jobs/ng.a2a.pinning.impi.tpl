@@ -21,7 +21,6 @@
 # Job options
 #SBATCH --partition=<<CLASS>>
 #Number of nodes and MPI tasks per node:
-#SBATCH --ntasks=<<NUM_TASKS>>
 #SBATCH --nodes=<<NUM_NODES>>
 #SBATCH --ntasks-per-node=<<NUM_PROCS>>
 

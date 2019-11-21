@@ -2,18 +2,28 @@
 
 source "$HOME/scripts/bash-commands.sh"
 
-procs=(8 16 32 48)
+ctx=""
 
-nthreads=(12 6 3 2)
+if [[ $# -gt 1 ]]; then
+  ctx="$1"
+  shift
+fi
 
-ldate="$(date +%Y-%m-%d_%H%M%S)"
+if [[ -z "$ctx" ]]; then
+  ctx="$(date +%Y-%m-%d_%H%M%S)"
+else
+  ctx="${ctx}.$(date +%Y-%m-%d_%H%M%S)"
+fi
 
-for s in $(seq 0 8)
+procs=(16 48)
+
+for s in $(seq 0 6)
 do
   for i in "${procs[@]}"
   do
+    nthreads=$((48 / i))
     gencmdfile jobs/ng.a2a.impi.tpl \
-      -n $((2**s)) -p $i -t 1 -j fmpi -d "$ldate" -c "general" \
+      -n $((2**s)) -p $i -t "$nthreads" -j fmpi -d "$ctx" -c "general" \
       "$@"
   done
 done

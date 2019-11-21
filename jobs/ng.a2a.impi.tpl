@@ -21,9 +21,7 @@
 # Job options
 #SBATCH --partition=<<CLASS>>
 #Number of nodes and MPI tasks per node:
-#SBATCH --ntasks=<<NUM_TASKS>>
 #SBATCH --nodes=<<NUM_NODES>>
-#SBATCH --ntasks-per-core=1
 #SBATCH --ntasks-per-node=<<NUM_PROCS>>
 
 #Important
@@ -31,6 +29,9 @@ module load slurm_setup
 
 export RTLX_ENABLE_TRACE=1
 
+export OMP_NUM_THREADS=<<NUM_THREADS>>
+
 mpiexec \
-    -n $((<<NUM_PROCS>> * <<NUM_NODES>>)) build.release/benchmark/twoSidedAlgorithms \
+    -n $SLURM_NTASKS  \
+    build.release/benchmark/twoSidedAlgorithms \
     $SLURM_JOB_NUM_NODES <<ARGS>>
