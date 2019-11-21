@@ -2,9 +2,12 @@
 
 #include <tlx/container/simple_vector.hpp>
 
+#include <omp.h>
+
 #include <fmpi/AlltoAll.h>
 #include <fmpi/Bruck.h>
 #include <fmpi/Math.h>
+
 
 #include <MPISynchronizedBarrier.h>
 #include <rtlx/ScopedLambda.h>
@@ -354,6 +357,7 @@ int main(int argc, char* argv[])
       Measurement m{};
       m.nhosts    = params.nhosts;
       m.nprocs    = nr;
+      m.nthreads  = omp_get_max_threads();
       m.me        = me;
       m.step      = step + 1;
       m.nbytes    = nels * nr * sizeof(value_t);
@@ -425,7 +429,7 @@ int main(int argc, char* argv[])
 
 void printMeasurementHeader(std::ostream& os)
 {
-  os << "Nodes, Procs, Round, NBytes, Blocksize, Algo, Rank, Iteration, "
+  os << "Nodes, Procs, Threads, Round, NBytes, Blocksize, Algo, Rank, Iteration, "
         "Measurement, "
         "Value\n";
 }
@@ -439,6 +443,7 @@ void printMeasurementCsvLine(
     std::ostringstream myos;
     myos << params.nhosts << ", ";
     myos << params.nprocs << ", ";
+    myos << params.nthreads << ", ";
     myos << params.step << ", ";
     myos << params.nbytes << ", ";
     myos << params.blocksize << ", ";

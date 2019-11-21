@@ -6,6 +6,7 @@
 struct Measurement {
   size_t nhosts;
   size_t nprocs;
+  size_t nthreads;
   int    me;
 
   size_t step;
