@@ -13,7 +13,7 @@ if [[ "$#" -lt 2 ]]; then
   exit 1
 fi
 
-if [[ ! -x "$(command -v Rscript)" ]]; then
+if [[ ! -x "$(command -v R)" ]]; then
   echo "R seems not to be installed on your system"
   exit 1
 fi

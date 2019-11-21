@@ -61,6 +61,10 @@ ci_prob <- .95
 
 print("--calulating statistics")
 
+if (!("Threads" %in% colnames(df.in))) {
+    df.in <- df.in %>% mutate(Threads = 1)
+}
+
 df.stats <- df.in %>%
     group_by(Nodes, Procs, Blocksize, Algo, Measurement) %>%
     summarise_at(
