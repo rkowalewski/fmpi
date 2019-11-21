@@ -31,7 +31,7 @@ append <- FALSE
 
 print(paste0("--reading file: ", csv_in))
 
-df.in <- read_csv(csv_in, col_names=TRUE, col_types="iii?iciicd")
+df.in <- read_csv(csv_in, col_names=TRUE, col_types="iiii?iciicd")
 
 ci <- function(n, sd_x, prob = .95) {
   #n <- sum(!is.na(x))
@@ -62,11 +62,11 @@ ci_prob <- .95
 print("--calulating statistics")
 
 if (!("Threads" %in% colnames(df.in))) {
-    df.in <- df.in %>% mutate(Threads = 1)
+    df.in <- df.in %>% mutate(Threads = 0)
 }
 
 df.stats <- df.in %>%
-    group_by(Nodes, Procs, Blocksize, Algo, Measurement) %>%
+    group_by(Nodes, Procs, Threads, Blocksize, Algo, Measurement) %>%
     summarise_at(
               vars(c("Value")),
                   list(
