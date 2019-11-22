@@ -1,5 +1,4 @@
 #include <fmpi/mpi/Environment.h>
-
 #include <rtlx/Assert.h>
 
 #include <iosfwd>
@@ -97,7 +96,7 @@ auto operator-(Rank const& lhs, Rank const& rhs) noexcept -> Rank
   return Rank{l - r};
 }
 
-auto operator^(Rank const& lhs, Rank const& rhs) -> Rank RTLX_NOEXCEPT
+auto operator^(Rank const& lhs, Rank const& rhs) RTLX_NOEXCEPT -> Rank
 {
   auto l = static_cast<mpi_rank>(lhs);
   auto r = static_cast<mpi_rank>(rhs);

@@ -1,16 +1,13 @@
 #ifndef FMPI_MPI_ENVIRONMENT_H
 #define FMPI_MPI_ENVIRONMENT_H
 
-#include <cstdint>
-#include <type_traits>
-
-#include <mpi.h>
-
 #include <fmpi/mpi/TypeMapper.h>
-
+#include <mpi.h>
 #include <rtlx/Assert.h>
 
+#include <cstdint>
 #include <iosfwd>
+#include <type_traits>
 
 namespace mpi {
 
@@ -32,7 +29,7 @@ struct Rank {
 
 auto operator+(Rank const& lhs, Rank const& rhs) noexcept -> Rank;
 auto operator-(Rank const& lhs, Rank const& rhs) noexcept -> Rank;
-auto operator^(Rank const& lhs, Rank const& rhs) -> Rank RTLX_NOEXCEPT;
+auto operator^(Rank const& lhs, Rank const& rhs) RTLX_NOEXCEPT -> Rank;
 auto operator%(Rank const& lhs, Rank const& rhs) noexcept -> Rank;
 
 auto operator==(Rank const& lhs, Rank const& rhs) noexcept -> bool;
