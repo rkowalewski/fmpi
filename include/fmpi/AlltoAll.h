@@ -555,6 +555,8 @@ inline void scatteredPairwiseWaitall(
     s = os.str();
   }
 
+  auto const schedule = Schedule{};
+
   auto trace = rtlx::TimeTrace{me, s};
 
   trace.tick(COMMUNICATION);
@@ -562,7 +564,7 @@ inline void scatteredPairwiseWaitall(
   std::array<MPI_Request, 2 * NReqs> reqs;
   reqs.fill(MPI_REQUEST_NULL);
 
-  auto const totalExchanges = static_cast<size_t>(nr);
+  auto const totalExchanges = static_cast<std::size_t>(schedule.phaseCount(ctx));
   auto const reqsInFlight   = std::min(totalExchanges - 1, NReqs);
 
   RTLX_ASSERT(2 * reqsInFlight <= reqs.size());
@@ -584,8 +586,6 @@ inline void scatteredPairwiseWaitall(
   chunks.push_back(std::make_pair(
       begin + me * blocksize, begin + me * blocksize + blocksize));
 
-  std::size_t rphase = 0, sphase = 0;
-
   auto const nrounds = tlx::div_ceil(totalExchanges, reqsInFlight);
 
   mergePsum.reserve(nrounds + 2);
@@ -593,13 +593,13 @@ inline void scatteredPairwiseWaitall(
 
   FMPI_DBG(nrounds);
 
+  std::size_t rphase = 0, sphase = 0;
   auto mergebuf = out;
+
   for (auto&& win : range<std::size_t>(nrounds)) {
-    std::size_t nsreqs, nrreqs;
+    std::size_t nrreqs;
 
-    auto const schedule = Schedule{};
-
-    for (nrreqs = 0; nrreqs < reqsInFlight && rphase < nr;
+    for (nrreqs = 0; nrreqs < reqsInFlight && rphase < totalExchanges;
          ++rphase) {
       // receive from
       auto recvfrom = schedule.recvRank(ctx, rphase);
@@ -619,7 +619,7 @@ inline void scatteredPairwiseWaitall(
       ++nrreqs;
     }
 
-    for (nsreqs = 0; nsreqs < reqsInFlight && sphase < nr; ++sphase) {
+    for (std::size_t nsreqs = 0; nsreqs < reqsInFlight && sphase < totalExchanges; ++sphase) {
       auto sendto = schedule.sendRank(ctx, sphase);
 
       if (sendto == me) continue;

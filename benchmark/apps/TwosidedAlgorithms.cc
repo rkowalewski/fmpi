@@ -34,7 +34,7 @@ template <class InputIterator, class OutputIterator>
 using merger_t = std::function<void(
     std::vector<std::pair<InputIterator, InputIterator>>, OutputIterator)>;
 
-std::vector<std::pair<
+static std::vector<std::pair<
     std::string,
     fmpi_algrithm_t<iterator_t, merger_t<iterator_t, iterator_t>>>>
     ALGORITHMS = {std::make_pair(
@@ -44,9 +44,44 @@ std::vector<std::pair<
                           iterator_t,
                           merger_t<iterator_t, iterator_t>>),
                   std::make_pair(
+                      "RingWaitall4",
+                      fmpi::scatteredPairwiseWaitall<
+                          fmpi::FlatHandshake,
+                          iterator_t,
+                          iterator_t,
+                          merger_t<iterator_t, iterator_t>, 4>),
+                  std::make_pair(
+                      "RingWaitall8",
+                      fmpi::scatteredPairwiseWaitall<
+                          fmpi::FlatHandshake,
+                          iterator_t,
+                          iterator_t,
+                          merger_t<iterator_t, iterator_t>, 8>),
+                  std::make_pair(
                       "RingWaitall16",
                       fmpi::scatteredPairwiseWaitall<
                           fmpi::FlatHandshake,
+                          iterator_t,
+                          iterator_t,
+                          merger_t<iterator_t, iterator_t>, 16>),
+                  std::make_pair(
+                      "OneFactorWaitall4",
+                      fmpi::scatteredPairwiseWaitall<
+                          fmpi::OneFactor,
+                          iterator_t,
+                          iterator_t,
+                          merger_t<iterator_t, iterator_t>, 4>),
+                  std::make_pair(
+                      "OneFactorWaitall8",
+                      fmpi::scatteredPairwiseWaitall<
+                          fmpi::OneFactor,
+                          iterator_t,
+                          iterator_t,
+                          merger_t<iterator_t, iterator_t>, 8>),
+                  std::make_pair(
+                      "OneFactorWaitall16",
+                      fmpi::scatteredPairwiseWaitall<
+                          fmpi::OneFactor,
                           iterator_t,
                           iterator_t,
                           merger_t<iterator_t, iterator_t>, 16>),
@@ -196,7 +231,6 @@ int main(int argc, char* argv[])
             }),
         ALGORITHMS.end());
   }
-
 
   if (!fmpi::isPow2(nr)) {
     // remove bruck_mod if we have not a power of 2 ranks.

@@ -26,6 +26,10 @@ Rank FlatHandshake::hypercube(mpi::Context const& comm, uint32_t phase) const
   return comm.rank() ^ static_cast<Rank>(phase);
 }
 
+uint32_t FlatHandshake::phaseCount(mpi::Context const& comm) const noexcept {
+  return comm.size();
+}
+
 Rank OneFactor::sendRank(mpi::Context const& comm, uint32_t phase) const
 {
   return (comm.size() % 2) != 0 ? factor_odd(comm, phase)
@@ -62,12 +66,20 @@ Rank OneFactor::factor_odd(mpi::Context const& comm, uint32_t phase) const
       static_cast<Rank>(phase) - comm.rank(), static_cast<Rank>(comm.size()));
 }
 
+uint32_t OneFactor::phaseCount(mpi::Context const& comm) const noexcept {
+  return comm.size() % 2 ? comm.size() : comm.size() - 1;
+}
+
 mpi::Rank Linear::sendRank(mpi::Context const& /* unused */, uint32_t phase) const noexcept {
   return static_cast<Rank>(phase);
 }
 
 mpi::Rank Linear::recvRank(mpi::Context const& /* unused */, uint32_t phase) const noexcept {
   return static_cast<Rank>(phase);
+}
+
+uint32_t Linear::phaseCount(mpi::Context const& comm) const noexcept {
+  return comm.size();
 }
 
 }  // namespace fmpi
