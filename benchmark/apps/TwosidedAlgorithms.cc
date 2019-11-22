@@ -44,53 +44,12 @@ std::vector<std::pair<
                           iterator_t,
                           merger_t<iterator_t, iterator_t>>),
                   std::make_pair(
-                      "Ring",
-                      fmpi::scatteredPairwise<
+                      "RingWaitall16",
+                      fmpi::scatteredPairwiseWaitall<
                           fmpi::FlatHandshake,
-                          false,
                           iterator_t,
                           iterator_t,
-                          merger_t<iterator_t, iterator_t>>),
-                  std::make_pair(
-                      "OneFactor",
-                      fmpi::scatteredPairwise<
-                          fmpi::OneFactor,
-                          false,
-                          iterator_t,
-                          iterator_t,
-                          merger_t<iterator_t, iterator_t>>),
-                  std::make_pair(
-                      "Linear",
-                      fmpi::scatteredPairwise<
-                          fmpi::Linear,
-                          false,
-                          iterator_t,
-                          iterator_t,
-                          merger_t<iterator_t, iterator_t>>),
-                  std::make_pair(
-                      "RingBlocking",
-                      fmpi::scatteredPairwise<
-                          fmpi::FlatHandshake,
-                          true,
-                          iterator_t,
-                          iterator_t,
-                          merger_t<iterator_t, iterator_t>>),
-                  std::make_pair(
-                      "OneFactorBlocking",
-                      fmpi::scatteredPairwise<
-                          fmpi::OneFactor,
-                          true,
-                          iterator_t,
-                          iterator_t,
-                          merger_t<iterator_t, iterator_t>>),
-                  std::make_pair(
-                      "LinearBlocking",
-                      fmpi::scatteredPairwise<
-                          fmpi::Linear,
-                          true,
-                          iterator_t,
-                          iterator_t,
-                          merger_t<iterator_t, iterator_t>>),
+                          merger_t<iterator_t, iterator_t>, 16>),
                   std::make_pair(
                       "RingWaitsome4",
                       fmpi::scatteredPairwiseWaitsome<

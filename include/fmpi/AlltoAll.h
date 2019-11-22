@@ -1,27 +1,23 @@
 #ifndef ALLTOALL_H
 #define ALLTOALL_H
 
+#include <fmpi/Constants.h>
+#include <fmpi/Debug.h>
+#include <fmpi/Memory.h>
+#include <fmpi/NumericRange.h>
+#include <fmpi/Schedule.h>
+#include <fmpi/detail/CommState.h>
+#include <fmpi/mpi/Request.h>
 #include <mpi.h>
+#include <rtlx/Assert.h>
+#include <rtlx/Trace.h>
 
 #include <algorithm>
 #include <cmath>
 #include <memory>
 #include <stack>
-
 #include <tlx/simple_vector.hpp>
 #include <tlx/stack_allocator.hpp>
-
-#include <rtlx/Assert.h>
-#include <rtlx/Trace.h>
-
-#include <fmpi/Constants.h>
-#include <fmpi/Debug.h>
-#include <fmpi/Memory.h>
-#include <fmpi/Schedule.h>
-#include <fmpi/detail/CommState.h>
-#include <fmpi/mpi/Request.h>
-
-#include <fmpi/NumericRange.h>
 
 // Other AllToAll Algorithms
 
@@ -531,20 +527,21 @@ inline void scatteredPairwise(
   trace.tock(MERGE);
 }
 
-#if 0
 template <
     class Schedule,
     class InputIt,
     class OutputIt,
     class Op,
     size_t NReqs = 1>
-inline void scatteredPairwiseWindow(
+inline void scatteredPairwiseWaitall(
     InputIt             begin,
     OutputIt            out,
     int                 blocksize,
     mpi::Context const& ctx,
     Op&&                op)
 {
+  using value_type = typename std::iterator_traits<OutputIt>::value_type;
+
   auto me = ctx.rank();
   auto nr = ctx.size();
 
@@ -552,7 +549,7 @@ inline void scatteredPairwiseWindow(
 
   if (rtlx::TraceStore::GetInstance().enabled()) {
     std::ostringstream os;
-    os << Schedule::NAME << "Waitsome" << NReqs;
+    os << Schedule::NAME << "Waitall" << NReqs;
     s = os.str();
   }
 
@@ -563,132 +560,100 @@ inline void scatteredPairwiseWindow(
   std::array<MPI_Request, 2 * NReqs> reqs;
   reqs.fill(MPI_REQUEST_NULL);
 
-  auto const totalExchanges = static_cast<size_t>(nr - 1);
-  auto const totalReqs      = 2 * totalExchanges;
-  auto const reqsInFlight   = std::min(totalExchanges, NReqs);
+  auto const totalExchanges = static_cast<size_t>(nr);
+  auto const reqsInFlight   = std::min(totalExchanges - 1, NReqs);
 
   RTLX_ASSERT(2 * reqsInFlight <= reqs.size());
 
-  std::size_t nsreqs, nrreqs, rphase, sphase;
+  using buffer_t =
+      tlx::SimpleVector<value_type, tlx::SimpleVectorMode::NoInitNoDestroy>;
 
-  Schedule schedule{};
-  for (rphase = 0, nrreqs = 0; nrreqs < reqsInFlight; ++rphase) {
-    // receive from
-    auto recvfrom = schedule.recvRank(rphase);
+  buffer_t buffer{nr * blocksize};
 
-    if (recvfrom == me) continue;
+  std::vector<
+      std::pair<typename buffer_t::iterator, typename buffer_t::iterator>>
+      chunks;
 
-    FMPI_DBG(recvfrom);
+  chunks.reserve(reqsInFlight + 1);
 
-    FMPI_CHECK(mpi::irecv(
-        std::next(out, recvfrom * blocksize),
-        blocksize,
-        recvfrom,
-        EXCH_TAG_RING,
-        ctx,
-        &reqs[nrreqs++]));
-  }
+  // We can save the local copy and do it with the merge operation itself
+  chunks.push_back(std::make_pair(
+      begin + me * blocksize, begin + me * blocksize + blocksize));
 
-  for (sphase = 0, nsreqs = 0; nsreqs < reqsInFlight; ++sphase) {
-    // receive from
-    auto sendto = mod(me + static_cast<int>(nsreqs) + 1, nr);
+  std::size_t rphase = 0, sphase = 0;
 
-    FMPI_DBG(sendto);
+  auto const nrounds = std::ceil(totalExchanges / reqsInFlight);
 
-    FMPI_CHECK(mpi::isend(
-        std::next(begin, sendto * blocksize),
-        blocksize,
-        sendto,
-        EXCH_TAG_RING,
-        ctx,
-        &reqs[reqsInFlight + nsreqs++]));
-  }
+  auto mergebuf = out;
+  for (auto&& win : range<std::size_t>(nrounds)) {
+    std::size_t nsreqs, nrreqs;
 
-  // local copy
-  std::copy(
-      begin + me * blocksize,
-      begin + me * blocksize + blocksize,
-      out + me * blocksize);
+    auto const schedule = Schedule{};
 
-  size_t ncExchanges = 0;
+    auto const firstPhase = win * reqsInFlight;
+    auto const lastPhase = std::min((win + 1) * reqsInFlight, totalExchanges);
 
-  while (ncExchanges < totalExchanges) {
+    for (nrreqs = 0; nrreqs < std::min(reqsInFlight, lastPhase - firstPhase);
+         ++rphase) {
+      // receive from
+      auto recvfrom = schedule.recvRank(ctx, rphase);
+
+      if (recvfrom == me) continue;
+
+      FMPI_DBG(recvfrom);
+
+      FMPI_CHECK(mpi::irecv(
+          std::next(buffer.begin(), nrreqs * blocksize),
+          blocksize,
+          recvfrom,
+          EXCH_TAG_RING,
+          ctx,
+          &reqs[nrreqs]));
+
+      nrreqs++;
+    }
+
+    for (nsreqs = 0; nsreqs < reqsInFlight; ++sphase) {
+      auto sendto = schedule.sendRank(ctx, rphase);
+
+      if (sendto == me) continue;
+
+      FMPI_DBG(sendto);
+
+      FMPI_CHECK(mpi::isend(
+          std::next(begin, sendto * blocksize),
+          blocksize,
+          sendto,
+          EXCH_TAG_RING,
+          ctx,
+          &reqs[reqsInFlight + nsreqs++]));
+    }
+
+    for (auto&& b : range<std::size_t>(0, nrreqs)) {
+      chunks.push_back(std::make_pair(
+          std::next(buffer.begin(), b * blocksize),
+          std::next(buffer.begin(), (b + 1) * blocksize)));
+    }
+
     FMPI_CHECK(mpi::waitall(&(*std::begin(reqs)), &(*std::end(reqs))));
 
-    if (reqCompleted < static_cast<int>(reqsInFlight)) {
-      // a receive request is done, so post a new one...
+    op(chunks, mergebuf);
 
-      // but we really need to check if we really need to perform another
-      // request, because a MPI_Request_NULL could be completed as well
-      if (nrreqs < totalExchanges) {
-        // receive from
-        auto recvfrom = mod(me - static_cast<int>(nrreqs) - 1, nr);
-
-        P(me << " recvfrom " << recvfrom);
-
-        RTLX_ASSERT_RETURNS(
-            MPI_Irecv(
-                std::next(out, recvfrom * blocksize),
-                blocksize,
-                mpi_datatype,
-                recvfrom,
-                EXCH_TAG_RING,
-                comm,
-                &(reqs[reqCompleted])),
-            MPI_SUCCESS);
-        ++nrreqs;
-      }
-    }
-    else {
-      // a send request is done, so post a new one...
-      if (nsreqs < totalExchanges) {
-        // receive from
-        auto sendto = mod(me + static_cast<int>(nsreqs) + 1, nr);
-
-        P(me << " sendto " << sendto);
-
-        RTLX_ASSERT_RETURNS(
-            MPI_Isend(
-                std::next(begin, sendto * blocksize),
-                blocksize,
-                mpi_datatype,
-                sendto,
-                EXCH_TAG_RING,
-                comm,
-                &(reqs[reqCompleted])),
-            MPI_SUCCESS);
-        ++nsreqs;
-      }
-    }
+    mergebuf += chunks.size();
+    chunks.clear();
   }
 
-  trace.tock(COMMUNICATION);
-
-  trace.tick(MERGE);
-  std::vector<std::pair<OutputIt, OutputIt>> seqs;
-  seqs.reserve(nr);
-
-  for (size_t i = 0; i < std::size_t(nr); ++i) {
-    seqs.push_back(
-        std::make_pair(out + i * blocksize, out + (i + 1) * blocksize));
+  for (auto&& win : range<std::size_t>(nrounds)) {
+    auto first = win * blocksize;
+    auto last  = std::min((win + 1) * blocksize, std::size_t(nr) * blocksize);
+    chunks.push_back(
+        std::make_pair(std::next(out, first), std::next(out, last)));
   }
 
-  auto merge_buf =
-      std::unique_ptr<value_type[]>(new value_type[blocksize * nr]);
+  op(chunks, buffer.begin());
 
-  __gnu_parallel::multiway_merge(
-      seqs.begin(),
-      seqs.end(),
-      merge_buf.get(),
-      blocksize * nr,
-      std::less<value_type>{},
-      __gnu_parallel::sequential_tag{});
-
-  std::copy(merge_buf.get(), merge_buf.get() + blocksize * nr, out);
-
-  trace.tock(MERGE);
+  std::move(buffer.begin(), buffer.end(), out);
 }
-#endif
 
 template <class InputIt, class OutputIt, class Op>
 inline void MpiAlltoAll(
