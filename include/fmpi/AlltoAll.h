@@ -16,9 +16,10 @@
 #include <cmath>
 #include <memory>
 #include <stack>
-#include <tlx/math/div_ceil.hpp>
+
 #include <tlx/simple_vector.hpp>
 #include <tlx/stack_allocator.hpp>
+#include <tlx/math/div_ceil.hpp>
 
 // Other AllToAll Algorithms
 
@@ -583,6 +584,8 @@ inline void scatteredPairwiseWaitall(
   chunks.push_back(std::make_pair(
       begin + me * blocksize, begin + me * blocksize + blocksize));
 
+  std::size_t rphase = 0, sphase = 0;
+
   auto const nrounds = tlx::div_ceil(totalExchanges, reqsInFlight);
 
   mergePsum.reserve(nrounds + 2);
@@ -591,16 +594,13 @@ inline void scatteredPairwiseWaitall(
   FMPI_DBG(nrounds);
 
   auto mergebuf = out;
-
   for (auto&& win : range<std::size_t>(nrounds)) {
-    std::size_t rphase = win * reqsInFlight;
-    std::size_t sphase = win * reqsInFlight;
-
-    std::size_t nrreqs;
+    std::size_t nsreqs, nrreqs;
 
     auto const schedule = Schedule{};
 
-    for (nrreqs = 0; nrreqs < reqsInFlight && rphase < nr; ++rphase) {
+    for (nrreqs = 0; nrreqs < reqsInFlight && rphase < nr;
+         ++rphase) {
       // receive from
       auto recvfrom = schedule.recvRank(ctx, rphase);
 
@@ -619,7 +619,7 @@ inline void scatteredPairwiseWaitall(
       ++nrreqs;
     }
 
-    for (std::size_t nsreqs = 0; nsreqs < reqsInFlight && sphase < nr; ++sphase) {
+    for (nsreqs = 0; nsreqs < reqsInFlight && sphase < nr; ++sphase) {
       auto sendto = schedule.sendRank(ctx, sphase);
 
       if (sendto == me) continue;
@@ -644,10 +644,8 @@ inline void scatteredPairwiseWaitall(
     FMPI_CHECK(mpi::waitall(&(*std::begin(reqs)), &(*std::end(reqs))));
 
     op(chunks, mergebuf);
-
     auto const nMerged = chunks.size() * blocksize;
     mergebuf += nMerged;
-
     mergePsum.push_back(mergePsum.back() + nMerged);
 
     chunks.clear();
@@ -661,14 +659,16 @@ inline void scatteredPairwiseWaitall(
       std::next(std::begin(mergePsum)),
       std::back_inserter(chunks),
       [rbuf = out](auto first, auto last) {
-        return std::make_pair(std::next(rbuf, first), std::next(rbuf, last));
+        return std::make_pair(
+            std::next(rbuf, first), std::next(rbuf, last));
       });
+
 
   op(chunks, buffer.begin());
 
   std::move(buffer.begin(), buffer.end(), out);
 
-  FMPI_DBG_RANGE(out, out + nr * blocksize);
+    FMPI_DBG_RANGE(out, out + nr * blocksize);
 }
 
 template <class InputIt, class OutputIt, class Op>
