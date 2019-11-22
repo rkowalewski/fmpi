@@ -133,36 +133,6 @@ static std::vector<std::pair<
                           iterator_t,
                           merger_t<iterator_t, iterator_t>,
                           16>),
-#if 0
-                  std::make_pair(
-                      "Waitany16",
-                      fmpi::scatteredPairwiseWaitany<
-                          iterator_t,
-                          iterator_t,
-                          merger_t,
-                          16>),
-                  std::make_pair(
-                      "Waitany32",
-                      fmpi::scatteredPairwiseWaitany<
-                          iterator_t,
-                          iterator_t,
-                          merger_t,
-                          32>),
-                  std::make_pair(
-                      "Waitany64",
-                      fmpi::scatteredPairwiseWaitany<
-                          iterator_t,
-                          iterator_t,
-                          merger_t,
-                          64>),
-                  std::make_pair(
-                      "Waitany128",
-                      fmpi::scatteredPairwiseWaitany<
-                          iterator_t,
-                          iterator_t,
-                          merger_t,
-                          128>),
-#endif
                   // Bruck Algorithms, first the original one, then a modified
                   // version which omits the last local rotation step
                   std::make_pair(
