@@ -21,7 +21,10 @@ namespace fmpi {
 namespace detail {
 
 template <class BidirIt, class OutputIt>
-constexpr OutputIt reverse_copy_strided(
+#ifndef _OPENMP
+constexpr
+#endif
+OutputIt reverse_copy_strided(
     BidirIt first, BidirIt last, std::size_t blocksize, OutputIt d_first)
 {
   auto const n = std::distance(first, last);
@@ -29,7 +32,9 @@ constexpr OutputIt reverse_copy_strided(
 
   auto const nb = n / blocksize;
 
+#ifdef _OPENMP
 #pragma omp parallel for
+#endif
   for (std::size_t block = 0; block < nb; ++block) {
     std::copy(
         first + (nb - block - 1) * blocksize,

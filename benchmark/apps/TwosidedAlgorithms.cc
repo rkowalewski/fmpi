@@ -20,10 +20,8 @@
 
 #ifdef NDEBUG
 constexpr int nwarmup = 1;
-constexpr int niters  = 10;
 #else
 constexpr int nwarmup = 0;
-constexpr int niters  = 1;
 #endif
 
 // The container where we store our
