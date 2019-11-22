@@ -4,10 +4,10 @@ if(CMAKE_VERSION VERSION_GREATER 3.6 AND ENABLE_CLANG_TIDY)
     find_program(
         CLANG_TIDY_BIN
         NAMES
+            clang-tidy
             clang-tidy-7
             clang-tidy-6
             clang-tidy-5
-            clang-tidy
         DOC "Path to clang-tidy executable"
     )
 
@@ -46,6 +46,7 @@ if(CMAKE_VERSION VERSION_GREATER 3.6 AND ENABLE_CLANG_TIDY)
     if (CLANG_TIDY_FIX)
         list(APPEND RUN_CLANG_TIDY_BIN_ARGS
             -fix
+            -export-fixes fixes.yaml
             -format
             -style file)
     endif()
