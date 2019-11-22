@@ -5,7 +5,7 @@
 #SBATCH -o <<LOGDIR>>/%j.n<<NUM_NODES>>.p<<NUM_PROCS>>.t<<NUM_THREADS>>.out
 #SBATCH -e <<LOGDIR>>/%j.n<<NUM_NODES>>.p<<NUM_PROCS>>.t<<NUM_THREADS>>.err
 #Initial working directory (also --chdir):
-#SBATCH -D /dss/dsshome1/03/di25qoy2/workspaces/alltoall
+#SBATCH -D <<WORKDIR>>
 #Notification and type
 #SBATCH --mail-type=END
 #SBATCH --mail-user=roger.kowalewski@ifi.lmu.de

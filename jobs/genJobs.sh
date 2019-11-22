@@ -59,7 +59,7 @@ ctx="${ctx}.${gitv}.${current_date}"
 for s in $(seq 0 $scale)
 do
   f=$(gencmdfile jobs/ng.a2a.impi.tpl \
-    -n $((2**s)) -p "$procs" -t "$threads" -j fmpi -d "$ctx" -c "general" "$args")
+    -n $((2**s)) -p "$procs" -t "$threads" -j fmpi -D "$git_root" -d "$ctx" -c "general" "$args")
 
   if [[ "$submit" == "1" ]]; then
     sbatch "$f"
