@@ -16,10 +16,9 @@
 #include <cmath>
 #include <memory>
 #include <stack>
-
+#include <tlx/math/div_ceil.hpp>
 #include <tlx/simple_vector.hpp>
 #include <tlx/stack_allocator.hpp>
-#include <tlx/math/div_ceil.hpp>
 
 // Other AllToAll Algorithms
 
@@ -543,6 +542,7 @@ inline void scatteredPairwiseWaitall(
     Op&&                op)
 {
   using value_type = typename std::iterator_traits<OutputIt>::value_type;
+  using pointer    = typename std::iterator_traits<OutputIt>::pointer;
 
   auto me = ctx.rank();
   auto nr = ctx.size();
@@ -564,19 +564,16 @@ inline void scatteredPairwiseWaitall(
   std::array<MPI_Request, 2 * NReqs> reqs;
   reqs.fill(MPI_REQUEST_NULL);
 
-  auto const totalExchanges = static_cast<std::size_t>(schedule.phaseCount(ctx));
-  auto const reqsInFlight   = std::min(totalExchanges - 1, NReqs);
+  auto const totalExchanges =
+      static_cast<std::size_t>(schedule.phaseCount(ctx));
+  auto const reqsInFlight = std::min(totalExchanges - 1, NReqs);
 
   RTLX_ASSERT(2 * reqsInFlight <= reqs.size());
 
   using buffer_t =
       tlx::SimpleVector<value_type, tlx::SimpleVectorMode::NoInitNoDestroy>;
 
-  buffer_t buffer{nr * blocksize};
-
-  std::vector<
-      std::pair<typename buffer_t::iterator, typename buffer_t::iterator>>
-      chunks;
+  std::vector<std::pair<pointer, pointer>> chunks;
 
   std::vector<std::size_t> mergePsum;
 
@@ -594,7 +591,13 @@ inline void scatteredPairwiseWaitall(
   FMPI_DBG(nrounds);
 
   std::size_t rphase = 0, sphase = 0;
-  auto mergebuf = out;
+  auto        mergebuf = out;
+
+  auto const nels   = nr * blocksize;
+  auto const nbytes = nels * sizeof(value_type);
+  buffer_t   buffer{nels};
+
+  auto const allFitsInL2Cache = (nbytes < fmpi::CACHELEVEL2_SIZE);
 
   for (auto&& win : range<std::size_t>(nrounds)) {
     static_cast<void>(win);
@@ -609,18 +612,22 @@ inline void scatteredPairwiseWaitall(
 
       FMPI_DBG(recvfrom);
 
+      auto* recvBuf = allFitsInL2Cache
+                          ? std::next(buffer.begin(), recvfrom * blocksize)
+                          : std::next(buffer.begin(), nrreqs * blocksize);
+
       FMPI_CHECK(mpi::irecv(
-          std::next(buffer.begin(), nrreqs * blocksize),
-          blocksize,
-          recvfrom,
-          EXCH_TAG_RING,
-          ctx,
-          &reqs[nrreqs]));
+          recvBuf, blocksize, recvfrom, EXCH_TAG_RING, ctx, &reqs[nrreqs]));
+
+      chunks.push_back(
+          std::make_pair(recvBuf, std::next(recvBuf, blocksize)));
 
       ++nrreqs;
     }
 
-    for (std::size_t nsreqs = 0; nsreqs < reqsInFlight && sphase < totalExchanges; ++sphase) {
+    for (std::size_t nsreqs = 0;
+         nsreqs < reqsInFlight && sphase < totalExchanges;
+         ++sphase) {
       auto sendto = schedule.sendRank(ctx, sphase);
 
       if (sendto == me) continue;
@@ -636,40 +643,51 @@ inline void scatteredPairwiseWaitall(
           &reqs[reqsInFlight + nsreqs++]));
     }
 
-    for (auto&& b : range<std::size_t>(nrreqs)) {
-      chunks.push_back(std::make_pair(
-          std::next(buffer.begin(), b * blocksize),
-          std::next(buffer.begin(), (b + 1) * blocksize)));
-    }
-
     FMPI_CHECK(mpi::waitall(&(*std::begin(reqs)), &(*std::end(reqs))));
 
-    op(chunks, mergebuf);
-    auto const nMerged = chunks.size() * blocksize;
-    mergebuf += nMerged;
-    mergePsum.push_back(mergePsum.back() + nMerged);
-
-    chunks.clear();
+    if (!allFitsInL2Cache && !chunks.empty()) {
+      op(chunks, mergebuf);
+      auto const nMerged = chunks.size() * blocksize;
+      mergebuf += nMerged;
+      mergePsum.push_back(mergePsum.back() + nMerged);
+      chunks.clear();
+    }
 
     FMPI_DBG_RANGE(out, mergebuf);
   }
 
-  std::transform(
-      std::begin(mergePsum),
-      std::prev(std::end(mergePsum)),
-      std::next(std::begin(mergePsum)),
-      std::back_inserter(chunks),
-      [rbuf = out](auto first, auto last) {
-        return std::make_pair(
-            std::next(rbuf, first), std::next(rbuf, last));
-      });
+  auto mergeSrc = buffer.begin();
+  auto target   = &*out;
 
+  // if we have intermediate merge operations then we have already merged
+  // chunks in the out buffer and use the dedicated merge buffer as destinated
+  // merged buffer.
+  // Otherwise, we merge directly into the out buffer.
+  FMPI_DBG(mergePsum);
+  if (!allFitsInL2Cache) {
+    FMPI_DBG(mergePsum);
+    std::swap(mergeSrc, target);
+    std::transform(
+        std::begin(mergePsum),
+        std::prev(std::end(mergePsum)),
+        std::next(std::begin(mergePsum)),
+        std::back_inserter(chunks),
+        [rbuf = mergeSrc](auto first, auto last) {
+          return std::make_pair(
+              std::next(rbuf, first), std::next(rbuf, last));
+        });
+  }
 
-  op(chunks, buffer.begin());
+  FMPI_DBG("final merge");
+  FMPI_DBG(chunks.size());
 
-  std::move(buffer.begin(), buffer.end(), out);
+  op(chunks, target);
 
-    FMPI_DBG_RANGE(out, out + nr * blocksize);
+  if (target != &*out) {
+    std::move(target, target + nels, out);
+  }
+
+  FMPI_DBG_RANGE(out, out + nr * blocksize);
 }
 
 template <class InputIt, class OutputIt, class Op>
