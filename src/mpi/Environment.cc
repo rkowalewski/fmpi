@@ -9,7 +9,9 @@ namespace mpi {
 Context::Context(MPI_Comm comm)
   : m_comm(comm)
 {
-  int sz, rank;
+  int sz;
+
+        int rank;
   RTLX_ASSERT_RETURNS(MPI_Comm_size(m_comm, &sz), MPI_SUCCESS);
   m_size = sz;
 
@@ -17,17 +19,17 @@ Context::Context(MPI_Comm comm)
   m_rank = static_cast<Rank>(rank);
 }
 
-Rank Context::rank() const noexcept
+auto Context::rank() const noexcept -> Rank
 {
   return m_rank;
 }
 
-Context::size_type Context::size() const noexcept
+auto Context::size() const noexcept -> Context::size_type
 {
   return m_size;
 }
 
-MPI_Comm Context::mpiComm() const noexcept
+auto Context::mpiComm() const noexcept -> MPI_Comm
 {
   return m_comm;
 }
@@ -47,55 +49,55 @@ Rank::operator bool() const noexcept
   return m_rank != MPI_PROC_NULL && m_rank >= 0;
 }
 
-Rank& Rank::operator++()
+auto Rank::operator++() -> Rank&
 {
   ++m_rank;
   return *this;
 }
 
-const Rank Rank::operator++(int) const
+auto Rank::operator++(int) const -> const Rank
 {
   auto tmp = *this;
   return ++tmp;
 }
 
-bool operator==(Rank const& lhs, Rank const& rhs) noexcept
+auto operator==(Rank const& lhs, Rank const& rhs) noexcept -> bool
 {
   return static_cast<mpi_rank>(lhs) == static_cast<mpi_rank>(rhs);
 }
 
-bool operator!=(Rank const& lhs, Rank const& rhs) noexcept
+auto operator!=(Rank const& lhs, Rank const& rhs) noexcept -> bool
 {
   return !(lhs == rhs);
 }
 
-bool operator<(Rank const& lhs, Rank const& rhs) noexcept
+auto operator<(Rank const& lhs, Rank const& rhs) noexcept -> bool
 {
   auto l = static_cast<mpi_rank>(lhs);
   auto r = static_cast<mpi_rank>(rhs);
   return l < r;
 }
 
-bool operator>(Rank const& lhs, Rank const& rhs) noexcept
+auto operator>(Rank const& lhs, Rank const& rhs) noexcept -> bool
 {
   return !(lhs < rhs) && !(lhs == rhs);
 }
 
-Rank operator+(Rank const& lhs, Rank const& rhs) noexcept
+auto operator+(Rank const& lhs, Rank const& rhs) noexcept -> Rank
 {
   auto l = static_cast<mpi_rank>(lhs);
   auto r = static_cast<mpi_rank>(rhs);
   return Rank{l + r};
 }
 
-Rank operator-(Rank const& lhs, Rank const& rhs) noexcept
+auto operator-(Rank const& lhs, Rank const& rhs) noexcept -> Rank
 {
   auto l = static_cast<mpi_rank>(lhs);
   auto r = static_cast<mpi_rank>(rhs);
   return Rank{l - r};
 }
 
-Rank operator^(Rank const& lhs, Rank const& rhs) RTLX_NOEXCEPT
+auto operator^(Rank const& lhs, Rank const& rhs) -> Rank RTLX_NOEXCEPT
 {
   auto l = static_cast<mpi_rank>(lhs);
   auto r = static_cast<mpi_rank>(rhs);
@@ -107,14 +109,14 @@ Rank operator^(Rank const& lhs, Rank const& rhs) RTLX_NOEXCEPT
       static_cast<unsigned>(l) ^ static_cast<unsigned>(r));
 }
 
-Rank operator%(Rank const& lhs, Rank const& rhs) noexcept
+auto operator%(Rank const& lhs, Rank const& rhs) noexcept -> Rank
 {
   auto l = static_cast<mpi_rank>(lhs);
   auto r = static_cast<mpi_rank>(rhs);
   return Rank{l % r};
 }
 
-Context splitSharedComm(Context const& baseComm)
+auto splitSharedComm(Context const& baseComm) -> Context
 {
   MPI_Comm sharedComm;
   // split world into shared memory communicator
@@ -130,7 +132,7 @@ Context splitSharedComm(Context const& baseComm)
   return Context{sharedComm};
 }
 
-std::ostream& operator<<(std::ostream& os, Rank const& p)
+auto operator<<(std::ostream& os, Rank const& p) -> std::ostream&
 {
   os << static_cast<mpi_rank>(p);
   return os;

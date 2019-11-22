@@ -11,7 +11,7 @@
 #include <mpi.h>
 
 SynchronizedBarrier::SynchronizedBarrier()
-  : local_success_(0u)
+  : local_success_(0U)
 {
 }
 
@@ -20,11 +20,11 @@ SynchronizedBarrier::SynchronizedBarrier(bool local_success)
 {
 }
 
-bool SynchronizedBarrier::Success(MPI_Comm comm) {
+auto SynchronizedBarrier::Success(MPI_Comm comm) -> bool {
 
     unsigned long global_success = 0;
     MPI_Allreduce(&local_success_, &global_success, 1, MPI_UNSIGNED_LONG, MPI_LAND, comm);
-    return global_success != 0u;
+    return global_success != 0U;
 }
 
 SynchronizedClock::SynchronizedClock(int sync_tag,
@@ -36,9 +36,11 @@ SynchronizedClock::SynchronizedClock(int sync_tag,
     , synced_(false)
 {}
 
-bool SynchronizedClock::Init(MPI_Comm comm) {
+auto SynchronizedClock::Init(MPI_Comm comm) -> bool {
 
-    int nprocs, myrank;
+    int nprocs;
+
+        int myrank;
     MPI_Comm_size(comm, &nprocs);
     MPI_Comm_rank(comm, &myrank);
 
@@ -100,7 +102,7 @@ bool SynchronizedClock::Init(MPI_Comm comm) {
     return synced_;
 }
 
-SynchronizedBarrier SynchronizedClock::Barrier(MPI_Comm comm) {
+auto SynchronizedClock::Barrier(MPI_Comm comm) -> SynchronizedBarrier {
 
     MPI_Barrier(comm);
 

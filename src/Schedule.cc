@@ -5,14 +5,14 @@ namespace fmpi {
 
 using namespace mpi;
 
-Rank FlatHandshake::sendRank(mpi::Context const& comm, uint32_t phase) const
+auto FlatHandshake::sendRank(mpi::Context const& comm, uint32_t phase) const -> Rank
 {
   return isPow2(comm.size()) ? hypercube(comm, phase)
                              : mod(comm.rank() + static_cast<Rank>(phase),
                                    static_cast<Rank>(comm.size()));
 }
 
-Rank FlatHandshake::recvRank(mpi::Context const& comm, uint32_t phase) const
+auto FlatHandshake::recvRank(mpi::Context const& comm, uint32_t phase) const -> Rank
 {
   auto r = isPow2(comm.size()) ? hypercube(comm, phase)
                                : mod(comm.rank() - static_cast<Rank>(phase),
@@ -20,28 +20,28 @@ Rank FlatHandshake::recvRank(mpi::Context const& comm, uint32_t phase) const
   return Rank{r};
 }
 
-Rank FlatHandshake::hypercube(mpi::Context const& comm, uint32_t phase) const
+auto FlatHandshake::hypercube(mpi::Context const& comm, uint32_t phase)  -> Rank
 {
   RTLX_ASSERT(isPow2(comm.size()));
   return comm.rank() ^ static_cast<Rank>(phase);
 }
 
-uint32_t FlatHandshake::phaseCount(mpi::Context const& comm) const noexcept {
+auto FlatHandshake::phaseCount(mpi::Context const& comm) noexcept -> uint32_t {
   return comm.size();
 }
 
-Rank OneFactor::sendRank(mpi::Context const& comm, uint32_t phase) const
+auto OneFactor::sendRank(mpi::Context const& comm, uint32_t phase) const -> Rank
 {
   return (comm.size() % 2) != 0 ? factor_odd(comm, phase)
                                 : factor_even(comm, phase);
 }
 
-Rank OneFactor::recvRank(mpi::Context const& comm, uint32_t phase) const
+auto OneFactor::recvRank(mpi::Context const& comm, uint32_t phase) const -> Rank
 {
   return sendRank(comm, phase);
 }
 
-Rank OneFactor::factor_even(mpi::Context const& comm, uint32_t phase) const
+auto OneFactor::factor_even(mpi::Context const& comm, uint32_t phase)  -> Rank
 {
   auto idle =
       mod(static_cast<Rank>(comm.size() * phase / 2),
@@ -60,25 +60,25 @@ Rank OneFactor::factor_even(mpi::Context const& comm, uint32_t phase) const
       static_cast<Rank>(comm.size() - 1));
 }
 
-Rank OneFactor::factor_odd(mpi::Context const& comm, uint32_t phase) const
+auto OneFactor::factor_odd(mpi::Context const& comm, uint32_t phase)  -> Rank
 {
   return mod(
       static_cast<Rank>(phase) - comm.rank(), static_cast<Rank>(comm.size()));
 }
 
-uint32_t OneFactor::phaseCount(mpi::Context const& comm) const noexcept {
-  return comm.size() % 2 ? comm.size() : comm.size() - 1;
+auto OneFactor::phaseCount(mpi::Context const& comm) noexcept -> uint32_t {
+  return (comm.size() % 2) != 0u ? comm.size() : comm.size() - 1;
 }
 
-mpi::Rank Linear::sendRank(mpi::Context const& /* unused */, uint32_t phase) const noexcept {
+auto Linear::sendRank(mpi::Context const& /* unused */, uint32_t phase) noexcept -> mpi::Rank {
   return static_cast<Rank>(phase);
 }
 
-mpi::Rank Linear::recvRank(mpi::Context const& /* unused */, uint32_t phase) const noexcept {
+auto Linear::recvRank(mpi::Context const& /* unused */, uint32_t phase) noexcept -> mpi::Rank {
   return static_cast<Rank>(phase);
 }
 
-uint32_t Linear::phaseCount(mpi::Context const& comm) const noexcept {
+auto Linear::phaseCount(mpi::Context const& comm) noexcept -> uint32_t {
   return comm.size();
 }
 

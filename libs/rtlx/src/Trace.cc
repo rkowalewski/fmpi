@@ -9,7 +9,7 @@
 
 namespace rtlx {
 
-bool TimeTrace::enabled() const noexcept
+auto TimeTrace::enabled() noexcept -> bool
 {
   auto &store = TraceStore::GetInstance();
   return store.enabled();
@@ -21,12 +21,12 @@ TimeTrace::TimeTrace(int pid, TraceStore::context_t ctx)
 {
 }
 
-int TimeTrace::pid() const noexcept
+auto TimeTrace::pid() const noexcept -> int
 {
   return m_pid;
 }
 
-std::string const &TimeTrace::context() const noexcept
+auto TimeTrace::context() const noexcept -> std::string const &
 {
   return m_context;
 }
@@ -56,8 +56,9 @@ void TimeTrace::clear()
   m_cache.clear();
 }
 
-std::unordered_map<TraceStore::key_t, TraceStore::value_t> const &
-TimeTrace::measurements() const
+auto
+TimeTrace::measurements() const -> std::unordered_map<TraceStore::key_t,
+        TraceStore::value_t> const &
 {
   auto &      store = TraceStore::GetInstance();
   auto const &m     = store.get(m_context);
@@ -65,7 +66,7 @@ TimeTrace::measurements() const
   return m;
 }
 
-TraceStore::value_t TimeTrace::lookup(TraceStore::key_t const &key) const
+auto TimeTrace::lookup(TraceStore::key_t const &key) const -> TraceStore::value_t
 {
   if (!enabled()) {
     return TraceStore::value_t{};
@@ -81,13 +82,14 @@ TraceStore::value_t TimeTrace::lookup(TraceStore::key_t const &key) const
   return it->second;
 }
 
-std::unordered_map<TraceStore::key_t, TraceStore::value_t> &TraceStore::get(
-    context_t const &ctx)
+auto TraceStore::get(
+    context_t const &ctx) -> std::unordered_map<TraceStore::key_t,
+        TraceStore::value_t> &
 {
   return m_traces[ctx];
 }
 
-static bool isTraceEnvironFlagEnabled()
+static auto isTraceEnvironFlagEnabled() -> bool
 {
   // Split into key and value:
   if (auto const *flag = std::getenv("RTLX_ENABLE_TRACE")) {
@@ -98,7 +100,7 @@ static bool isTraceEnvironFlagEnabled()
   return false;
 }
 
-TraceStore &TraceStore::GetInstance()
+auto TraceStore::GetInstance() -> TraceStore &
 {
   std::call_once(m_onceFlag, [] {
     m_instance              = std::make_unique<TraceStore>();
@@ -112,7 +114,7 @@ void TraceStore::clear()
   m_traces.clear();
 }
 
-bool TraceStore::enabled() const noexcept
+auto TraceStore::enabled() const noexcept -> bool
 {
   return m_enabled;
 }

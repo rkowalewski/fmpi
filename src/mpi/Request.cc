@@ -3,13 +3,13 @@
 
 namespace mpi {
 
-bool waitall(MPI_Request* begin, MPI_Request* end)
+auto waitall(MPI_Request* begin, MPI_Request* end) -> bool
 {
   auto n = std::distance(begin, end);
   return MPI_Waitall(n, begin, MPI_STATUSES_IGNORE) == MPI_SUCCESS;
 }
 
-int* waitsome(MPI_Request* begin, MPI_Request* end, int* indices)
+auto waitsome(MPI_Request* begin, MPI_Request* end, int* indices) -> int*
 {
   int completed;
 
@@ -26,7 +26,7 @@ int* waitsome(MPI_Request* begin, MPI_Request* end, int* indices)
   return std::next(indices, completed);
 }
 
-int* testsome(MPI_Request* begin, MPI_Request* end, int* indices)
+auto testsome(MPI_Request* begin, MPI_Request* end, int* indices) -> int*
 {
   int completed;
 

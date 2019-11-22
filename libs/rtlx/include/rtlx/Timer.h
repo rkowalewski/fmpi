@@ -20,7 +20,7 @@ struct ChooseClockType {
   using type = ChooseSteadyClock<>::type;
 };
 
-inline double ChronoClockNow()
+inline auto ChronoClockNow() -> double
 {
   using ClockType = ChooseClockType::type;
   using duration_t =

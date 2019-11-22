@@ -22,12 +22,13 @@ class TraceStore {
  public:
   TraceStore()                      = default;
   TraceStore(const TraceStore &src) = delete;
-  TraceStore &operator=(const TraceStore &rhs) = delete;
+  auto operator=(const TraceStore &rhs) -> TraceStore & = delete;
 
-  static TraceStore &                 GetInstance();
-  std::unordered_map<key_t, value_t> &get(context_t const &ctx);
+  static auto                 GetInstance() -> TraceStore &;
+  auto get(context_t const &ctx) -> std::unordered_map<key_t, value_t>
+        &;
   void                                clear();
-  bool                                enabled() const noexcept;
+  auto                                enabled() const noexcept -> bool;
 
  private:
   static std::unique_ptr<TraceStore> m_instance;
@@ -44,18 +45,19 @@ class TimeTrace {
  public:
   TimeTrace(int pid, TraceStore::context_t ctx);
 
-  bool enabled() const noexcept;
+  static auto enabled() noexcept -> bool;
 
   void tick(const TraceStore::key_t &key);
   void tock(const TraceStore::key_t &key);
 
-  value_t lookup(TraceStore::key_t const &key) const;
+  auto lookup(TraceStore::key_t const &key) const -> value_t;
 
-  std::unordered_map<TraceStore::key_t, TraceStore::value_t> const &
-  measurements() const;
+  auto
+  measurements() const -> std::unordered_map<TraceStore::key_t,
+        TraceStore::value_t> const &;
 
-  int                pid() const noexcept;
-  std::string const &context() const noexcept;
+  auto                pid() const noexcept -> int;
+  auto context() const noexcept -> std::string const &;
 
   void clear();
 

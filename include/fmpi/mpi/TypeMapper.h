@@ -19,12 +19,12 @@ struct type_mapper {
       !std::is_arithmetic<T>::value,
       "arithmetic types can be perfectly matched to MPI Types");
 
-  static constexpr MPI_Datatype type()
+  static constexpr auto type() -> MPI_Datatype
   {
     return MPI_BYTE;
   }
 
-  static constexpr std::size_t factor()
+  static constexpr auto factor() -> std::size_t
   {
     return sizeof(T);
   }
@@ -62,7 +62,7 @@ FMPI_MPI_DATATYPE_MAPPER(bool, MPI_C_BOOL)
 
 template <class T>
 struct type_mapper {
-  static constexpr MPI_Datatype type()
+  static constexpr auto type() -> MPI_Datatype
   {
     return detail::type_mapper<T>::type();
   }

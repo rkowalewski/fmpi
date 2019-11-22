@@ -2,14 +2,14 @@
 
 namespace mpi {
 
-bool isend_type(
+auto isend_type(
     void const*    buf,
     std::size_t    count,
     MPI_Datatype   type,
     Rank           target,
     int            tag,
     Context const& ctx,
-    MPI_Request*   req)
+    MPI_Request*   req) -> bool
 {
   RTLX_ASSERT(count < std::numeric_limits<int>::max());
 
@@ -23,14 +23,14 @@ bool isend_type(
              req) == MPI_SUCCESS;
 }
 
-bool irecv_type(
+auto irecv_type(
     void*          buf,
     std::size_t    count,
     MPI_Datatype   type,
     Rank           source,
     int            tag,
     Context const& ctx,
-    MPI_Request*   req)
+    MPI_Request*   req) -> bool
 {
   RTLX_ASSERT(count < std::numeric_limits<int>::max());
 

@@ -13,7 +13,7 @@ namespace benchmark {
 
 template <class cT, class traits = std::char_traits<cT> >
 class basic_nullbuf : public std::basic_streambuf<cT, traits> {
-  typename traits::int_type overflow(typename traits::int_type c) override
+  auto overflow(typename traits::int_type c) -> typename traits::int_type override
   {
     return traits::not_eof(c);  // indicate success
   }
@@ -37,11 +37,11 @@ class basic_onullstream : public std::basic_ostream<cT, traits> {
 using onullstream  = basic_onullstream<char>;
 using wonullstream = basic_onullstream<wchar_t>;
 
-bool process(
+auto process(
     int                   argc,
     char*                 argv[],
     ::mpi::Context const& mpiCtx,
-    struct Params&        params)
+    struct Params&        params) -> bool
 {
   bool good;
 
@@ -97,22 +97,22 @@ bool process(
   return good;
 }
 
-static std::string& ltrim(
-    std::string& str, const std::string& chars = "\t\n\v\f\r ")
+static auto ltrim(
+    std::string& str, const std::string& chars = "\t\n\v\f\r ") -> std::string&
 {
   str.erase(0, str.find_first_not_of(chars));
   return str;
 }
 
-static std::string& rtrim(
-    std::string& str, const std::string& chars = "\t\n\v\f\r ")
+static auto rtrim(
+    std::string& str, const std::string& chars = "\t\n\v\f\r ") -> std::string&
 {
   str.erase(str.find_last_not_of(chars) + 1);
   return str;
 }
 
-static std::string& trim(
-    std::string& str, const std::string& chars = "\t\n\v\f\r ")
+static auto trim(
+    std::string& str, const std::string& chars = "\t\n\v\f\r ") -> std::string&
 {
   return ltrim(rtrim(str, chars), chars);
 }
@@ -121,7 +121,7 @@ struct string_pair : std::pair<std::string, std::string> {
   using std::pair<std::string, std::string>::pair;
 };
 
-std::ostream& operator<<(std::ostream& os, string_pair const& p)
+auto operator<<(std::ostream& os, string_pair const& p) -> std::ostream&
 {
   os << p.first << " = " << p.second;
   return os;

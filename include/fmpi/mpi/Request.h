@@ -13,10 +13,10 @@
 
 namespace mpi {
 
-int* waitsome(MPI_Request* begin, MPI_Request* end, int* indices);
-int* testsome(MPI_Request* begin, MPI_Request* end, int* indices);
+auto waitsome(MPI_Request* begin, MPI_Request* end, int* indices) -> int*;
+auto testsome(MPI_Request* begin, MPI_Request* end, int* indices) -> int*;
 
-bool waitall(MPI_Request* begin, MPI_Request* end);
+auto waitall(MPI_Request* begin, MPI_Request* end) -> bool;
 }  // namespace mpi
 
 #endif

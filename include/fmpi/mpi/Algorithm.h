@@ -8,13 +8,13 @@
 namespace mpi {
 
 template <class T>
-inline bool irecv(
+inline auto irecv(
     T*             buf,
     std::size_t    count,
     Rank           source,
     int            tag,
     Context const& ctx,
-    MPI_Request*   req)
+    MPI_Request*   req) -> bool
 
 {
   auto type = mpi::type_mapper<T>::type();
@@ -32,13 +32,13 @@ inline bool irecv(
 }
 
 template <class T>
-inline bool isend(
+inline auto isend(
     T const*       buf,
     std::size_t    count,
     Rank           target,
     int            tag,
     Context const& ctx,
-    MPI_Request*   req)
+    MPI_Request*   req) -> bool
 
 {
   auto type = mpi::type_mapper<T>::type();
@@ -55,26 +55,26 @@ inline bool isend(
              req) == MPI_SUCCESS;
 }
 
-bool isend_type(
+auto isend_type(
     void const*    buf,
     std::size_t    count,
     MPI_Datatype   type,
     Rank           target,
     int            tag,
     Context const& ctx,
-    MPI_Request*   req);
+    MPI_Request*   req) -> bool;
 
-bool irecv_type(
+auto irecv_type(
     void*          buf,
     std::size_t    count,
     MPI_Datatype   type,
     Rank           source,
     int            tag,
     Context const& ctx,
-    MPI_Request*   req);
+    MPI_Request*   req) -> bool;
 
 template <class T, class U>
-inline bool sendrecv(
+inline auto sendrecv(
     T const*       sendbuf,
     std::size_t    sendcount,
     Rank           dest,
@@ -83,7 +83,7 @@ inline bool sendrecv(
     std::size_t    recvcount,
     Rank           source,
     int            recvtag,
-    Context const& ctx)
+    Context const& ctx) -> bool
 {
   RTLX_ASSERT(sendcount < std::numeric_limits<int>::max());
   RTLX_ASSERT(recvcount < std::numeric_limits<int>::max());
@@ -104,12 +104,12 @@ inline bool sendrecv(
 }
 
 template <class T, class U>
-inline bool alltoall(
+inline auto alltoall(
     T const*       sendbuf,
     std::size_t    sendcount,
     U*             recvbuf,
     std::size_t    recvcount,
-    Context const& ctx)
+    Context const& ctx) -> bool
 {
   RTLX_ASSERT(sendcount < std::numeric_limits<int>::max());
   RTLX_ASSERT(recvcount < std::numeric_limits<int>::max());
@@ -129,7 +129,9 @@ inline auto allreduce_minmax(Context const& ctx, T value)
 {
   auto mpi_type = mpi::type_mapper<T>::type();
 
-  T min, max;
+  T min;
+
+        T max;
 
   RTLX_ASSERT_RETURNS(
       MPI_Allreduce(&value, &min, 1, mpi_type, MPI_MIN, ctx.mpiComm()),

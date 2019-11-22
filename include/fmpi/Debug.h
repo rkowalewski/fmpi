@@ -29,9 +29,11 @@ class DebugOutput {
   }
 
   template <typename T>
-  T&& print(const std::string& type, T&& value) const
+  auto print(const std::string& type, T&& value) const -> T&&
   {
-    int flag, me = MPI_PROC_NULL;
+    int flag;
+
+        int me = MPI_PROC_NULL;
     MPI_Initialized(&flag);
 
     const T&          ref = value;
@@ -65,7 +67,7 @@ class DebugOutput {
   }
 
  private:
-  const char* ansi(const char* code) const
+  auto ansi(const char* code) const -> const char*
   {
     if (m_use_colorized_output) {
       return code;
@@ -98,9 +100,9 @@ class DebugOutput {
 namespace std {
 
 template <class F, class T>
-std::ostream& operator<<(std::ostream& os, std::pair<F, T> const& p)
+auto operator<<(std::ostream& os, std::pair<F, T> const& p) -> std::ostream&
 {
-  os << "(" << p.first << ", " << p.second << ")";
+  os << std::string("(") << p.first << ", " << p.second << ")";
   return os;
 }
 }  // namespace std

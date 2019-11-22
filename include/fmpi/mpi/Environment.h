@@ -23,24 +23,24 @@ struct Rank {
            operator mpi_rank() const noexcept;  // NOLINT
   explicit operator bool() const noexcept;
 
-  Rank&      operator++();
-  const Rank operator++(int) const;
+  auto      operator++() -> Rank&;
+  auto operator++(int) const -> const Rank;
 
  private:
   mpi_rank m_rank{MPI_PROC_NULL};
 };
 
-Rank operator+(Rank const& lhs, Rank const& rhs) noexcept;
-Rank operator-(Rank const& lhs, Rank const& rhs) noexcept;
-Rank operator^(Rank const& lhs, Rank const& rhs) RTLX_NOEXCEPT;
-Rank operator%(Rank const& lhs, Rank const& rhs) noexcept;
+auto operator+(Rank const& lhs, Rank const& rhs) noexcept -> Rank;
+auto operator-(Rank const& lhs, Rank const& rhs) noexcept -> Rank;
+auto operator^(Rank const& lhs, Rank const& rhs) -> Rank RTLX_NOEXCEPT;
+auto operator%(Rank const& lhs, Rank const& rhs) noexcept -> Rank;
 
-bool operator==(Rank const& lhs, Rank const& rhs) noexcept;
-bool operator!=(Rank const& lhs, Rank const& rhs) noexcept;
-bool operator>(Rank const& lhs, Rank const& rhs) noexcept;
-bool operator<(Rank const& lhs, Rank const& rhs) noexcept;
+auto operator==(Rank const& lhs, Rank const& rhs) noexcept -> bool;
+auto operator!=(Rank const& lhs, Rank const& rhs) noexcept -> bool;
+auto operator>(Rank const& lhs, Rank const& rhs) noexcept -> bool;
+auto operator<(Rank const& lhs, Rank const& rhs) noexcept -> bool;
 
-std::ostream& operator<<(std::ostream& os, Rank const& p);
+auto operator<<(std::ostream& os, Rank const& p) -> std::ostream&;
 
 class Context {
  public:
@@ -49,11 +49,11 @@ class Context {
  public:
   explicit Context(MPI_Comm comm);
 
-  Rank rank() const noexcept;
+  auto rank() const noexcept -> Rank;
 
-  size_type size() const noexcept;
+  auto size() const noexcept -> size_type;
 
-  MPI_Comm mpiComm() const noexcept;
+  auto mpiComm() const noexcept -> MPI_Comm;
 
  private:
   size_type m_size{};
@@ -61,7 +61,7 @@ class Context {
   MPI_Comm  m_comm{MPI_COMM_NULL};
 };
 
-Context splitSharedComm(Context const& baseComm);
+auto splitSharedComm(Context const& baseComm) -> Context;
 
 }  // namespace mpi
 

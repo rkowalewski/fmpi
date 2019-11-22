@@ -26,11 +26,11 @@ struct Params {
   bool        check{false};
 };
 
-bool process(
+auto process(
     int /*argc*/,
     char*                 argv[],
     ::mpi::Context const& mpiCtx,
-    struct Params&        params);
+    struct Params&        params) -> bool;
 
 void printBenchmarkPreamble(
     std::ostream& os, const std::string& prefix, const char* delim = "\n");

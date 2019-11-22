@@ -9,41 +9,41 @@ class FlatHandshake {
  public:
   static constexpr const char* NAME = "Ring";
 
-  mpi::Rank sendRank(mpi::Context const& comm, uint32_t phase) const;
+  auto sendRank(mpi::Context const& comm, uint32_t phase) const -> mpi::Rank;
 
-  mpi::Rank recvRank(mpi::Context const& comm, uint32_t phase) const;
+  auto recvRank(mpi::Context const& comm, uint32_t phase) const -> mpi::Rank;
 
-  uint32_t phaseCount(mpi::Context const& comm) const noexcept;
+  static auto phaseCount(mpi::Context const& comm) noexcept -> uint32_t;
 
  private:
-  mpi::Rank hypercube(mpi::Context const& comm, uint32_t phase) const;
+  static auto hypercube(mpi::Context const& comm, uint32_t phase)  -> mpi::Rank;
 };
 
 class OneFactor {
  public:
   static constexpr const char* NAME = "OneFactor";
 
-  mpi::Rank sendRank(mpi::Context const& comm, uint32_t phase) const;
+  auto sendRank(mpi::Context const& comm, uint32_t phase) const -> mpi::Rank;
 
-  mpi::Rank recvRank(mpi::Context const& comm, uint32_t phase) const;
+  auto recvRank(mpi::Context const& comm, uint32_t phase) const -> mpi::Rank;
 
-  uint32_t phaseCount(mpi::Context const& comm) const noexcept;
+  static auto phaseCount(mpi::Context const& comm) noexcept -> uint32_t;
 
  private:
-  mpi::Rank factor_even(mpi::Context const& comm, uint32_t phase) const;
+  static auto factor_even(mpi::Context const& comm, uint32_t phase)  -> mpi::Rank;
 
-  mpi::Rank factor_odd(mpi::Context const& comm, uint32_t phase) const;
+  static auto factor_odd(mpi::Context const& comm, uint32_t phase)  -> mpi::Rank;
 };
 
 class Linear {
  public:
   static constexpr const char* NAME = "Linear";
 
-  mpi::Rank sendRank(mpi::Context const& comm, uint32_t phase) const noexcept;
+  static auto sendRank(mpi::Context const& comm, uint32_t phase) noexcept -> mpi::Rank;
 
-  mpi::Rank recvRank(mpi::Context const& comm, uint32_t phase) const noexcept;
+  static auto recvRank(mpi::Context const& comm, uint32_t phase) noexcept -> mpi::Rank;
 
-  uint32_t phaseCount(mpi::Context const& comm) const noexcept;
+  static auto phaseCount(mpi::Context const& comm) noexcept -> uint32_t;
 };
 
 }  // namespace fmpi
