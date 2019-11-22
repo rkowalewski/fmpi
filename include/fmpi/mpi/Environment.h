@@ -23,7 +23,7 @@ struct Rank {
            operator mpi_rank() const noexcept;  // NOLINT
   explicit operator bool() const noexcept;
 
-  auto      operator++() -> Rank&;
+  auto operator++() -> Rank&;
   auto operator++(int) const -> const Rank;
 
  private:

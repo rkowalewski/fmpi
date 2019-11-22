@@ -24,9 +24,8 @@ class TraceStore {
   TraceStore(const TraceStore &src) = delete;
   auto operator=(const TraceStore &rhs) -> TraceStore & = delete;
 
-  static auto                 GetInstance() -> TraceStore &;
-  auto get(context_t const &ctx) -> std::unordered_map<key_t, value_t>
-        &;
+  static auto GetInstance() -> TraceStore &;
+  auto get(context_t const &ctx) -> std::unordered_map<key_t, value_t> &;
   void                                clear();
   auto                                enabled() const noexcept -> bool;
 
@@ -52,11 +51,10 @@ class TimeTrace {
 
   auto lookup(TraceStore::key_t const &key) const -> value_t;
 
-  auto
-  measurements() const -> std::unordered_map<TraceStore::key_t,
-        TraceStore::value_t> const &;
+  auto measurements() const
+      -> std::unordered_map<TraceStore::key_t, TraceStore::value_t> const &;
 
-  auto                pid() const noexcept -> int;
+  auto pid() const noexcept -> int;
   auto context() const noexcept -> std::string const &;
 
   void clear();

@@ -56,9 +56,8 @@ void TimeTrace::clear()
   m_cache.clear();
 }
 
-auto
-TimeTrace::measurements() const -> std::unordered_map<TraceStore::key_t,
-        TraceStore::value_t> const &
+auto TimeTrace::measurements() const
+    -> std::unordered_map<TraceStore::key_t, TraceStore::value_t> const &
 {
   auto &      store = TraceStore::GetInstance();
   auto const &m     = store.get(m_context);
@@ -66,7 +65,8 @@ TimeTrace::measurements() const -> std::unordered_map<TraceStore::key_t,
   return m;
 }
 
-auto TimeTrace::lookup(TraceStore::key_t const &key) const -> TraceStore::value_t
+auto TimeTrace::lookup(TraceStore::key_t const &key) const
+    -> TraceStore::value_t
 {
   if (!enabled()) {
     return TraceStore::value_t{};
@@ -82,9 +82,8 @@ auto TimeTrace::lookup(TraceStore::key_t const &key) const -> TraceStore::value_
   return it->second;
 }
 
-auto TraceStore::get(
-    context_t const &ctx) -> std::unordered_map<TraceStore::key_t,
-        TraceStore::value_t> &
+auto TraceStore::get(context_t const &ctx)
+    -> std::unordered_map<TraceStore::key_t, TraceStore::value_t> &
 {
   return m_traces[ctx];
 }

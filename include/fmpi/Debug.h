@@ -33,7 +33,7 @@ class DebugOutput {
   {
     int flag;
 
-        int me = MPI_PROC_NULL;
+    int me = MPI_PROC_NULL;
     MPI_Initialized(&flag);
 
     const T&          ref = value;

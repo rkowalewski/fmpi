@@ -13,7 +13,8 @@ namespace benchmark {
 
 template <class cT, class traits = std::char_traits<cT> >
 class basic_nullbuf : public std::basic_streambuf<cT, traits> {
-  auto overflow(typename traits::int_type c) -> typename traits::int_type override
+  auto overflow(typename traits::int_type c) ->
+      typename traits::int_type override
   {
     return traits::not_eof(c);  // indicate success
   }
@@ -97,22 +98,22 @@ auto process(
   return good;
 }
 
-static auto ltrim(
-    std::string& str, const std::string& chars = "\t\n\v\f\r ") -> std::string&
+static auto ltrim(std::string& str, const std::string& chars = "\t\n\v\f\r ")
+    -> std::string&
 {
   str.erase(0, str.find_first_not_of(chars));
   return str;
 }
 
-static auto rtrim(
-    std::string& str, const std::string& chars = "\t\n\v\f\r ") -> std::string&
+static auto rtrim(std::string& str, const std::string& chars = "\t\n\v\f\r ")
+    -> std::string&
 {
   str.erase(str.find_last_not_of(chars) + 1);
   return str;
 }
 
-static auto trim(
-    std::string& str, const std::string& chars = "\t\n\v\f\r ") -> std::string&
+static auto trim(std::string& str, const std::string& chars = "\t\n\v\f\r ")
+    -> std::string&
 {
   return ltrim(rtrim(str, chars), chars);
 }

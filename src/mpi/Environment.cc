@@ -11,7 +11,7 @@ Context::Context(MPI_Comm comm)
 {
   int sz;
 
-        int rank;
+  int rank;
   RTLX_ASSERT_RETURNS(MPI_Comm_size(m_comm, &sz), MPI_SUCCESS);
   m_size = sz;
 

@@ -131,7 +131,7 @@ inline auto allreduce_minmax(Context const& ctx, T value)
 
   T min;
 
-        T max;
+  T max;
 
   RTLX_ASSERT_RETURNS(
       MPI_Allreduce(&value, &min, 1, mpi_type, MPI_MIN, ctx.mpiComm()),
