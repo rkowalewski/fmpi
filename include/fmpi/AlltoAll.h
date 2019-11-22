@@ -16,8 +16,10 @@
 #include <cmath>
 #include <memory>
 #include <stack>
+
 #include <tlx/simple_vector.hpp>
 #include <tlx/stack_allocator.hpp>
+#include <tlx/math/div_ceil.hpp>
 
 // Other AllToAll Algorithms
 
@@ -574,6 +576,8 @@ inline void scatteredPairwiseWaitall(
       std::pair<typename buffer_t::iterator, typename buffer_t::iterator>>
       chunks;
 
+  std::vector<std::size_t> mergePsum;
+
   chunks.reserve(reqsInFlight + 1);
 
   // We can save the local copy and do it with the merge operation itself
@@ -582,7 +586,12 @@ inline void scatteredPairwiseWaitall(
 
   std::size_t rphase = 0, sphase = 0;
 
-  auto const nrounds = std::ceil(totalExchanges / reqsInFlight);
+  auto const nrounds = tlx::div_ceil(totalExchanges, reqsInFlight);
+
+  mergePsum.reserve(nrounds + 2);
+  mergePsum.push_back(0);
+
+  FMPI_DBG(nrounds);
 
   auto mergebuf = out;
   for (auto&& win : range<std::size_t>(nrounds)) {
@@ -590,10 +599,7 @@ inline void scatteredPairwiseWaitall(
 
     auto const schedule = Schedule{};
 
-    auto const firstPhase = win * reqsInFlight;
-    auto const lastPhase = std::min((win + 1) * reqsInFlight, totalExchanges);
-
-    for (nrreqs = 0; nrreqs < std::min(reqsInFlight, lastPhase - firstPhase);
+    for (nrreqs = 0; nrreqs < reqsInFlight && rphase < nr;
          ++rphase) {
       // receive from
       auto recvfrom = schedule.recvRank(ctx, rphase);
@@ -610,11 +616,11 @@ inline void scatteredPairwiseWaitall(
           ctx,
           &reqs[nrreqs]));
 
-      nrreqs++;
+      ++nrreqs;
     }
 
-    for (nsreqs = 0; nsreqs < reqsInFlight; ++sphase) {
-      auto sendto = schedule.sendRank(ctx, rphase);
+    for (nsreqs = 0; nsreqs < reqsInFlight && sphase < nr; ++sphase) {
+      auto sendto = schedule.sendRank(ctx, sphase);
 
       if (sendto == me) continue;
 
@@ -629,7 +635,7 @@ inline void scatteredPairwiseWaitall(
           &reqs[reqsInFlight + nsreqs++]));
     }
 
-    for (auto&& b : range<std::size_t>(0, nrreqs)) {
+    for (auto&& b : range<std::size_t>(nrreqs)) {
       chunks.push_back(std::make_pair(
           std::next(buffer.begin(), b * blocksize),
           std::next(buffer.begin(), (b + 1) * blocksize)));
@@ -638,21 +644,31 @@ inline void scatteredPairwiseWaitall(
     FMPI_CHECK(mpi::waitall(&(*std::begin(reqs)), &(*std::end(reqs))));
 
     op(chunks, mergebuf);
+    auto const nMerged = chunks.size() * blocksize;
+    mergebuf += nMerged;
+    mergePsum.push_back(mergePsum.back() + nMerged);
 
-    mergebuf += chunks.size();
     chunks.clear();
+
+    FMPI_DBG_RANGE(out, mergebuf);
   }
 
-  for (auto&& win : range<std::size_t>(nrounds)) {
-    auto first = win * blocksize;
-    auto last  = std::min((win + 1) * blocksize, std::size_t(nr) * blocksize);
-    chunks.push_back(
-        std::make_pair(std::next(out, first), std::next(out, last)));
-  }
+  std::transform(
+      std::begin(mergePsum),
+      std::prev(std::end(mergePsum)),
+      std::next(std::begin(mergePsum)),
+      std::back_inserter(chunks),
+      [rbuf = out](auto first, auto last) {
+        return std::make_pair(
+            std::next(rbuf, first), std::next(rbuf, last));
+      });
+
 
   op(chunks, buffer.begin());
 
   std::move(buffer.begin(), buffer.end(), out);
+
+    FMPI_DBG_RANGE(out, out + nr * blocksize);
 }
 
 template <class InputIt, class OutputIt, class Op>
