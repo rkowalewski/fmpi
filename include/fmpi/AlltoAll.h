@@ -597,6 +597,7 @@ inline void scatteredPairwiseWaitall(
   auto mergebuf = out;
 
   for (auto&& win : range<std::size_t>(nrounds)) {
+    static_cast<void>(win);
     std::size_t nrreqs;
 
     for (nrreqs = 0; nrreqs < reqsInFlight && rphase < totalExchanges;
