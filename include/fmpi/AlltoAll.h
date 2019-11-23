@@ -747,7 +747,6 @@ inline void scatteredPairwiseWaitall(
 
 #if 0
     for (nrreqs = 0; nrreqs < reqsInFlight && rphase < phaseCount; ++rphase) {
-      // receive from
       auto recvfrom = schedule.recvRank(ctx, rphase);
 
       if (recvfrom == me) continue;
@@ -788,6 +787,7 @@ inline void scatteredPairwiseWaitall(
     std::tie(rphase, sphase) =
         enqueueRecvsSends(rphase, sphase, recv_buffer, chunks_comm);
     trace.tock(COMMUNICATION);
+
 
     if (!allFitsInL2Cache && !chunks.empty()) {
       trace.tick(MERGE);
@@ -846,6 +846,7 @@ inline void scatteredPairwiseWaitall(
   }
 
   trace.tock(MERGE);
+
   trace.put(detail::N_COMM_ROUNDS, nrounds);
 
   FMPI_DBG_RANGE(out, out + nr * blocksize);

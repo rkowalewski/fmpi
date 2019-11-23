@@ -18,6 +18,8 @@ constexpr int nwarmup = 1;
 constexpr int nwarmup = 0;
 #endif
 
+constexpr std::size_t PAGESZ =  (1024 * 4);
+
 // The container where we store our
 using value_t = int;
 using storage_t =
@@ -380,6 +382,11 @@ int main(int argc, char* argv[])
       // synchronize before advancing to the next stage
       FMPI_DBG("Iteration Finished");
       MPI_Barrier(worldCtx.mpiComm());
+    }
+
+    if (blocksize >= PAGESZ && (step + 2) <= nsteps) {
+      blocksize*=2;
+      ++step;
     }
   }
 
