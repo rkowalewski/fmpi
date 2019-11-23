@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 
 import argparse
-import numpy as np
-from math import log2, ceil
+#import numpy as np
+from math import log2, ceil, pow
 import sys
 import csv
 
@@ -23,11 +23,16 @@ parser.add_argument('maxsize', type=check_positive)
 
 args = parser.parse_args()
 
-log2min = log2(args.minsize)
-log2max = log2(args.maxsize)
+log2min = int(log2(args.minsize))
+log2max = int(log2(args.maxsize))
 
-bsizes = np.logspace(log2min, log2max, num=log2max -
-                     log2min+1, base=2, dtype='int')
+bsizes = []
+for i in range(log2min, log2max + 1):
+    bsizes.append(int(pow(2, i)))
+
+print(bsizes)
+
+sys.exit(0)
 
 nr = args.nodes * args.procs
 
@@ -62,7 +67,7 @@ for i in range(len(bsizes)):
 
     reqwin = 8
 
-    for (algo in algos):
+    for algo in algos:
         d = {}
         d["nprocs"] = nr
         d["algorithm"] = "ScatterPairwise"

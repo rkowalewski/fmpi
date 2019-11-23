@@ -1,65 +1,114 @@
 #!/bin/bash
 
+getcontext() {
+  # extract version from version.h
+  local gitv="$(grep FMPI_GIT_COMMIT ${2}/benchmark/src/Version.h | \
+    sed 's/.*\(FMPI_GIT_COMMIT\).*"\(.*\)";/\2/g')"
+
+  local current_date="$(date +%Y-%m-%d)"
+
+  echo "${1}.${gitv}.${current_date}"
+}
+
+function ceiling() {
+  local float_in=$1
+  local ceil_val=${float_in/.*}
+  local ceil_val=$((ceil_val+1))
+  echo "$ceil_val"
+}
+
+
+getmaxblocksizel3() {
+  local nprocs="$1"
+  local l2cache="$(getconf LEVEL3_CACHE_SIZE)"
+  local cap="$((l2cache / (nprocs)))"
+  local logresult=$( echo "l($cap)/l(2)" | bc -l )
+  local ceil="$(ceiling $logresult)"
+  echo "$ceil"
+}
+
+getmaxblocksizel2() {
+  local nprocs="$1"
+  local l2cache="$(getconf LEVEL2_CACHE_SIZE)"
+  local cap="$((l2cache / (nprocs)))"
+  local logresult=$( echo "l($cap)/l(2)" | bc -l )
+  local ceil="$(ceiling $logresult)"
+  echo "$ceil"
+}
+
+
 source "$HOME/scripts/bash-commands.sh"
 
 ctx=""
 scale="0"
-procs="48"
-threads="1"
-
 submit="0"
+ppn="48"
 
-while getopts ":d:s:p:t:a:x" opt; do
-  case ${opt} in
-    d )
-      ctx=$OPTARG
+POSITIONAL=()
+
+while [[ $# -gt 0 ]]
+do
+  key="$1"
+
+  case $key in
+      -d|--desc)
+      ctx="$2"
+      shift # past argument
+      shift # past value
       ;;
-    s )
-      scale=$OPTARG
+      -s|--scale)
+      scale="$2"
+      shift # past argument
+      shift # past value
       ;;
-    p )
-      procs=$OPTARG
+      -p|--procs)
+      ppn="$2"
+      shift # past argument
+      shift # past value
       ;;
-    t )
-      threads=$OPTARG
-      ;;
-    a )
-      args=$OPTARG
-      ;;
-    x )
+      -x|--submit)
       submit="1"
+      shift # past argument
       ;;
-    \? )
-      echo "Invalid option: $OPTARG" 1>&2
-      exit 1
-      ;;
-    : )
-      echo "Invalid option: $OPTARG requires an argument" 1>&2
+      *)    # unknown option
+      POSITIONAL+=("$1") # save it in an array for later
+      shift # past argument
       ;;
   esac
 done
-shift $((OPTIND -1))
 
+set -- "${POSITIONAL[@]}" # restore positional parameters
+
+echo "positional arguments:"
+
+for ((i = 0; i < ${#POSITIONAL[@]}; i+=2)); do
+    # bash arrays are 0-indexed
+    echo "   ${POSITIONAL[$i]} ${POSITIONAL[$i+1]}"
+done
 
 if [[ -z "$ctx" ]]; then
-  echo "usage: $0 -d <context> -s <scale> -p <procs> -t <threads> -a <args>"
+  echo "context is missing"
   exit 1
 fi
 
+
 git_root="$(git rev-parse --show-toplevel)"
+ctx=$(getcontext "$ctx" "$git_root")
 
-# extract version from version.h
-gitv="$(grep FMPI_GIT_COMMIT ${git_root}/benchmark/src/Version.h | \
-  sed 's/.*\(FMPI_GIT_COMMIT\).*"\(.*\)";/\2/g')"
+echo "$ctx"
 
-current_date="$(date +%Y-%m-%d)"
-
-ctx="${ctx}.${gitv}.${current_date}"
-
-for s in $(seq 0 $scale)
+for s in $(seq 2 $scale)
 do
+  nodes="$((2**s))"
+  nprocs="$((nodes * ppn))"
+  l2boundary="$(getmaxblocksizel2 $nprocs)"
+  l3boundary="$(getmaxblocksizel3 $nprocs)"
+  l3boundary="$((l3boundary+1))"
+
+  echo "$l2boundary, $l3boundary"
+
   f=$(gencmdfile jobs/ng.a2a.impi.tpl \
-    -n $((2**s)) -p "$procs" -t "$threads" -j fmpi -D "$git_root" -d "$ctx" -c "general" "$args")
+    -n "$nodes" -p "$ppn" -d "$ctx"  -j fmpi -D "$git_root" -u "$((2**l3boundary))" "${POSITIONAL[@]}")
 
   if [[ "$submit" == "1" ]]; then
     sbatch "$f"
