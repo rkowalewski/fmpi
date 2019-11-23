@@ -97,7 +97,7 @@ ctx=$(getcontext "$ctx" "$git_root")
 
 echo "$ctx"
 
-for s in $(seq 2 $scale)
+for s in $(seq 0 $scale)
 do
   nodes="$((2**s))"
   nprocs="$((nodes * ppn))"
