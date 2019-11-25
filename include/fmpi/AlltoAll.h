@@ -256,9 +256,12 @@ inline void scatteredPairwiseWaitsome(
 
     RTLX_ASSERT(indices.size() <= nPendingReqs);
 
+    int count = 0;
+
     trace.tock(COMMUNICATION);
 
     while (ncReqs < totalReqs) {
+      ++count;
       trace.tick(COMMUNICATION);
 
       auto* lastIdx = mpi::testsome(
@@ -386,6 +389,8 @@ inline void scatteredPairwiseWaitsome(
     }
 
     trace.tick(MERGE);
+    trace.put("CommunicationRounds", count);
+
     auto const needsFinalMerge = mergedChunksPsum.size() > 2;
     if (needsFinalMerge) {
       RTLX_ASSERT(chunks_to_merge.empty());
