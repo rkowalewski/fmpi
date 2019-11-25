@@ -36,6 +36,12 @@ getmaxblocksizel2() {
   echo "$ceil"
 }
 
+getminblocksize() {
+  local base="$1"
+  local baseppn="$2"
+  echo "$((baseppn * base / $3))"
+}
+
 
 source "$HOME/scripts/bash-commands.sh"
 
@@ -43,6 +49,7 @@ ctx=""
 scale="0"
 submit="0"
 ppn="48"
+minblocksize="4"
 
 POSITIONAL=()
 
@@ -68,6 +75,10 @@ do
       ;;
       -x|--submit)
       submit="1"
+      shift # past argument
+      ;;
+      -l|--lower)
+      minblocksize="$2"
       shift # past argument
       ;;
       *)    # unknown option
@@ -104,11 +115,12 @@ do
   l2boundary="$(getmaxblocksizel2 $nprocs)"
   l3boundary="$(getmaxblocksizel3 $nprocs)"
   l3boundary="$((l3boundary+1))"
+  minblock="$(getminblocksize "$minblocksize" 48 "$ppn")"
 
-  echo "$l2boundary, $l3boundary"
+  echo "$l2boundary, $l3boundary, $minblock"
 
   f=$(gencmdfile jobs/ng.a2a.impi.tpl \
-    -n "$nodes" -p "$ppn" -d "$ctx"  -j fmpi -D "$git_root" -u "$((2**l3boundary))" "${POSITIONAL[@]}")
+    -n "$nodes" -p "$ppn" -d "$ctx"  -j fmpi -D "$git_root" -u "$((2**l3boundary))" -l "$minblock" "${POSITIONAL[@]}")
 
   if [[ "$submit" == "1" ]]; then
     sbatch "$f"
