@@ -1,5 +1,5 @@
-#ifndef CONSTANTS_H
-#define CONSTANTS_H
+#ifndef FMPI_CONSTANTS_H
+#define FMPI_CONSTANTS_H
 
 #include <cstddef>
 

@@ -9,9 +9,9 @@ class FlatHandshake {
  public:
   static constexpr const char* NAME = "Ring";
 
-  auto sendRank(mpi::Context const& comm, uint32_t phase) const -> mpi::Rank;
+  static auto sendRank(mpi::Context const& comm, uint32_t phase) -> mpi::Rank;
 
-  auto recvRank(mpi::Context const& comm, uint32_t phase) const -> mpi::Rank;
+  static auto recvRank(mpi::Context const& comm, uint32_t phase) -> mpi::Rank;
 
   static auto phaseCount(mpi::Context const& comm) noexcept -> uint32_t;
 
@@ -24,9 +24,9 @@ class OneFactor {
  public:
   static constexpr const char* NAME = "OneFactor";
 
-  auto sendRank(mpi::Context const& comm, uint32_t phase) const -> mpi::Rank;
+  static auto sendRank(mpi::Context const& comm, uint32_t phase) -> mpi::Rank;
 
-  auto recvRank(mpi::Context const& comm, uint32_t phase) const -> mpi::Rank;
+  static auto recvRank(mpi::Context const& comm, uint32_t phase) -> mpi::Rank;
 
   static auto phaseCount(mpi::Context const& comm) noexcept -> uint32_t;
 

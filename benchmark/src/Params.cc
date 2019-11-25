@@ -1,10 +1,8 @@
 #include <Params.h>
-
-#include <tlx/cmdline_parser.hpp>
-
+#include <Version.h>
 #include <rtlx/Assert.h>
 
-#include <Version.h>
+#include <tlx/cmdline_parser.hpp>
 
 extern char** environ;
 

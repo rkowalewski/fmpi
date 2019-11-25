@@ -46,11 +46,11 @@ class Context {
  public:
   explicit Context(MPI_Comm comm);
 
-  auto rank() const noexcept -> Rank;
+  [[nodiscard]] auto rank() const noexcept -> Rank;
 
-  auto size() const noexcept -> size_type;
+  [[nodiscard]] auto size() const noexcept -> size_type;
 
-  auto mpiComm() const noexcept -> MPI_Comm;
+  [[nodiscard]] auto mpiComm() const noexcept -> MPI_Comm;
 
  private:
   size_type m_size{};

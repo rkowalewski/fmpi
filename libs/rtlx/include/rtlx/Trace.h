@@ -54,7 +54,7 @@ class TimeTrace {
   void tick(const TraceStore::key_t &key);
   void tock(const TraceStore::key_t &key);
 
-  void put(TraceStore::key_t const &, int v) const;
+  void put(TraceStore::key_t const & /*key*/, int v) const;
 
   auto lookup(TraceStore::key_t const &key) const -> value_t;
 
