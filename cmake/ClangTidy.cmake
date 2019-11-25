@@ -40,12 +40,11 @@ if(CMAKE_VERSION VERSION_GREATER 3.6 AND ENABLE_CLANG_TIDY)
     list(APPEND RUN_CLANG_TIDY_BIN_ARGS
         -clang-tidy-binary ${CLANG_TIDY_BIN}
         "\"-header-filter=.*${CMAKE_SOURCE_DIR}.*/(include|libs|src|benchmark)/.*\""
-        "\"-checks=*,-hicpp-no-array-decay,-fuchsia*,-cppcoreguidelines-pro-bounds-array-to-pointer-decay,-clang-analyzer-core.NonNull*,-clang-analyzer-core.NullDereference,-clang-analyzer-core.uninitialized.Branch\""
+        "\"-checks=*,-hicpp-no-array-decay,-fuchsia*,-cppcoreguidelines-pro-bounds-array-to-pointer-decay,-clang-analyzer-core.NonNull*,-clang-analyzer-core.NullDereference,-clang-analyzer-core.uninitialized.Branch,-modernize-concat-nested-namespaces\""
         )
 
     if (CLANG_TIDY_FIX)
         list(APPEND RUN_CLANG_TIDY_BIN_ARGS
-            -fix
             -export-fixes fixes.yaml
             -format
             -style file)
