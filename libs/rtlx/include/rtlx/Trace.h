@@ -6,6 +6,7 @@
 #include <mutex>
 #include <string>
 #include <unordered_map>
+#include <variant>
 #include <vector>
 
 namespace rtlx {
@@ -15,7 +16,8 @@ class TimeTrace;
 class TraceStore {
   using key_t     = std::string;
   using context_t = key_t;
-  using value_t   = double;
+  using value_t   = std::variant<double, int>;
+  using store_t   = std::unordered_map<key_t, value_t>;
 
   friend class TimeTrace;
 
@@ -24,10 +26,12 @@ class TraceStore {
   TraceStore(const TraceStore &src) = delete;
   auto operator=(const TraceStore &rhs) -> TraceStore & = delete;
 
-  static auto GetInstance() -> TraceStore &;
   auto get(context_t const &ctx) -> std::unordered_map<key_t, value_t> &;
-  void                                clear();
-  auto                                enabled() const noexcept -> bool;
+  void clear();
+  auto enabled() const noexcept -> bool;
+
+  // Singleton Instance (Thread Safe)
+  static auto GetInstance() -> TraceStore &;
 
  private:
   static std::unique_ptr<TraceStore> m_instance;
@@ -38,6 +42,7 @@ class TraceStore {
 };
 
 class TimeTrace {
+ public:
   using key_t   = TraceStore::key_t;
   using value_t = TraceStore::value_t;
 
@@ -48,6 +53,8 @@ class TimeTrace {
 
   void tick(const TraceStore::key_t &key);
   void tock(const TraceStore::key_t &key);
+
+  void put(TraceStore::key_t const &, int v) const;
 
   auto lookup(TraceStore::key_t const &key) const -> value_t;
 

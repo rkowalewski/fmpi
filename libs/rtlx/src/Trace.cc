@@ -1,11 +1,11 @@
+#include <rtlx/Assert.h>
+#include <rtlx/Timer.h>
+#include <rtlx/Trace.h>
+
 #include <cstring>
 #include <iostream>
 #include <memory>
 #include <mutex>
-
-#include <rtlx/Assert.h>
-#include <rtlx/Timer.h>
-#include <rtlx/Trace.h>
 
 namespace rtlx {
 
@@ -44,10 +44,21 @@ void TimeTrace::tock(const TraceStore::key_t &key)
   auto &store = TraceStore::GetInstance();
   if (store.enabled()) {
     RTLX_ASSERT(m_cache.find(key) != std::end(m_cache));
-    store.get(m_context)[key] += ChronoClockNow() - m_cache[key];
+    auto& v = std::get<double>(store.get(m_context)[key]);
+     v += ChronoClockNow() - std::get<double>(m_cache[key]);
     m_cache.erase(key);
   }
 }
+
+void TimeTrace::put(TraceStore::key_t const& key, int v) const
+{
+  auto &store = TraceStore::GetInstance();
+  if (store.enabled()) {
+    auto& val = std::get<int>(store.get(m_context)[key]);
+    val = v;
+  }
+}
+
 
 void TimeTrace::clear()
 {
@@ -72,9 +83,9 @@ auto TimeTrace::lookup(TraceStore::key_t const &key) const
     return TraceStore::value_t{};
   }
 
-  auto const &m  = measurements();
+  auto const &m = measurements();
 
-  auto        it = m.find(key);
+  auto it = m.find(key);
 
   if (it == m.end()) {
     return TraceStore::value_t{};

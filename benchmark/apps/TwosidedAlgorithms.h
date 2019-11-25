@@ -2,6 +2,9 @@
 #define BENCHMARK__TWOSIDED_ALGORITHMS_H
 
 #include <rtlx/Timer.h>
+#include <rtlx/Trace.h>
+
+#include <functional>
 
 struct Measurement {
   size_t nhosts;
@@ -20,9 +23,9 @@ struct Measurement {
 void printMeasurementHeader(std::ostream& os);
 
 void printMeasurementCsvLine(
-    std::ostream&                           os,
-    Measurement const&                      params,
-    std::unordered_map<std::string, double> traces);
+    std::ostream&                                                     os,
+    Measurement const&                                                params,
+    std::unordered_map<std::string, std::variant<double, int>> const& traces);
 
 template <
     class InputIt,

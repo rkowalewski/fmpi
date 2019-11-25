@@ -1,22 +1,16 @@
-#include <parallel/algorithm>
-
-#include <tlx/container/simple_vector.hpp>
-
-#include <omp.h>
-
-#include <fmpi/AlltoAll.h>
-#include <fmpi/Bruck.h>
-#include <fmpi/Math.h>
-
-
 #include <MPISynchronizedBarrier.h>
-#include <rtlx/ScopedLambda.h>
-
 #include <Params.h>
 #include <Random.h>
 #include <TwosidedAlgorithms.h>
+#include <fmpi/AlltoAll.h>
+#include <fmpi/Bruck.h>
+#include <fmpi/Math.h>
+#include <omp.h>
+#include <rtlx/ScopedLambda.h>
 
+#include <parallel/algorithm>
 #include <regex>
+#include <tlx/container/simple_vector.hpp>
 
 #ifdef NDEBUG
 constexpr int nwarmup = 1;
@@ -49,42 +43,48 @@ static std::vector<std::pair<
                           fmpi::FlatHandshake,
                           iterator_t,
                           iterator_t,
-                          merger_t<iterator_t, iterator_t>, 4>),
+                          merger_t<iterator_t, iterator_t>,
+                          4>),
                   std::make_pair(
                       "RingWaitall8",
                       fmpi::scatteredPairwiseWaitall<
                           fmpi::FlatHandshake,
                           iterator_t,
                           iterator_t,
-                          merger_t<iterator_t, iterator_t>, 8>),
+                          merger_t<iterator_t, iterator_t>,
+                          8>),
                   std::make_pair(
                       "RingWaitall16",
                       fmpi::scatteredPairwiseWaitall<
                           fmpi::FlatHandshake,
                           iterator_t,
                           iterator_t,
-                          merger_t<iterator_t, iterator_t>, 16>),
+                          merger_t<iterator_t, iterator_t>,
+                          16>),
                   std::make_pair(
                       "OneFactorWaitall4",
                       fmpi::scatteredPairwiseWaitall<
                           fmpi::OneFactor,
                           iterator_t,
                           iterator_t,
-                          merger_t<iterator_t, iterator_t>, 4>),
+                          merger_t<iterator_t, iterator_t>,
+                          4>),
                   std::make_pair(
                       "OneFactorWaitall8",
                       fmpi::scatteredPairwiseWaitall<
                           fmpi::OneFactor,
                           iterator_t,
                           iterator_t,
-                          merger_t<iterator_t, iterator_t>, 8>),
+                          merger_t<iterator_t, iterator_t>,
+                          8>),
                   std::make_pair(
                       "OneFactorWaitall16",
                       fmpi::scatteredPairwiseWaitall<
                           fmpi::OneFactor,
                           iterator_t,
                           iterator_t,
-                          merger_t<iterator_t, iterator_t>, 16>),
+                          merger_t<iterator_t, iterator_t>,
+                          16>),
                   std::make_pair(
                       "RingWaitsome4",
                       fmpi::scatteredPairwiseWaitsome<
@@ -390,15 +390,27 @@ int main(int argc, char* argv[])
 
 void printMeasurementHeader(std::ostream& os)
 {
-  os << "Nodes, Procs, Threads, Round, NBytes, Blocksize, Algo, Rank, Iteration, "
+  os << "Nodes, Procs, Threads, Round, NBytes, Blocksize, Algo, Rank, "
+        "Iteration, "
         "Measurement, "
         "Value\n";
 }
 
+std::ostream& operator<<(std::ostream& os, std::variant<double, int> const& v)
+{
+  if (std::holds_alternative<double>(v)) {
+    os << std::get<double>(v);
+  }
+  else {
+    os << std::get<int>(v);
+  }
+  return os;
+}
+
 void printMeasurementCsvLine(
-    std::ostream&                           os,
-    Measurement const&                      params,
-    std::unordered_map<std::string, double> traces)
+    std::ostream&                                                     os,
+    Measurement const&                                                params,
+    std::unordered_map<std::string, std::variant<double, int>> const& traces)
 {
   for (auto&& trace : traces) {
     std::ostringstream myos;
