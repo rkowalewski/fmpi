@@ -1,4 +1,5 @@
 build*
+my.build.*
 *.pdf
 Version.h
 logs

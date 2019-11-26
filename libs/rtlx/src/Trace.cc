@@ -54,8 +54,7 @@ void TimeTrace::put(TraceStore::key_t const& key, int v) const
 {
   auto &store = TraceStore::GetInstance();
   if (store.enabled()) {
-    auto& val = std::get<int>(store.get(m_context)[key]);
-    val = v;
+    store.get(m_context)[key] = v;
   }
 }
 
