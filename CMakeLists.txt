@@ -27,7 +27,7 @@ else()
 endif()
 
 
-if ("${CMAKE_CXX_COMPILER_ID}" MATCHES "Intel")
+if ("${CMAKE_CXX_COMPILER_ID}" MATCHES "Intel" AND DEFINED ${ICC_GXX})
     string(APPEND CMAKE_CXX_FLAGS "-gxx-name=${ICC_GXX}")
 endif()
 
