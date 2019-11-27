@@ -216,13 +216,6 @@ int main(int argc, char* argv[])
 
   RTLX_ASSERT((nr % params.nhosts) == 0);
 
-  std::size_t nsteps = std::ceil(std::log2(params.maxblocksize)) -
-                       std::ceil(std::log2(params.minblocksize));
-
-  nsteps = std::min(nsteps, std::size_t(20));
-
-  RTLX_ASSERT(params.minblocksize >= sizeof(value_t));
-
   if (me == 0) {
     fmpi::benchmark::printBenchmarkPreamble(std::cout, "++ ", "\n");
     printMeasurementHeader(std::cout);
@@ -235,9 +228,12 @@ int main(int argc, char* argv[])
 
   FMPI_DBG(params.niters);
 
-  for (size_t blocksize = params.minblocksize, step = 0; step <= nsteps;
-       blocksize *= 2, ++step) {
+  for (std::size_t step = 0; step < params.sizes.size(); ++step) {
     // each process sends sencount to all other PEs
+    auto const blocksize = params.sizes[step];
+    RTLX_ASSERT(blocksize >= sizeof(value_t));
+    RTLX_ASSERT(blocksize % sizeof(value_t));
+
     auto sendcount = blocksize / sizeof(value_t);
 
     FMPI_DBG(sendcount);

@@ -1,7 +1,7 @@
 #ifndef PARAMS_H
 #define PARAMS_H
 
-#include <array>
+#include <vector>
 
 #include <fmpi/mpi/Environment.h>
 
@@ -14,8 +14,6 @@ constexpr size_t MINSZ = 32;
 constexpr size_t MAXSZ = 128;
 
 struct Params {
-  std::size_t  minblocksize{MINSZ};
-  std::size_t  maxblocksize{MAXSZ};
   unsigned int nhosts{};
 #ifdef NDEBUG
   unsigned int niters{10};
@@ -24,6 +22,8 @@ struct Params {
 #endif
   std::string pattern{};
   bool        check{false};
+
+  std::vector<std::size_t> sizes{};
 };
 
 auto process(

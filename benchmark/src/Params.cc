@@ -1,7 +1,10 @@
 #include <Params.h>
 #include <Version.h>
+#include <fmpi/NumericRange.h>
 #include <rtlx/Assert.h>
 
+#include <cmath>
+#include <string>
 #include <tlx/cmdline_parser.hpp>
 
 extern char** environ;
@@ -59,15 +62,16 @@ auto process(
       params.pattern,
       "Select specific algorithms matching a regex pattern");
 
+  std::size_t minblocksize, maxblocksize;
   cp.add_bytes(
       'l',
       "minblocksize",
-      params.minblocksize,
+      minblocksize,
       "Minimum block size communication to each unit.");
   cp.add_bytes(
       'u',
       "maxblocksize",
-      params.maxblocksize,
+      maxblocksize,
       "Maximum block size communication to each unit.");
 
   cp.add_uint(
@@ -81,12 +85,50 @@ auto process(
       "correctly. This does not work with random text (no way to "
       " reproduce).");
 
+  std::string sizes_csv;
+  cp.add_string('s', "sizes", sizes_csv, "list of block sizes");
+
   if (mpiCtx.rank() == 0) {
     good = cp.process(argc, argv, std::cout);
   }
   else {
     onullstream os;
     good = cp.process(argc, argv, os);
+  }
+
+  if (sizes_csv.empty()) {
+    std::int64_t nsteps = std::ceil(std::log2(maxblocksize)) -
+                          std::ceil(std::log2(minblocksize));
+
+    if (nsteps < 0) {
+      if (mpiCtx.rank() == 0) {
+        std::ostringstream os;
+        os << "maxblocksize cannot be smaller than minblocksize\n";
+        cp.print_usage(os);
+        std::cerr << os.str();
+        return false;
+      }
+    }
+
+    nsteps = std::min<std::size_t>(nsteps, 20);
+
+    params.sizes.resize(nsteps + 1);
+
+    auto blocksize = minblocksize;
+    for (auto&& r : range<std::size_t>(nsteps + 1)) {
+      params.sizes[r] = std::min(blocksize, maxblocksize);
+      blocksize *= 2;
+    }
+  }
+  else {
+    std::stringstream ss(sizes_csv);
+
+    for (std::size_t i; ss >> i;) {
+      params.sizes.push_back(i);
+      if (ss.peek() == ',') {
+        ss.ignore();
+      }
+    }
   }
 
   if (good && mpiCtx.rank() == 0) {

@@ -129,6 +129,8 @@ auto TraceStore::enabled() const noexcept -> bool
 }
 
 /// Static variables
+//private:
+//
 
 std::unique_ptr<TraceStore> TraceStore::m_instance{};
 

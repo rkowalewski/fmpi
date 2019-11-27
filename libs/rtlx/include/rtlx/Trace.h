@@ -1,6 +1,8 @@
 #ifndef RTLX_TRACE_H
 #define RTLX_TRACE_H
 
+#include <rtlx/Timer.h>
+
 #include <iosfwd>
 #include <memory>
 #include <mutex>
@@ -39,6 +41,18 @@ class TraceStore {
 
   std::unordered_map<context_t, std::unordered_map<key_t, value_t>> m_traces;
   bool m_enabled{false};
+};
+
+class Interval {
+ public:
+  using duration = double;
+ public:
+  void tick();
+  void tock();
+  ~Interval();
+ private:
+  duration tick_{};
+  duration tock_{};
 };
 
 class TimeTrace {
