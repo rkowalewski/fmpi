@@ -8,7 +8,6 @@
 #include <fmpi/Schedule.h>
 #include <fmpi/detail/CommState.h>
 #include <fmpi/mpi/Request.h>
-#include <mpi.h>
 #include <rtlx/Assert.h>
 #include <rtlx/Trace.h>
 
@@ -64,6 +63,66 @@ inline auto enqueueMpiOps(
   return phase;
 }
 
+template <class InputIt, class OutputIt, class Op>
+inline void scatteredPairwise_lt3(
+    InputIt             begin,
+    OutputIt            out,
+    int                 blocksize,
+    mpi::Context const& ctx,
+    Op&&                op,
+    rtlx::TimeTrace&    trace)
+{
+  using value_type = typename std::iterator_traits<OutputIt>::value_type;
+
+  using merge_buffer_t =
+      tlx::SimpleVector<value_type, tlx::SimpleVectorMode::NoInitNoDestroy>;
+
+  auto chunks = std::vector<std::pair<InputIt, InputIt>>{};
+  chunks.reserve(2);
+
+  auto const me = ctx.rank();
+
+  chunks.emplace_back(
+      std::make_pair(begin + me * blocksize, begin + (me + 1) * blocksize));
+
+  if (ctx.size() == 1) {
+    trace.tick(MERGE);
+    op(chunks, out);
+    trace.tock(MERGE);
+    return;
+  }
+
+  auto other = static_cast<mpi::Rank>(1 - me);
+
+  trace.tick(COMMUNICATION);
+  FMPI_CHECK(mpi::sendrecv(
+      begin + other * blocksize,
+      blocksize,
+      other,
+      EXCH_TAG_BRUCK,
+      out + other * blocksize,
+      blocksize,
+      other,
+      EXCH_TAG_BRUCK,
+      ctx));
+  trace.tock(COMMUNICATION);
+
+  trace.tick(MERGE);
+
+  {
+    chunks.emplace_back(std::make_pair(
+        out + other * blocksize, out + (other + 1) * blocksize));
+    merge_buffer_t buffer{ctx.size() * blocksize};
+    op(chunks, buffer.begin());
+
+    std::move(buffer.begin(), buffer.end(), out);
+  }
+
+  trace.tock(MERGE);
+
+  return;
+}
+
 }  // namespace detail
 
 template <
@@ -110,6 +169,12 @@ inline void scatteredPairwiseWaitsome(
   auto trace = rtlx::TimeTrace{ctx.rank(), s};
 
   FMPI_DBG_STREAM("running algorithm " << s << ", blocksize: " << blocksize);
+
+  if (nr < 3) {
+    detail::scatteredPairwise_lt3(
+        begin, out, blocksize, ctx, std::forward<Op&&>(op), trace);
+    return;
+  }
 
   trace.tick(COMMUNICATION);
 
@@ -563,6 +628,14 @@ inline void scatteredPairwiseWaitall(
   auto const schedule = Schedule{};
 
   auto trace = rtlx::TimeTrace{me, s};
+
+  FMPI_DBG_STREAM("running algorithm " << s << ", blocksize: " << blocksize);
+
+  if (nr < 3) {
+    detail::scatteredPairwise_lt3(
+        begin, out, blocksize, ctx, std::forward<Op&&>(op), trace);
+    return;
+  }
 
   trace.tick(COMMUNICATION);
 
