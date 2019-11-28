@@ -27,7 +27,7 @@ namespace fmpi {
 
 namespace detail {
 
-static constexpr char T_COMM_ROUNDS[] = "CommunicationRounds";
+static constexpr char T_COMM_ROUNDS[] = "Tcomm_rounds";
 
 template <class Schedule, class ReqIdx, class BufAlloc, class CommOp>
 inline auto enqueueMpiOps(
@@ -627,8 +627,6 @@ inline void scatteredPairwiseWaitall(
     return;
   }
 
-  trace.tick(COMMUNICATION);
-
   std::array<MPI_Request, 2 * NReqs> reqs;
   reqs.fill(MPI_REQUEST_NULL);
 
@@ -667,7 +665,10 @@ inline void scatteredPairwiseWaitall(
 
   auto const allFitsInL2Cache = (nbytes < fmpi::CACHELEVEL2_SIZE);
 
+  int32_t count = 0;
   for (auto&& win : range<std::size_t>(nrounds)) {
+    ++count;
+    trace.tick(COMMUNICATION);
     static_cast<void>(win);
     std::size_t nrreqs;
 
@@ -712,17 +713,23 @@ inline void scatteredPairwiseWaitall(
     }
 
     FMPI_CHECK(mpi::waitall(&(*std::begin(reqs)), &(*std::end(reqs))));
+    trace.tock(COMMUNICATION);
 
     if (!allFitsInL2Cache && !chunks.empty()) {
+      trace.tick(MERGE);
       op(chunks, mergebuf);
       auto const nMerged = chunks.size() * blocksize;
       mergebuf += nMerged;
       mergePsum.push_back(mergePsum.back() + nMerged);
       chunks.clear();
+      trace.tock(MERGE);
     }
 
     FMPI_DBG_RANGE(out, mergebuf);
   }
+
+  trace.tick(MERGE);
+
 
   auto mergeSrc = buffer.begin();
   auto target   = &*out;
@@ -754,6 +761,9 @@ inline void scatteredPairwiseWaitall(
   if (target != &*out) {
     std::move(target, target + nels, out);
   }
+
+  trace.tock(MERGE);
+  trace.put(detail::T_COMM_ROUNDS, count);
 
   FMPI_DBG_RANGE(out, out + nr * blocksize);
 }
