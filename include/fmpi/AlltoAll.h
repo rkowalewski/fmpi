@@ -27,7 +27,7 @@ namespace fmpi {
 
 namespace detail {
 
-static constexpr char T_COMM_ROUNDS[] = "Tcomm_rounds";
+static constexpr char N_COMM_ROUNDS[] = "Ncomm_rounds";
 
 template <class Schedule, class ReqIdx, class BufAlloc, class CommOp>
 inline auto enqueueMpiOps(
@@ -124,6 +124,8 @@ inline void scatteredPairwise_lt3(
 
   trace.tock(MERGE);
 
+  trace.put(detail::N_COMM_ROUNDS, 1);
+
   return;
 }
 
@@ -167,7 +169,7 @@ inline void scatteredPairwiseWaitsome(
 
   auto trace = rtlx::TimeTrace{os.str()};
 
-  FMPI_DBG_STREAM("running algorithm " << s << ", blocksize: " << blocksize);
+  FMPI_DBG_STREAM("running algorithm " << os.str() << ", blocksize: " << blocksize);
 
   if (nr < 3) {
     detail::scatteredPairwise_lt3(
@@ -298,7 +300,7 @@ inline void scatteredPairwiseWaitsome(
       op(chunks_to_merge, out);
     }
     trace.tock(MERGE);
-    trace.put(detail::T_COMM_ROUNDS, 1);
+    trace.put(detail::N_COMM_ROUNDS, 1);
   }
   else {
     using index_type = int;
@@ -454,7 +456,7 @@ inline void scatteredPairwiseWaitsome(
     }
 
     trace.tick(MERGE);
-    trace.put(detail::T_COMM_ROUNDS, count);
+    trace.put(detail::N_COMM_ROUNDS, count);
 
     auto const needsFinalMerge = mergedChunksPsum.size() > 2;
     if (needsFinalMerge) {
@@ -619,7 +621,7 @@ inline void scatteredPairwiseWaitall(
   auto const schedule = Schedule{};
 
 
-  FMPI_DBG_STREAM("running algorithm " << s << ", blocksize: " << blocksize);
+  FMPI_DBG_STREAM("running algorithm " << os.str() << ", blocksize: " << blocksize);
 
   if (nr < 3) {
     detail::scatteredPairwise_lt3(
@@ -763,7 +765,7 @@ inline void scatteredPairwiseWaitall(
   }
 
   trace.tock(MERGE);
-  trace.put(detail::T_COMM_ROUNDS, count);
+  trace.put(detail::N_COMM_ROUNDS, count);
 
   FMPI_DBG_RANGE(out, out + nr * blocksize);
 }
