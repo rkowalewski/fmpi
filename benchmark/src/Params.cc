@@ -62,7 +62,9 @@ auto process(
       params.pattern,
       "Select specific algorithms matching a regex pattern");
 
-  std::size_t minblocksize, maxblocksize;
+  std::size_t minblocksize;
+
+  std::size_t maxblocksize;
   cp.add_bytes(
       'l',
       "minblocksize",

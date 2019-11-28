@@ -1,5 +1,5 @@
-#ifndef NUMERICRANGE_H
-#define NUMERICRANGE_H
+#ifndef FMPI_NUMERICRANGE_H
+#define FMPI_NUMERICRANGE_H
 // -*- C++ -*-
 // Copyright (c) 2017, Just Software Solutions Ltd
 // All rights reserved.
@@ -78,7 +78,7 @@ class numeric_range {
   Increment m_inc;
   direction m_dir;
 
-  bool at_end()
+  auto at_end() -> bool
   {
     if (m_dir == direction::increasing) {
       return m_current >= m_final;
@@ -107,7 +107,7 @@ class numeric_range {
         : value(std::move(value_))
       {
       }
-      T operator*()
+      auto operator*() -> T
       {
         return std::move(value);
       }
@@ -127,17 +127,17 @@ class numeric_range {
 }
     }
 
-    T operator*() const
+    auto operator*() const -> T
     {
       return range->m_current;
     }
 
-    T* operator->() const
+    auto operator-> () const -> T*
     {
       return &range->m_current;
     }
 
-    iterator& operator++()
+    auto operator++() -> iterator&
     {
       if (!range) {
         throw std::runtime_error("Increment a past-the-end iterator");
@@ -147,29 +147,29 @@ class numeric_range {
       return *this;
     }
 
-    const postinc_return operator++(int)
+    auto operator++(int) -> const postinc_return
     {
       postinc_return temp(**this);
       ++*this;
       return temp;
     }
 
-    friend bool operator==(iterator const& lhs, iterator const& rhs)
+    friend auto operator==(iterator const& lhs, iterator const& rhs) -> bool
     {
       return lhs.range == rhs.range;
     }
-    friend bool operator!=(iterator const& lhs, iterator const& rhs)
+    friend auto operator!=(iterator const& lhs, iterator const& rhs) -> bool
     {
       return !(lhs == rhs);
     }
   };
 
-  iterator begin()
+  auto begin() -> iterator
   {
     return iterator(this);
   }
 
-  iterator end()
+  auto end() -> iterator
   {
     return iterator(nullptr);
   }
@@ -197,7 +197,7 @@ class numeric_range {
 };
 
 template <typename T>
-numeric_range<T> range(T from, T to)
+auto range(T from, T to) -> numeric_range<T>
 {
   if (to < from) { throw std::runtime_error("Cannot count down ");
 }
@@ -205,13 +205,13 @@ numeric_range<T> range(T from, T to)
 }
 
 template <typename T>
-numeric_range<T> range(T to)
+auto range(T to) -> numeric_range<T>
 {
   return range(T(), std::move(to));
 }
 
 template <typename T>
-numeric_range<T, IncrementBy<T>> range(T from, T to, T delta)
+auto range(T from, T to, T delta) -> numeric_range<T, IncrementBy<T>>
 {
   if (!delta) { throw std::runtime_error("Step must be non-zero");
 }

@@ -55,7 +55,7 @@ class TimeTrace {
   using value_t = TraceStore::value_t;
 
  public:
-  TimeTrace(TraceStore::context_t ctx);
+  explicit TimeTrace(TraceStore::context_t ctx);
 
   static auto enabled() noexcept -> bool;
 
