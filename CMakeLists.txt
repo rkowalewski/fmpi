@@ -30,8 +30,21 @@ if (NOT MSVC)
 endif()
 
 if(NOT CMAKE_DEBUG_POSTFIX)
-  set(CMAKE_DEBUG_POSTFIX d)
+    set(CMAKE_DEBUG_POSTFIX d)
 endif()
+
+if (NOT CMAKE_BUILD_TYPE)
+    if ("${CMAKE_BINARY_DIR}" MATCHES ".*(R|r)release$")
+        message(STATUS "No build type selected, default to: Release")
+        set(CMAKE_BUILD_TYPE "Release")
+    else()
+        message(STATUS "No build type selected, default to: Debug")
+        set(CMAKE_BUILD_TYPE "Debug")
+    endif()
+else()
+    message(STATUS "Using build type: ${CMAKE_BUILD_TYPE}")
+endif()
+
 
 # Options
 option(MPI_CXX_SKIP_MPICXX "" ON)

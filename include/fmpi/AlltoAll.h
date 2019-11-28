@@ -16,6 +16,7 @@
 #include <cmath>
 #include <memory>
 #include <stack>
+#include <string_view>
 #include <tlx/math/div_ceil.hpp>
 #include <tlx/simple_vector.hpp>
 #include <tlx/stack_allocator.hpp>
@@ -25,6 +26,8 @@
 namespace fmpi {
 
 namespace detail {
+
+static constexpr char T_COMM_ROUNDS[] = "CommunicationRounds";
 
 template <class Schedule, class ReqIdx, class BufAlloc, class CommOp>
 inline auto enqueueMpiOps(
@@ -295,6 +298,7 @@ inline void scatteredPairwiseWaitsome(
       op(chunks_to_merge, out);
     }
     trace.tock(MERGE);
+    trace.put(detail::T_COMM_ROUNDS, 1);
   }
   else {
     using index_type = int;
@@ -450,7 +454,7 @@ inline void scatteredPairwiseWaitsome(
     }
 
     trace.tick(MERGE);
-    trace.put("CommunicationRounds", count);
+    trace.put(detail::T_COMM_ROUNDS, count);
 
     auto const needsFinalMerge = mergedChunksPsum.size() > 2;
     if (needsFinalMerge) {
