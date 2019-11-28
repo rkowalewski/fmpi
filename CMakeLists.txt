@@ -18,7 +18,6 @@ if ("${CMAKE_CXX_COMPILER_ID}" MATCHES "Intel")
     string(APPEND CMAKE_CXX_FLAGS "-gxx-name=${ICC_GXX}")
 endif()
 
-# Find packages go here.
 option(MPI_CXX_SKIP_MPICXX "" ON)
 
 include(CheckCXXCompilerFlag)

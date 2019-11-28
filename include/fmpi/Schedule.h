@@ -1,7 +1,7 @@
 #ifndef FMPI_SCHEDULE_H
 #define FMPI_SCHEDULE_H
 
-#include <fmpi/mpi/Mpi.h>
+#include <fmpi/mpi/Environment.h>
 
 namespace fmpi {
 
@@ -9,7 +9,7 @@ class FlatHandshake {
  public:
   static constexpr const char* NAME = "Ring";
 
-  static auto sendRank(mpi::Context const& comm, uint32_t phase) -> mpi::Rank;
+  static auto sendRank(::mpi::Context const& comm, uint32_t phase) -> ::mpi::Rank;
 
   static auto recvRank(mpi::Context const& comm, uint32_t phase) -> mpi::Rank;
 

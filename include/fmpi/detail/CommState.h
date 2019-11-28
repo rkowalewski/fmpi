@@ -1,12 +1,13 @@
 #ifndef FMPI__DETAIL__COMM_STATE_H
 #define FMPI__DETAIL__COMM_STATE_H
 
-#include <list>
-
 #include <fmpi/Debug.h>
-
 #include <fmpi/Memory.h>
 #include <fmpi/NumericRange.h>
+
+#include <tlx/simple_vector.hpp>
+
+#include <list>
 
 namespace fmpi {
 namespace detail {

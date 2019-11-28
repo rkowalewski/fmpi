@@ -7,6 +7,7 @@
 #include <fmpi/NumericRange.h>
 #include <fmpi/Schedule.h>
 #include <fmpi/detail/CommState.h>
+#include <fmpi/mpi/Algorithm.h>
 #include <fmpi/mpi/Request.h>
 #include <rtlx/Assert.h>
 #include <rtlx/Trace.h>
