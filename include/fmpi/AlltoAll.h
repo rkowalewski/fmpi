@@ -652,7 +652,7 @@ inline void scatteredPairwiseWaitall(
       begin + me * blocksize, begin + me * blocksize + blocksize));
 
   auto const phaseCount = static_cast<std::size_t>(schedule.phaseCount(ctx));
-  auto const nrounds    = tlx::div_ceil(phaseCount, reqsInFlight);
+  auto const nrounds    = tlx::div_ceil(totalExchanges, reqsInFlight);
 
   mergePsum.reserve(nrounds + 2);
   mergePsum.push_back(0);
