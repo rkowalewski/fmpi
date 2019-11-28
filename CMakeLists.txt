@@ -18,8 +18,6 @@ if ("${CMAKE_CXX_COMPILER_ID}" MATCHES "Intel")
     string(APPEND CMAKE_CXX_FLAGS "-gxx-name=${ICC_GXX}")
 endif()
 
-option(MPI_CXX_SKIP_MPICXX "" ON)
-
 include(CheckCXXCompilerFlag)
 check_cxx_compiler_flag(-pedantic PEDANTIC_SUPPORTED)
 
@@ -35,6 +33,9 @@ if(NOT CMAKE_DEBUG_POSTFIX)
   set(CMAKE_DEBUG_POSTFIX d)
 endif()
 
+# Options
+option(MPI_CXX_SKIP_MPICXX "" ON)
+
 include(${CMAKE_SOURCE_DIR}/cmake/FindMPI.cmake)
 include(${CMAKE_SOURCE_DIR}/cmake/FindOpenMP.cmake)
 include(${CMAKE_SOURCE_DIR}/cmake/ClangTidy.cmake)
@@ -45,5 +46,4 @@ add_subdirectory(src)
 
 add_subdirectory(apps)
 add_subdirectory(benchmark)
-
 

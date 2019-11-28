@@ -14,12 +14,6 @@ TimeTrace::TimeTrace(TraceStore::context_t ctx)
 {
 }
 
-auto TimeTrace::enabled() noexcept -> bool
-{
-  return TraceStore::GetInstance().enabled();
-}
-
-
 auto TimeTrace::context() const noexcept -> std::string const &
 {
   return m_context;
@@ -27,7 +21,7 @@ auto TimeTrace::context() const noexcept -> std::string const &
 
 void TimeTrace::tick(const TraceStore::key_t &key)
 {
-  if (enabled()) {
+  if constexpr (TraceStore::enabled()) {
     RTLX_ASSERT(m_cache.find(key) == std::end(m_cache));
     m_cache[key] = ChronoClockNow();
   }
@@ -35,11 +29,11 @@ void TimeTrace::tick(const TraceStore::key_t &key)
 
 void TimeTrace::tock(const TraceStore::key_t &key)
 {
-  auto &store = TraceStore::GetInstance();
-  if (store.enabled()) {
+  if constexpr (TraceStore::enabled()) {
+    auto &store = TraceStore::GetInstance();
     RTLX_ASSERT(m_cache.find(key) != std::end(m_cache));
-    auto const tickVal = std::get<double>(m_cache[key]);
-    auto const interval = ChronoClockNow() - tickVal ;
+    auto const tickVal  = std::get<double>(m_cache[key]);
+    auto const interval = ChronoClockNow() - tickVal;
 
     auto &totalTicks = std::get<double>(store.m_traces[m_context][key]);
     totalTicks += interval;
@@ -49,8 +43,9 @@ void TimeTrace::tock(const TraceStore::key_t &key)
 
 void TimeTrace::put(TraceStore::key_t const &key, int v) const
 {
-  auto &store = TraceStore::GetInstance();
-  if (store.enabled()) {
+  if constexpr (TraceStore::enabled()) {
+    auto &store = TraceStore::GetInstance();
+
     store.m_traces[m_context][key] = v;
   }
 }
@@ -61,6 +56,7 @@ auto TraceStore::traces(context_t const &ctx)
   return m_traces[ctx];
 }
 
+#if 0
 static auto isTraceEnvironFlagEnabled() -> bool
 {
   // Split into key and value:
@@ -71,12 +67,12 @@ static auto isTraceEnvironFlagEnabled() -> bool
 
   return false;
 }
+#endif
 
 auto TraceStore::GetInstance() -> TraceStore &
 {
   std::call_once(m_onceFlag, [] {
     m_instance              = std::make_unique<TraceStore>();
-    (*m_instance).m_enabled = isTraceEnvironFlagEnabled();
   });
   return *m_instance;
 }
@@ -90,12 +86,8 @@ void TraceStore::clear()
 
 void TraceStore::erase(context_t const &ctx)
 {
+  // Test
   m_traces.erase(ctx);
-}
-
-auto TraceStore::enabled() const noexcept -> bool
-{
-  return m_enabled;
 }
 
 /// Static variables

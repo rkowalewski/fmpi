@@ -30,7 +30,13 @@ class TraceStore {
 
   auto traces(context_t const &ctx) -> std::unordered_map<key_t, value_t> const &;
   //void clear();
-  auto enabled() const noexcept -> bool;
+  static constexpr auto enabled() noexcept -> bool {
+#if defined(RTLX_ENABLE_TRACE) && (RTLX_ENABLE_TRACE == 1)
+    return true;
+#else
+    return false;
+#endif
+  }
   void erase(context_t const &ctx);
 
   // Singleton Instance (Thread Safe)
@@ -41,7 +47,6 @@ class TraceStore {
   static std::once_flag              m_onceFlag;
 
   std::unordered_map<context_t, std::unordered_map<key_t, value_t>> m_traces;
-  bool m_enabled{false};
 };
 
 class TimeTrace {

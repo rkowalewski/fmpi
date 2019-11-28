@@ -159,15 +159,10 @@ inline void scatteredPairwiseWaitsome(
   auto const nr = ctx.size();
   auto const me = ctx.rank();
 
-  std::string s;
+  std::ostringstream os;
+  os << Schedule::NAME << "Waitsome" << NReqs;
 
-  if (rtlx::TraceStore::GetInstance().enabled()) {
-    std::ostringstream os;
-    os << Schedule::NAME << "Waitsome" << NReqs;
-    s = os.str();
-  }
-
-  auto trace = rtlx::TimeTrace{s};
+  auto trace = rtlx::TimeTrace{os.str()};
 
   FMPI_DBG_STREAM("running algorithm " << s << ", blocksize: " << blocksize);
 
@@ -509,18 +504,13 @@ inline void scatteredPairwise(
 
   auto rbuf = std::unique_ptr<value_type[]>(new value_type[nr * blocksize]);
 
-  std::string s;
-
-  if (rtlx::TraceStore::GetInstance().enabled()) {
-    std::ostringstream os;
-    os << Schedule::NAME;
-    if (isBlocking) {
-      os << "Blocking";
-    }
-    s = os.str();
+  std::ostringstream os;
+  os << Schedule::NAME;
+  if (isBlocking) {
+    os << "Blocking";
   }
 
-  auto trace = rtlx::TimeTrace{s};
+  auto trace = rtlx::TimeTrace{os.str()};
 
   trace.tick(COMMUNICATION);
   std::copy(
@@ -618,17 +608,12 @@ inline void scatteredPairwiseWaitall(
   auto me = ctx.rank();
   auto nr = ctx.size();
 
-  std::string s;
-
-  if (rtlx::TraceStore::GetInstance().enabled()) {
-    std::ostringstream os;
-    os << Schedule::NAME << "Waitall" << NReqs;
-    s = os.str();
-  }
+  std::ostringstream os;
+  os << Schedule::NAME << "Waitall" << NReqs;
+  auto trace = rtlx::TimeTrace{os.str()};
 
   auto const schedule = Schedule{};
 
-  auto trace = rtlx::TimeTrace{s};
 
   FMPI_DBG_STREAM("running algorithm " << s << ", blocksize: " << blocksize);
 
