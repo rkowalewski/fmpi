@@ -232,7 +232,7 @@ int main(int argc, char* argv[])
     // each process sends sencount to all other PEs
     auto const blocksize = params.sizes[step];
     RTLX_ASSERT(blocksize >= sizeof(value_t));
-    RTLX_ASSERT(blocksize % sizeof(value_t));
+    RTLX_ASSERT(blocksize % sizeof(value_t) == 0);
 
     auto sendcount = blocksize / sizeof(value_t);
 
@@ -358,21 +358,21 @@ int main(int argc, char* argv[])
           }
         }
 
-        if (it >= nwarmup) {
-          auto trace = rtlx::TimeTrace{me, algo.first};
+        auto& traceStore = rtlx::TraceStore::GetInstance();
 
+        if (it >= nwarmup) {
           m.algorithm = algo.first;
           m.iter      = it - nwarmup + 1;
 
-          auto traces = trace.measurements();
+          auto traces = traceStore.traces(algo.first);
 
           // insert total time
           traces.insert(std::make_pair(fmpi::TOTAL, total));
 
           printMeasurementCsvLine(std::cout, m, traces);
-
-          trace.clear();
         }
+
+        traceStore.erase(algo.first);
       }
 
       // synchronize before advancing to the next stage
@@ -394,12 +394,7 @@ void printMeasurementHeader(std::ostream& os)
 
 std::ostream& operator<<(std::ostream& os, std::variant<double, int> const& v)
 {
-  if (std::holds_alternative<double>(v)) {
-    os << std::get<double>(v);
-  }
-  else {
-    os << std::get<int>(v);
-  }
+  std::visit([&os](auto const& val) { os << val; }, v);
   return os;
 }
 

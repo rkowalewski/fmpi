@@ -166,7 +166,7 @@ inline void scatteredPairwiseWaitsome(
     s = os.str();
   }
 
-  auto trace = rtlx::TimeTrace{ctx.rank(), s};
+  auto trace = rtlx::TimeTrace{s};
 
   FMPI_DBG_STREAM("running algorithm " << s << ", blocksize: " << blocksize);
 
@@ -519,7 +519,7 @@ inline void scatteredPairwise(
     s = os.str();
   }
 
-  auto trace = rtlx::TimeTrace{me, s};
+  auto trace = rtlx::TimeTrace{s};
 
   trace.tick(COMMUNICATION);
   std::copy(
@@ -627,7 +627,7 @@ inline void scatteredPairwiseWaitall(
 
   auto const schedule = Schedule{};
 
-  auto trace = rtlx::TimeTrace{me, s};
+  auto trace = rtlx::TimeTrace{s};
 
   FMPI_DBG_STREAM("running algorithm " << s << ", blocksize: " << blocksize);
 
@@ -779,9 +779,8 @@ inline void MpiAlltoAll(
   using value_type = typename std::iterator_traits<InputIt>::value_type;
 
   auto nr = ctx.size();
-  auto me = ctx.rank();
 
-  auto trace = rtlx::TimeTrace{me, "AlltoAll"};
+  auto trace = rtlx::TimeTrace{"AlltoAll"};
 
   trace.tick(COMMUNICATION);
 

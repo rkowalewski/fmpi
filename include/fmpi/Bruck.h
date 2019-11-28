@@ -67,7 +67,7 @@ inline void bruck(
 
   using value_t = typename std::iterator_traits<InputIt>::value_type;
 
-  auto trace = rtlx::TimeTrace{me, "Bruck"};
+  auto trace = rtlx::TimeTrace{"Bruck"};
 
   // Phase 1: Process i rotates local elements by i blocks to the left in a
   // cyclic manner.
@@ -227,7 +227,7 @@ inline void bruck_indexed(
 
   using value_t = typename std::iterator_traits<InputIt>::value_type;
 
-  auto trace = rtlx::TimeTrace{me, "Bruck_indexed"};
+  auto trace = rtlx::TimeTrace{"Bruck_indexed"};
 
   // Phase 1: Process i rotates local elements by i blocks to the left in a
   // cyclic manner.
@@ -430,7 +430,7 @@ inline void bruck_interleave(
     return;
   }
 
-  auto trace = rtlx::TimeTrace{me, "Bruck_interleave"};
+  auto trace = rtlx::TimeTrace{"Bruck_interleave"};
 
   // Phase 1: Process i rotates local elements by i blocks to the left in a
   // cyclic manner.
@@ -662,7 +662,7 @@ inline void bruck_mod(
 
   using value_t = typename std::iterator_traits<InputIt>::value_type;
 
-  auto trace = rtlx::TimeTrace{me, "Bruck_Mod"};
+  auto trace = rtlx::TimeTrace{"Bruck_Mod"};
 
   trace.tick(detail::ROTATE);
 

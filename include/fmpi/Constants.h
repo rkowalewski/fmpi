@@ -4,6 +4,7 @@
 #include <cstddef>
 
 namespace fmpi {
+
 static constexpr const char TOTAL[] = "Ttotal";
 static constexpr const char MERGE[]         = "Tcomp";
 static constexpr const char COMMUNICATION[] = "Tcomm";

@@ -15,15 +15,9 @@ auto TimeTrace::enabled() noexcept -> bool
   return store.enabled();
 }
 
-TimeTrace::TimeTrace(int pid, TraceStore::context_t ctx)
-  : m_pid(pid)
-  , m_context(std::move(ctx))
+TimeTrace::TimeTrace(TraceStore::context_t ctx)
+  : m_context(std::move(ctx))
 {
-}
-
-auto TimeTrace::pid() const noexcept -> int
-{
-  return m_pid;
 }
 
 auto TimeTrace::context() const noexcept -> std::string const &
@@ -44,55 +38,21 @@ void TimeTrace::tock(const TraceStore::key_t &key)
   auto &store = TraceStore::GetInstance();
   if (store.enabled()) {
     RTLX_ASSERT(m_cache.find(key) != std::end(m_cache));
-    auto& v = std::get<double>(store.get(m_context)[key]);
-     v += ChronoClockNow() - std::get<double>(m_cache[key]);
+    auto &v = std::get<double>(store.traces(m_context)[key]);
+    v += ChronoClockNow() - std::get<double>(m_cache[key]);
     m_cache.erase(key);
   }
 }
 
-void TimeTrace::put(TraceStore::key_t const& key, int v) const
+void TimeTrace::put(TraceStore::key_t const &key, int v) const
 {
   auto &store = TraceStore::GetInstance();
   if (store.enabled()) {
-    store.get(m_context)[key] = v;
+    store.traces(m_context)[key] = v;
   }
 }
 
-
-void TimeTrace::clear()
-{
-  auto &store = TraceStore::GetInstance();
-  store.get(m_context).clear();
-  m_cache.clear();
-}
-
-auto TimeTrace::measurements() const
-    -> std::unordered_map<TraceStore::key_t, TraceStore::value_t> const &
-{
-  auto &      store = TraceStore::GetInstance();
-  auto const &m     = store.get(m_context);
-  // RTLX_ASSERT(m.size() > 0);
-  return m;
-}
-
-auto TimeTrace::lookup(TraceStore::key_t const &key) const
-    -> TraceStore::value_t
-{
-  if (!enabled()) {
-    return TraceStore::value_t{};
-  }
-
-  auto const &m = measurements();
-
-  auto it = m.find(key);
-
-  if (it == m.end()) {
-    return TraceStore::value_t{};
-  }
-  return it->second;
-}
-
-auto TraceStore::get(context_t const &ctx)
+auto TraceStore::traces(context_t const &ctx)
     -> std::unordered_map<TraceStore::key_t, TraceStore::value_t> &
 {
   return m_traces[ctx];
@@ -123,14 +83,19 @@ void TraceStore::clear()
   m_traces.clear();
 }
 
+void TraceStore::erase(context_t const &ctx)
+{
+  if (auto it = m_traces.find(ctx); it != m_traces.end()) {
+    m_traces.erase(it);
+  }
+}
+
 auto TraceStore::enabled() const noexcept -> bool
 {
   return m_enabled;
 }
 
 /// Static variables
-//private:
-//
 
 std::unique_ptr<TraceStore> TraceStore::m_instance{};
 
