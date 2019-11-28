@@ -323,12 +323,12 @@ inline void scatteredPairwiseWaitsome(
 
     RTLX_ASSERT(indices.size() <= nPendingReqs);
 
-    int count = 0;
+    int n_comm_rounds = 0;
 
     trace.tock(COMMUNICATION);
 
     while (ncReqs < totalReqs) {
-      ++count;
+      ++n_comm_rounds;
       trace.tick(COMMUNICATION);
 
       auto* lastIdx = mpi::testsome(
@@ -456,7 +456,7 @@ inline void scatteredPairwiseWaitsome(
     }
 
     trace.tick(MERGE);
-    trace.put(detail::N_COMM_ROUNDS, count);
+    trace.put(detail::N_COMM_ROUNDS, n_comm_rounds);
 
     auto const needsFinalMerge = mergedChunksPsum.size() > 2;
     if (needsFinalMerge) {
@@ -667,9 +667,7 @@ inline void scatteredPairwiseWaitall(
 
   auto const allFitsInL2Cache = (nbytes < fmpi::CACHELEVEL2_SIZE);
 
-  int32_t count = 0;
   for (auto&& win : range<std::size_t>(nrounds)) {
-    ++count;
     trace.tick(COMMUNICATION);
     static_cast<void>(win);
     std::size_t nrreqs;
@@ -765,7 +763,7 @@ inline void scatteredPairwiseWaitall(
   }
 
   trace.tock(MERGE);
-  trace.put(detail::N_COMM_ROUNDS, count);
+  trace.put(detail::N_COMM_ROUNDS, nrounds);
 
   FMPI_DBG_RANGE(out, out + nr * blocksize);
 }
