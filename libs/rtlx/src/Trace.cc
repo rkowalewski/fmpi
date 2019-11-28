@@ -9,16 +9,16 @@
 
 namespace rtlx {
 
-auto TimeTrace::enabled() noexcept -> bool
-{
-  auto &store = TraceStore::GetInstance();
-  return store.enabled();
-}
-
 TimeTrace::TimeTrace(TraceStore::context_t ctx)
   : m_context(std::move(ctx))
 {
 }
+
+auto TimeTrace::enabled() noexcept -> bool
+{
+  return TraceStore::GetInstance().enabled();
+}
+
 
 auto TimeTrace::context() const noexcept -> std::string const &
 {
@@ -38,8 +38,11 @@ void TimeTrace::tock(const TraceStore::key_t &key)
   auto &store = TraceStore::GetInstance();
   if (store.enabled()) {
     RTLX_ASSERT(m_cache.find(key) != std::end(m_cache));
-    auto &v = std::get<double>(store.traces(m_context)[key]);
-    v += ChronoClockNow() - std::get<double>(m_cache[key]);
+    auto const tickVal = std::get<double>(m_cache[key]);
+    auto const interval = ChronoClockNow() - tickVal ;
+
+    auto &totalTicks = std::get<double>(store.m_traces[m_context][key]);
+    totalTicks += interval;
     m_cache.erase(key);
   }
 }
@@ -48,12 +51,12 @@ void TimeTrace::put(TraceStore::key_t const &key, int v) const
 {
   auto &store = TraceStore::GetInstance();
   if (store.enabled()) {
-    store.traces(m_context)[key] = v;
+    store.m_traces[m_context][key] = v;
   }
 }
 
 auto TraceStore::traces(context_t const &ctx)
-    -> std::unordered_map<TraceStore::key_t, TraceStore::value_t> &
+    -> std::unordered_map<TraceStore::key_t, TraceStore::value_t> const &
 {
   return m_traces[ctx];
 }
@@ -78,16 +81,16 @@ auto TraceStore::GetInstance() -> TraceStore &
   return *m_instance;
 }
 
+#if 0
 void TraceStore::clear()
 {
   m_traces.clear();
 }
+#endif
 
 void TraceStore::erase(context_t const &ctx)
 {
-  if (auto it = m_traces.find(ctx); it != m_traces.end()) {
-    m_traces.erase(it);
-  }
+  m_traces.erase(ctx);
 }
 
 auto TraceStore::enabled() const noexcept -> bool

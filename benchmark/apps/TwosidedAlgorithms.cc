@@ -320,6 +320,7 @@ int main(int argc, char* argv[])
       m.nbytes    = nels * nr * sizeof(value_t);
       m.blocksize = blocksize;
 
+
       for (auto const& algo : ALGORITHMS) {
         FMPI_DBG_STREAM("running algorithm: " << algo.first);
 
@@ -374,6 +375,7 @@ int main(int argc, char* argv[])
 
         traceStore.erase(algo.first);
       }
+
 
       // synchronize before advancing to the next stage
       FMPI_DBG("Iteration Finished");

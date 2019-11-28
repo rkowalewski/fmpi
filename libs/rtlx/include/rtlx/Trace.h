@@ -28,8 +28,8 @@ class TraceStore {
   TraceStore(const TraceStore &src) = delete;
   auto operator=(const TraceStore &rhs) -> TraceStore & = delete;
 
-  auto traces(context_t const &ctx) -> std::unordered_map<key_t, value_t> &;
-  void clear();
+  auto traces(context_t const &ctx) -> std::unordered_map<key_t, value_t> const &;
+  //void clear();
   auto enabled() const noexcept -> bool;
   void erase(context_t const &ctx);
 
