@@ -35,11 +35,6 @@ if [[ ! -e "$OUTFILE" ]]; then
   fi
 fi
 
-append="0"
-if [[ -w "$OUTFILE" ]]; then
-  append="1"
-fi
-
 TMPDIR="/tmp"
 
 if [[ -n "$SCRATCH" && -d "$SCRATCH" ]]; then
@@ -80,4 +75,4 @@ grep -h '^\(Nodes\|[0-9]\+,\)' "${files[@]}" |
 
 echo "-- summarizing statistics in $OUTFILE"
 
-Rscript "$SCRIPTPATH/R/stats.R" "$TMPF" "$OUTFILE" "$append"
+Rscript "$SCRIPTPATH/R/stats.R" "$TMPF" "$OUTFILE"

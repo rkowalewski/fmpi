@@ -1,4 +1,4 @@
-#!/usr/bin/env Rscript --vanilla
+#!/usr/bin/env Rscript
 
 suppressMessages(library(tidyverse))
 suppressMessages(library(DescTools))
@@ -19,15 +19,12 @@ str2bool = function(input_str)
 
 args = commandArgs(trailingOnly=TRUE)
 
-if (length(args) < 3) {
-    stop("Usage: ./plots.R <csv_input> <csv_output> <append?>", call.=FALSE)
+if (length(args) < 2) {
+    stop("Usage: ./plots.R <csv_input> <csv_output>", call.=FALSE)
 }
 
 csv_in <- args[1]
 csv_out <- args[2]
-
-append <- str2bool(args[3])
-append <- FALSE
 
 print(paste0("--reading file: ", csv_in))
 
@@ -85,13 +82,7 @@ df.stats <- df.in %>%
     mutate(avg_ci = ci(n, sd, ci_prob),
            PPN = Procs / Nodes)
 
-{ if (append == TRUE){
-    print(paste0("--appending file: ", csv_out))
-  }
-  else {
-    print(paste0("--writing file: ", csv_out))
-  }
-}
+print(paste0("--writing file: ", csv_out))
 
 write_csv(df.stats, csv_out, na = "NA", append = FALSE, col_names = TRUE,
             quote_escape = "double")

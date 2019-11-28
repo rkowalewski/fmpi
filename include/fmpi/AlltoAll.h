@@ -169,7 +169,8 @@ inline void scatteredPairwiseWaitsome(
 
   auto trace = rtlx::TimeTrace{os.str()};
 
-  FMPI_DBG_STREAM("running algorithm " << os.str() << ", blocksize: " << blocksize);
+  FMPI_DBG_STREAM(
+      "running algorithm " << os.str() << ", blocksize: " << blocksize);
 
   if (nr < 3) {
     detail::scatteredPairwise_lt3(
@@ -620,8 +621,8 @@ inline void scatteredPairwiseWaitall(
 
   auto const schedule = Schedule{};
 
-
-  FMPI_DBG_STREAM("running algorithm " << os.str() << ", blocksize: " << blocksize);
+  FMPI_DBG_STREAM(
+      "running algorithm " << os.str() << ", blocksize: " << blocksize);
 
   if (nr < 3) {
     detail::scatteredPairwise_lt3(
@@ -632,9 +633,8 @@ inline void scatteredPairwiseWaitall(
   std::array<MPI_Request, 2 * NReqs> reqs;
   reqs.fill(MPI_REQUEST_NULL);
 
-  auto const totalExchanges =
-      static_cast<std::size_t>(schedule.phaseCount(ctx));
-  auto const reqsInFlight = std::min(totalExchanges - 1, NReqs);
+  auto const totalExchanges = nr - 1;
+  auto const reqsInFlight   = std::min<std::size_t>(totalExchanges, NReqs);
 
   RTLX_ASSERT(2 * reqsInFlight <= reqs.size());
 
@@ -651,7 +651,8 @@ inline void scatteredPairwiseWaitall(
   chunks.push_back(std::make_pair(
       begin + me * blocksize, begin + me * blocksize + blocksize));
 
-  auto const nrounds = tlx::div_ceil(totalExchanges, reqsInFlight);
+  auto const phaseCount = static_cast<std::size_t>(schedule.phaseCount(ctx));
+  auto const nrounds    = tlx::div_ceil(phaseCount, reqsInFlight);
 
   mergePsum.reserve(nrounds + 2);
   mergePsum.push_back(0);
@@ -672,8 +673,7 @@ inline void scatteredPairwiseWaitall(
     static_cast<void>(win);
     std::size_t nrreqs;
 
-    for (nrreqs = 0; nrreqs < reqsInFlight && rphase < totalExchanges;
-         ++rphase) {
+    for (nrreqs = 0; nrreqs < reqsInFlight && rphase < phaseCount; ++rphase) {
       // receive from
       auto recvfrom = schedule.recvRank(ctx, rphase);
 
@@ -694,8 +694,7 @@ inline void scatteredPairwiseWaitall(
       ++nrreqs;
     }
 
-    for (std::size_t nsreqs = 0;
-         nsreqs < reqsInFlight && sphase < totalExchanges;
+    for (std::size_t nsreqs = 0; nsreqs < reqsInFlight && sphase < phaseCount;
          ++sphase) {
       auto sendto = schedule.sendRank(ctx, sphase);
 
@@ -729,7 +728,6 @@ inline void scatteredPairwiseWaitall(
   }
 
   trace.tick(MERGE);
-
 
   auto mergeSrc = buffer.begin();
   auto target   = &*out;
