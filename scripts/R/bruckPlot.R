@@ -26,8 +26,7 @@ csv <- args[1]
 
 levels <- c("Tcomm", "Tcomp", "Trotate", "Tpack", "Tunpack", "Ttotal")
 
-df.in <- read_csv(csv, col_names=TRUE, col_types="iiiccidddddddddi") %>%
-    filter(grepl("^(Ring|OneFactor|AlltoAll)$", Algo)) %>%
+df.in <- read_csv(csv, col_names=TRUE, col_types="iiiiccidddddddddi") %>%
     mutate(Measurement=parse_factor(Measurement, levels)) %>%
     ungroup()
 
@@ -50,7 +49,7 @@ theme <- theme_bw()
 theme$axis.text.x <- element_text(angle = 45)
 
 my_labeller <- label_bquote(
-  cols = .(Nodes) / .(PPN) / .(Blocksize)
+  cols = .(Nodes) / .(PPN) / .(Threads) / .(Blocksize)
 )
 
 pd <- position_dodge(0.1)
@@ -68,7 +67,7 @@ p <- ggplot(data=df.pnt, aes(x=Algo, y=median, group=Algo)) +
     # To use for line and point colors, add
     scale_fill_brewer(type="qal", palette="Paired") +
     theme +
-    facet_wrap_paginate(PPN~Blocksize~Nodes, ncol=3, nrow=3,
+    facet_wrap_paginate(Threads~PPN~Blocksize~Nodes, ncol=3, nrow=3,
         scales="free_y", page=NULL, labeller = my_labeller)
 
 # other labeller are:

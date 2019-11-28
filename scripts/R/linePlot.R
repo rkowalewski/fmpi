@@ -18,6 +18,14 @@ thisFile <- function() {
         }
 }
 
+topAlgosByGroup <- function(df) {
+    df %>%
+        # we first get the best algorithms over all node counts for current blocksize
+        group_by(Nodes) %>% top_n(ntop, Ttotal_speedup) %>% ungroup() %>%
+        # and then we sum by algorithms to get the top10
+        group_by(Algo) %>% tally() %>% top_n(ntop, n) %>% select(Algo)
+}
+
 args = commandArgs(trailingOnly=TRUE)
 
 if (length(args)< 1) {
@@ -30,7 +38,7 @@ data.in <- read.csv(file=csv, header=TRUE, sep=",") %>%
     filter(Measurement == 'Ttotal')
 
 data <- data.in %>%
-    group_by(Nodes,Procs,Blocksize) %>%
+    group_by(Nodes,Procs,Threads, Blocksize) %>%
     mutate(Ttotal_speedup = median[Algo == "AlltoAll"] / median) %>%
     ungroup() %>%
     filter(Algo != "AlltoAll")
@@ -53,28 +61,60 @@ if (!("PPN" %in% colnames(data))) {
     data <- data %>% mutate(PPN = Procs / Nodes)
 }
 
-nSizes <- data %>% distinct(Blocksize)
 nPPN <- data %>% distinct(PPN)
 
 plots <- list()
 
-top <- 10
+ntop <- 10
+
+plotIdx <- 1
 
 for(i in seq(1, nrow(nPPN))) {
     ppn <- unlist(nPPN[i,1])
-    for(ii in seq(1, nrow(nSizes))) {
-        bsize <- unlist(nSizes[ii,1])
 
-        mydata <- data %>% filter(PPN == ppn & Blocksize == bsize)
+    ppnData <- data %>% filter(PPN == ppn)
+    nn <- nrow(ppnData %>% distinct(Nodes))
 
-        top5Algos <- mydata %>%
-            group_by(Nodes) %>% top_n(top, Ttotal_speedup) %>% ungroup() %>%
-            group_by(Algo) %>% tally() %>% top_n(top, n) %>% select(Algo)
+    if ((nn > 1)) {
+        nSizes <- ppnData %>% distinct(Blocksize)
+        # group by blocksize
+        for(ii in seq(1, nrow(nSizes))) {
+            bsize <- unlist(nSizes[ii,1])
+
+            mydata <- ppnData %>% filter(Blocksize == bsize)
+            print(paste(ppn, bsize, nrow(mydata), sep=", "))
+
+            top5Algos <- topAlgosByGroup(mydata)
+
+            top5Bsize <- mydata %>% filter(Algo %in% unlist(top5Algos))
+
+            p <- ggplot(top5Bsize, aes(x=factor(Nodes), y=Ttotal_speedup, colour=Algo, group=Algo))
+            plotTitle <- paste0("PPN: ", ppn, " / ", "Blocksize: ", bsize, " Bytes")
+
+            p <- p + geom_line(position=pd) +
+                geom_point(position=pd, size=2) +
+                labs(caption=plotTitle) +
+                theme_bw() +
+                # To use for line and point colors, add
+                scale_colour_brewer(type="qal", palette="Paired") +
+                scale_y_continuous(breaks=seq(0,5,by=.2),limits=mylimit) +
+                xlab("Nodes") +
+                ylab("Speedup")+
+                geom_hline(yintercept = 1)
+                #annotate("text", min(the.data$year), 50, vjust = -1, label = "Cutoff")
+                # + facet_zoom(xy = Nodes <= 32, horizontal=FALSE)
+            plots[[plotIdx]] <- p
+            plotIdx <- plotIdx + 1
+        }
+    } else {
+        mydata <- ppnData
+
+        top5Algos <- topAlgosByGroup(mydata)
 
         top5Bsize <- mydata %>% filter(Algo %in% unlist(top5Algos))
 
-        p <- ggplot(top5Bsize, aes(x=factor(Nodes), y=Ttotal_speedup, colour=Algo, group=Algo))
-        plotTitle <- paste0("PPN: ", ppn, " / ", "Blocksize: ", bsize, " Bytes")
+        p <- ggplot(top5Bsize, aes(x=factor(Blocksize), y=Ttotal_speedup, colour=Algo, group=Algo))
+        plotTitle <- paste0("PPN: ", ppn, " / ", "Nodes: ", mydata[1,1])
 
         p <- p + geom_line(position=pd) +
             geom_point(position=pd, size=2) +
@@ -83,13 +123,13 @@ for(i in seq(1, nrow(nPPN))) {
             # To use for line and point colors, add
             scale_colour_brewer(type="qal", palette="Paired") +
             scale_y_continuous(breaks=seq(0,5,by=.2),limits=mylimit) +
-            xlab("Nodes") +
+            xlab("Blocksize") +
             ylab("Speedup")+
             geom_hline(yintercept = 1)
             #annotate("text", min(the.data$year), 50, vjust = -1, label = "Cutoff")
             # + facet_zoom(xy = Nodes <= 32, horizontal=FALSE)
-        idx <- (i-1) * nrow(nSizes) + ii
-        plots[[idx]] <- p
+        plots[[plotIdx]] <- p
+        plotIdx <- plotIdx + 1
     }
 }
 

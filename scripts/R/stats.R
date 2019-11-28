@@ -34,8 +34,6 @@ print(paste0("--reading file: ", csv_in))
 df.in <- read_csv(csv_in, col_names=TRUE, col_types="iiii?iciicd")
 
 ci <- function(n, sd_x, prob = .95) {
-  #n <- sum(!is.na(x))
-  #sd_x <- sd(x, na.rm = TRUE)
   z_t <- qt(1 - (1 - prob) / 2, df = n - 1)
   z_t * sd_x / sqrt(n)
 }
