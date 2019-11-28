@@ -31,7 +31,7 @@ class TraceStore {
   auto traces(context_t const &ctx) -> std::unordered_map<key_t, value_t> const &;
   //void clear();
   static constexpr auto enabled() noexcept -> bool {
-#if defined(RTLX_ENABLE_TRACE) && (RTLX_ENABLE_TRACE == 1)
+#ifdef RTLX_ENABLE_TRACE
     return true;
 #else
     return false;

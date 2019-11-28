@@ -5,7 +5,7 @@ add_library(rtlx Trace.cc)
 target_include_directories(rtlx PUBLIC ../include)
 
 if (RTLX_ENABLE_TRACE MATCHES "ON")
-    list(APPEND rtlx_defines RTLX_ENABLE_TRACE=1)
+    list(APPEND rtlx_defines RTLX_ENABLE_TRACE)
 endif()
 
 target_compile_definitions (rtlx PRIVATE ${rtlx_defines})
