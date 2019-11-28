@@ -26,7 +26,6 @@ else()
     message(STATUS "Using build type: ${CMAKE_BUILD_TYPE}")
 endif()
 
-
 if ("${CMAKE_CXX_COMPILER_ID}" MATCHES "Intel" AND DEFINED ${ICC_GXX})
     string(APPEND CMAKE_CXX_FLAGS "-gxx-name=${ICC_GXX}")
 endif()
