@@ -34,7 +34,7 @@ if(CMAKE_VERSION VERSION_GREATER 3.6 AND ENABLE_CLANG_TIDY)
 
     string(REPLACE "\n" ";" TRACKED_FILES ${TRACKED_FILES})
 
-    message(INFO "tracked files: ${TRACKED_FILES}")
+    #message(INFO "tracked files: ${TRACKED_FILES}")
 
     # we cannot break multi line strings here
     list(APPEND RUN_CLANG_TIDY_BIN_ARGS
