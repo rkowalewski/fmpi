@@ -14,6 +14,19 @@ set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 
+if (NOT CMAKE_BUILD_TYPE)
+    if ("${CMAKE_BINARY_DIR}" MATCHES ".*(R|r)elease$")
+        message(STATUS "No build type selected, default to: Release")
+        set(CMAKE_BUILD_TYPE "Release")
+    else()
+        message(STATUS "No build type selected, default to: Debug")
+        set(CMAKE_BUILD_TYPE "Debug")
+    endif()
+else()
+    message(STATUS "Using build type: ${CMAKE_BUILD_TYPE}")
+endif()
+
+
 if ("${CMAKE_CXX_COMPILER_ID}" MATCHES "Intel")
     string(APPEND CMAKE_CXX_FLAGS "-gxx-name=${ICC_GXX}")
 endif()
@@ -31,18 +44,6 @@ endif()
 
 if(NOT CMAKE_DEBUG_POSTFIX)
     set(CMAKE_DEBUG_POSTFIX d)
-endif()
-
-if (NOT CMAKE_BUILD_TYPE)
-    if ("${CMAKE_BINARY_DIR}" MATCHES ".*(R|r)release$")
-        message(STATUS "No build type selected, default to: Release")
-        set(CMAKE_BUILD_TYPE "Release")
-    else()
-        message(STATUS "No build type selected, default to: Debug")
-        set(CMAKE_BUILD_TYPE "Debug")
-    endif()
-else()
-    message(STATUS "Using build type: ${CMAKE_BUILD_TYPE}")
 endif()
 
 
