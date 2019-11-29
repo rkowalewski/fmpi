@@ -111,16 +111,17 @@ echo "$ctx"
 for s in $(seq 0 $scale)
 do
   nodes="$((2**s))"
-  nprocs="$((nodes * ppn))"
-  l2boundary="$(getmaxblocksizel2 $nprocs)"
-  l3boundary="$(getmaxblocksizel3 $nprocs)"
-  l3boundary="$((l3boundary+1))"
-  minblock="$(getminblocksize "$minblocksize" 48 "$ppn")"
+  #nprocs="$((nodes * ppn))"
+  #l2boundary="$(getmaxblocksizel2 $nprocs)"
+  #l3boundary="$(getmaxblocksizel3 $nprocs)"
+  #l3boundary="$((l3boundary+1))"
+  #minblock="$(getminblocksize "$minblocksize" 48 "$ppn")"
 
-  echo "$l2boundary, $l3boundary, $minblock"
+  #echo "$l2boundary, $l3boundary, $minblock"
+  # -u "$((2**l3boundary))" -l "$minblock"
 
   f=$(gencmdfile jobs/ng.a2a.impi.tpl \
-    -n "$nodes" -p "$ppn" -d "$ctx"  -j fmpi -D "$git_root" -u "$((2**l3boundary))" -l "$minblock" "${POSITIONAL[@]}")
+    -n "$nodes" -p "$ppn" -d "$ctx"  -j fmpi -D "$git_root"  "${POSITIONAL[@]}")
 
   if [[ "$submit" == "1" ]]; then
     sbatch "$f"
