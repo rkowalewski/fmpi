@@ -26,10 +26,6 @@ else()
     message(STATUS "Using build type: ${CMAKE_BUILD_TYPE}")
 endif()
 
-if ("${CMAKE_CXX_COMPILER_ID}" MATCHES "Intel" AND DEFINED ${ICC_GXX})
-    string(APPEND CMAKE_CXX_FLAGS "-gxx-name=${ICC_GXX}")
-endif()
-
 include(CheckCXXCompilerFlag)
 check_cxx_compiler_flag(-pedantic PEDANTIC_SUPPORTED)
 
@@ -45,6 +41,14 @@ if(NOT CMAKE_DEBUG_POSTFIX)
     set(CMAKE_DEBUG_POSTFIX d)
 endif()
 
+STRING(STRIP "${ICC_GXX}" ICC_GXX)
+
+if ("${CMAKE_CXX_COMPILER_ID}" MATCHES "Intel" AND NOT "${ICC_GXX}" STREQUAL "")
+    message(STATUS "Using GCC: ${ICC_GXX}")
+    string(APPEND CMAKE_CXX_FLAGS "-gxx-name=${ICC_GXX}")
+else()
+    message(STATUS "Compiler: ${CMAKE_CXX_COMPILER_ID}")
+endif()
 
 # Options
 option(MPI_CXX_SKIP_MPICXX "" ON)

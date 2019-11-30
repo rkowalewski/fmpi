@@ -355,7 +355,7 @@ int main(int argc, char* argv[])
                 correct.end(),
                 std::ostream_iterator<value_t>(os, ", "));
             os << ")\n";
-            std::cout << os.str();
+            std::cerr << os.str();
           }
         }
 
