@@ -2,6 +2,7 @@
 
 suppressMessages(library(tidyverse))
 suppressMessages(library(ggforce))
+suppressMessages(library(argparser))
 
 thisFile <- function() {
         cmdArgs <- commandArgs(trailingOnly = FALSE)
@@ -16,17 +17,25 @@ thisFile <- function() {
         }
 }
 
-args = commandArgs(trailingOnly=TRUE)
+params <- arg_parser("visualizing times in a stacked bar plot")
+params <- add_argument(params, "--input", help = "input file", default = "-")
+params <- add_argument(params, "--output", help = "output file", default = "output.pdf")
 
-if (length(args)< 1) {
-    stop("Usage: ./plots.R <infile>", call.=FALSE)
+argv <- parse_args(params)
+
+df.in <- 0
+
+if (argv$input == "-") {
+    df.in <- read_csv(file('stdin'), col_names=TRUE, col_types="iiiiccidddddddddi")
+} else {
+    df.in <- read_csv(file=argv$input, col_names=TRUE, col_types="iiiiccidddddddddi")
 }
 
-csv <- args[1]
 
 levels <- c("Tcomm", "Tcomp", "Trotate", "Tpack", "Tunpack", "Ttotal")
 
-df.in <- read_csv(csv, col_names=TRUE, col_types="iiiiccidddddddddi") %>%
+df.in <- df.in %>%
+    filter(Measurement %in% levels) %>%
     mutate(Measurement=parse_factor(Measurement, levels)) %>%
     ungroup()
 
@@ -38,11 +47,7 @@ df.bar <- df.in %>% filter(Measurement != "Ttotal" )
 df.pnt <- df.in %>% filter(Measurement == "Ttotal" )
 df.a2a <- df.in %>% filter(Measurement == "Ttotal" & Algo == "AlltoAll")
 
-file <- sub(pattern = "(.*)\\..*$", replacement = "\\1", basename(csv))
-
-plotName <- paste0(file,".bruck.pdf")
-
-pdf(plotName,paper="a4")
+pdf(argv$output,paper="a4")
 
 theme <- theme_bw()
 # change xaxis text
