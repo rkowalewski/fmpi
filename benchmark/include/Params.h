@@ -1,11 +1,10 @@
 #ifndef PARAMS_H
 #define PARAMS_H
 
-#include <vector>
-
 #include <fmpi/mpi/Environment.h>
 
 #include <iosfwd>
+#include <vector>
 
 namespace fmpi {
 namespace benchmark {
@@ -33,7 +32,9 @@ auto process(
     struct Params&        params) -> bool;
 
 void printBenchmarkPreamble(
-    std::ostream& os, const std::string& prefix, const char* delim = "\n");
+    std::ostream&      os,
+    const std::string& prefix,
+    const char*        delim = "\n");
 
 }  // namespace benchmark
 }  // namespace fmpi

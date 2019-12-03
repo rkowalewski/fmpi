@@ -2,8 +2,12 @@
 #include <Version.h>
 #include <fmpi/NumericRange.h>
 #include <rtlx/Assert.h>
+#include <unistd.h>
 
+#include <climits>
 #include <cmath>
+#include <ctime>
+#include <iomanip>
 #include <string>
 #include <tlx/cmdline_parser.hpp>
 
@@ -38,6 +42,13 @@ class basic_onullstream : public std::basic_ostream<cT, traits> {
 
 using onullstream  = basic_onullstream<char>;
 using wonullstream = basic_onullstream<wchar_t>;
+
+static std::string getexepath()
+{
+  char    result[PATH_MAX];
+  ssize_t count = readlink("/proc/self/exe", result, PATH_MAX);
+  return std::string(result, (count > 0) ? count : 0);
+}
 
 auto process(
     int                   argc,
@@ -134,7 +145,14 @@ auto process(
   }
 
   if (good && mpiCtx.rank() == 0) {
+
+    auto time = std::time(nullptr);
+    std::cout << "Executable: " << getexepath() << "\n";
+    std::cout << "Time: " << std::put_time(std::gmtime(&time), "%F %T") << "\n";
+    std::cout << "Git Version: " << FMPI_GIT_COMMIT << "\n";
+
     cp.print_result();
+    std::cout << "\n";
   }
 
   return good;
@@ -189,8 +207,6 @@ void printBenchmarkPreamble(
       envs.emplace_back(key, val);
     }
   }
-
-  oss << prefix << "Git Version: " << FMPI_GIT_COMMIT << delim;
 
   for (auto&& kv : envs) {
     oss << prefix << kv << delim;
