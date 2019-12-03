@@ -562,9 +562,6 @@ inline void scatteredPairwiseWaitall(
     std::size_t rphase, sphase;
     std::tie(rphase, sphase) = initialPhases;
 
-    auto  recv_buffer = reqWin.rbuf();
-    auto& chunks      = reqWin.pending_pieces();
-
     for (std::size_t nrreqs = 0; nrreqs < winsize && rphase < phaseCount;
          ++rphase) {
       // receive from
@@ -574,12 +571,12 @@ inline void scatteredPairwiseWaitall(
 
       FMPI_DBG(recvfrom);
 
-      auto* recvBuf = std::next(recv_buffer, nrreqs * blocksize);
+      auto* recvBuf = std::next(reqWin.rbuf(), nrreqs * blocksize);
 
       FMPI_CHECK(mpi::irecv(
           recvBuf, blocksize, recvfrom, EXCH_TAG_RING, ctx, &reqs[nrreqs]));
 
-      chunks.push_back(
+      reqWin.pending_pieces().push_back(
           std::make_pair(recvBuf, std::next(recvBuf, blocksize)));
 
       ++nrreqs;
