@@ -1,11 +1,10 @@
-#include <rtlx/Assert.hpp>
-#include <rtlx/Timer.hpp>
-#include <rtlx/Trace.hpp>
-
 #include <cstring>
 #include <iostream>
 #include <memory>
 #include <mutex>
+#include <rtlx/Assert.hpp>
+#include <rtlx/Timer.hpp>
+#include <rtlx/Trace.hpp>
 
 namespace rtlx {
 

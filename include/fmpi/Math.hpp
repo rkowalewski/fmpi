@@ -1,11 +1,9 @@
 #ifndef FMPI_MATH_H
 #define FMPI_MATH_H
 
-#include <rtlx/Assert.hpp>
-
-#include <type_traits>
-
 #include <climits>
+#include <rtlx/Assert.hpp>
+#include <type_traits>
 
 namespace fmpi {
 

@@ -4,14 +4,11 @@
 #include <mpi.h>
 
 #include <array>
+#include <fmpi/mpi/Algorithm.hpp>
+#include <rtlx/Assert.hpp>
+#include <tlx/simple_vector.hpp>
 #include <tuple>
 #include <type_traits>
-
-#include <rtlx/Assert.hpp>
-
-#include <tlx/simple_vector.hpp>
-
-#include <fmpi/mpi/Algorithm.hpp>
 
 #if 0
 namespace mpi {

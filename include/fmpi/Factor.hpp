@@ -1,13 +1,6 @@
 #ifndef FACTOR_H
 #define FACTOR_H
 
-#include <mpi.h>
-
-#include <cassert>
-#include <iterator>
-#include <memory>
-#include <vector>
-
 #include <Constants.h>
 #include <Debug.h>
 #include <Math.h>
@@ -15,6 +8,12 @@
 #include <NumericRange.h>
 #include <Trace.h>
 #include <Types.h>
+#include <mpi.h>
+
+#include <cassert>
+#include <iterator>
+#include <memory>
+#include <vector>
 
 namespace fmpi {
 
@@ -130,22 +129,22 @@ inline void oneFactor(
   int nr;
   MPI_Comm_size(comm, &nr);
 
-  using value_type  = typename std::iterator_traits<InputIt>::value_type;
+  using value_type = typename std::iterator_traits<InputIt>::value_type;
   auto rbuf = std::unique_ptr<value_type[]>(new value_type[nr * blocksize]);
 
   if (nr % 2) {
-    detail::oneFactor_odd(begin, &rbuf[0], blocksize, comm, std::forward<Op>(op));
+    detail::oneFactor_odd(
+        begin, &rbuf[0], blocksize, comm, std::forward<Op>(op));
   }
   else {
-    detail::oneFactor_even(begin, &rbuf[0], blocksize, comm, std::forward<Op>(op));
+    detail::oneFactor_even(
+        begin, &rbuf[0], blocksize, comm, std::forward<Op>(op));
   }
-
 
   std::vector<std::pair<InputIt, InputIt>> chunks;
   chunks.reserve(nr);
 
   auto range = fmpi::range(0, nr * blocksize, blocksize);
-
 
   std::transform(
       std::begin(range),

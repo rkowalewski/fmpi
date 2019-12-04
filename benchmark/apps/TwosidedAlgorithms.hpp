@@ -1,10 +1,9 @@
 #ifndef BENCHMARK__TWOSIDED_ALGORITHMS_H
 #define BENCHMARK__TWOSIDED_ALGORITHMS_H
 
+#include <functional>
 #include <rtlx/Timer.hpp>
 #include <rtlx/Trace.hpp>
-
-#include <functional>
 
 struct Measurement {
   size_t nhosts;

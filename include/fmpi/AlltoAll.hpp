@@ -1,6 +1,8 @@
 #ifndef ALLTOALL_H
 #define ALLTOALL_H
 
+#include <algorithm>
+#include <cmath>
 #include <fmpi/Constants.hpp>
 #include <fmpi/Debug.hpp>
 #include <fmpi/Memory.hpp>
@@ -9,12 +11,9 @@
 #include <fmpi/detail/CommState.hpp>
 #include <fmpi/mpi/Algorithm.hpp>
 #include <fmpi/mpi/Request.hpp>
+#include <memory>
 #include <rtlx/Assert.hpp>
 #include <rtlx/Trace.hpp>
-
-#include <algorithm>
-#include <cmath>
-#include <memory>
 #include <stack>
 #include <string_view>
 #include <tlx/math/div_ceil.hpp>

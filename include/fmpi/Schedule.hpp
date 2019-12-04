@@ -9,7 +9,8 @@ class FlatHandshake {
  public:
   static constexpr const char* NAME = "Ring";
 
-  static auto sendRank(::mpi::Context const& comm, uint32_t phase) -> ::mpi::Rank;
+  static auto sendRank(::mpi::Context const& comm, uint32_t phase)
+      -> ::mpi::Rank;
 
   static auto recvRank(mpi::Context const& comm, uint32_t phase) -> mpi::Rank;
 

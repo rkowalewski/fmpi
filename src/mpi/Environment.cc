@@ -1,7 +1,6 @@
 #include <fmpi/mpi/Environment.hpp>
-#include <rtlx/Assert.hpp>
-
 #include <iosfwd>
+#include <rtlx/Assert.hpp>
 
 namespace mpi {
 

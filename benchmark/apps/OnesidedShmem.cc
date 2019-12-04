@@ -1,33 +1,29 @@
+#include <MPISynchronizedBarrier.h>
+#include <MpiAlltoAllBench.h>
+#include <Params.h>
+#include <Random.h>
+#include <Version.h>
+#include <mpi.h>
+#include <omp.h>
+
 #include <algorithm>
 #include <cstring>
+#include <fmpi/AlltoAll.hpp>
+#include <fmpi/Debug.hpp>
+#include <fmpi/SharedMemory.hpp>
 #include <functional>
 #include <iostream>
 #include <iterator>
 #include <memory>
-#include <sstream>
-#include <unordered_map>
-#include <utility>
-#include <vector>
-
-#include <mpi.h>
-#include <omp.h>
-
-#include <fmpi/AlltoAll.hpp>
-#include <fmpi/Debug.hpp>
-#include <fmpi/SharedMemory.hpp>
-
-#include <Random.h>
+#include <parallel/algorithm>
 #include <rtlx/Assert.hpp>
 #include <rtlx/ScopedLambda.hpp>
 #include <rtlx/Timer.hpp>
 #include <rtlx/Trace.hpp>
-
-#include <MPISynchronizedBarrier.h>
-#include <MpiAlltoAllBench.h>
-#include <Version.h>
-#include <parallel/algorithm>
-
-#include <Params.h>
+#include <sstream>
+#include <unordered_map>
+#include <utility>
+#include <vector>
 
 constexpr size_t KB = 1 << 10;
 constexpr size_t MB = 1 << 20;

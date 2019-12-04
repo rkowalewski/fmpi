@@ -4,16 +4,13 @@
 #include <mpi.h>
 
 #include <cmath>
-#include <memory>
-
-#include <rtlx/Assert.hpp>
-#include <rtlx/Trace.hpp>
-
 #include <fmpi/Constants.hpp>
 #include <fmpi/Math.hpp>
 #include <fmpi/mpi/Algorithm.hpp>
 #include <fmpi/mpi/Environment.hpp>
-
+#include <memory>
+#include <rtlx/Assert.hpp>
+#include <rtlx/Trace.hpp>
 #include <tlx/math/integer_log2.hpp>
 
 namespace fmpi {
@@ -24,8 +21,9 @@ template <class BidirIt, class OutputIt>
 #ifndef _OPENMP
 constexpr
 #endif
-OutputIt reverse_copy_strided(
-    BidirIt first, BidirIt last, std::size_t blocksize, OutputIt d_first)
+    OutputIt
+    reverse_copy_strided(
+        BidirIt first, BidirIt last, std::size_t blocksize, OutputIt d_first)
 {
   auto const n = std::distance(first, last);
   RTLX_ASSERT(n % blocksize == 0);

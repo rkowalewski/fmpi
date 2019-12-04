@@ -1,12 +1,12 @@
 #ifndef FMPI_MPI_ENVIRONMENT_H
 #define FMPI_MPI_ENVIRONMENT_H
 
-#include <fmpi/mpi/TypeMapper.hpp>
 #include <mpi.h>
-#include <rtlx/Assert.hpp>
 
 #include <cstdint>
+#include <fmpi/mpi/TypeMapper.hpp>
 #include <iosfwd>
+#include <rtlx/Assert.hpp>
 #include <type_traits>
 
 namespace mpi {

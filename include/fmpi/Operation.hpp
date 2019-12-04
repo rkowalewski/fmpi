@@ -2,7 +2,7 @@
 #define FMPI__OPERATION_H
 
 namespace fmpi {
-  auto isCacheLevel2Utilized(std::size_t nbytes) noexcept -> bool;
+auto isCacheLevel2Utilized(std::size_t nbytes) noexcept -> bool;
 
 }
 #endif

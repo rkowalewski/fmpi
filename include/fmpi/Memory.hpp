@@ -3,9 +3,8 @@
 
 #include <algorithm>
 #include <list>
-#include <vector>
-
 #include <tlx/stack_allocator.hpp>
+#include <vector>
 
 namespace fmpi {
 

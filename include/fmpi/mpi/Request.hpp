@@ -4,12 +4,10 @@
 #include <mpi.h>
 
 #include <array>
-#include <iterator>
-#include <vector>
-
-#include <rtlx/Assert.hpp>
-
 #include <fmpi/Debug.hpp>
+#include <iterator>
+#include <rtlx/Assert.hpp>
+#include <vector>
 
 namespace mpi {
 

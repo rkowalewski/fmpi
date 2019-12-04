@@ -1,17 +1,14 @@
 #ifndef RTLX_COLL_SHMEM_H
 #define RTLX_COLL_SHMEM_H
 
+#include <morton.h>
+
 #include <cstdlib>
-
-#include <rtlx/Assert.hpp>
-
 #include <fmpi/Math.hpp>
 #include <fmpi/mpi/Mpi.hpp>
-
+#include <rtlx/Assert.hpp>
 #include <tlx/math/integer_log2.hpp>
 #include <tlx/simple_vector.hpp>
-
-#include <morton.h>
 
 namespace fmpi {
 
@@ -19,7 +16,7 @@ enum class AllToAllAlgorithm;
 
 template <class T, class Op>
 inline void all2allMortonZSource(
-    mpi::Context const&    ctx,
+    mpi::Context const&       ctx,
     mpi::ShmSegment<T> const& from,
     mpi::ShmSegment<T>&       to,
     int                       blocksize,
@@ -171,13 +168,7 @@ inline void all2allMortonZSource(
                       << "), send to: " << dstRank);
 
         RTLX_ASSERT_RETURNS(
-            MPI_Send(
-                &sflag,
-                0,
-                MPI_BYTE,
-                dstRank,
-                notify_tag,
-                ctx.mpiComm()),
+            MPI_Send(&sflag, 0, MPI_BYTE, dstRank, notify_tag, ctx.mpiComm()),
             MPI_SUCCESS);
       }
       trace.tock(COMMUNICATION);
@@ -221,7 +212,7 @@ inline void all2allMortonZSource(
 
 template <class T, class Op>
 inline void all2allMortonZDest(
-    mpi::Context const&    ctx,
+    mpi::Context const&       ctx,
     mpi::ShmSegment<T> const& from,
     mpi::ShmSegment<T>&       to,
     int                       blocksize,
@@ -380,8 +371,7 @@ inline void all2allMortonZDest(
       FMPI_DBG_STREAM("notify rank: " << dstRank);
 
       RTLX_ASSERT_RETURNS(
-          MPI_Send(
-              &sflag, 0, MPI_BYTE, dstRank, notify_tag, ctx.mpiComm()),
+          MPI_Send(&sflag, 0, MPI_BYTE, dstRank, notify_tag, ctx.mpiComm()),
           MPI_SUCCESS);
       trace.tock(COMMUNICATION);
     }
@@ -426,7 +416,7 @@ inline void all2allMortonZDest(
 
 template <class T, class Op>
 inline void all2allNaive(
-    mpi::Context const&    ctx,
+    mpi::Context const&       ctx,
     mpi::ShmSegment<T> const& from,
     mpi::ShmSegment<T>&       to,
     int                       blocksize,

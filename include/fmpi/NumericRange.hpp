@@ -83,9 +83,8 @@ class numeric_range {
     if (m_dir == direction::increasing) {
       return m_current >= m_final;
     }
-    
-      return m_current <= m_final;
-    
+
+    return m_current <= m_final;
   }
 
  public:
@@ -123,8 +122,9 @@ class numeric_range {
     explicit iterator(numeric_range* range_)
       : range(range_)
     {
-      if (range) { check_done();
-}
+      if (range) {
+        check_done();
+      }
     }
 
     auto operator*() const -> T
@@ -141,7 +141,7 @@ class numeric_range {
     {
       if (!range) {
         throw std::runtime_error("Increment a past-the-end iterator");
-}
+      }
       range->m_inc(range->m_current);
       check_done();
       return *this;
@@ -199,8 +199,9 @@ class numeric_range {
 template <typename T>
 auto range(T from, T to) -> numeric_range<T>
 {
-  if (to < from) { throw std::runtime_error("Cannot count down ");
-}
+  if (to < from) {
+    throw std::runtime_error("Cannot count down ");
+  }
   return numeric_range<T>(std::move(from), std::move(to));
 }
 
@@ -213,8 +214,9 @@ auto range(T to) -> numeric_range<T>
 template <typename T>
 auto range(T from, T to, T delta) -> numeric_range<T, IncrementBy<T>>
 {
-  if (!delta) { throw std::runtime_error("Step must be non-zero");
-}
+  if (!delta) {
+    throw std::runtime_error("Step must be non-zero");
+  }
   using direction = typename numeric_range<T, IncrementBy<T>>::direction;
   direction const m_dir =
       (delta > T()) ? direction::increasing : direction::decreasing;

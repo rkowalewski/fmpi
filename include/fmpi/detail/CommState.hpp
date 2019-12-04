@@ -4,7 +4,6 @@
 #include <fmpi/Debug.hpp>
 #include <fmpi/Memory.hpp>
 #include <fmpi/NumericRange.hpp>
-
 #include <list>
 #include <tlx/simple_vector.hpp>
 

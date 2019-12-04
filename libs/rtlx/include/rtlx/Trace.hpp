@@ -1,11 +1,10 @@
 #ifndef RTLX_TRACE_H
 #define RTLX_TRACE_H
 
-#include <rtlx/Timer.hpp>
-
 #include <iosfwd>
 #include <memory>
 #include <mutex>
+#include <rtlx/Timer.hpp>
 #include <string>
 #include <unordered_map>
 #include <variant>
@@ -28,9 +27,11 @@ class TraceStore {
   TraceStore(const TraceStore &src) = delete;
   auto operator=(const TraceStore &rhs) -> TraceStore & = delete;
 
-  auto traces(context_t const &ctx) -> std::unordered_map<key_t, value_t> const &;
-  //void clear();
-  static constexpr auto enabled() noexcept -> bool {
+  auto traces(context_t const &ctx)
+      -> std::unordered_map<key_t, value_t> const &;
+  // void clear();
+  static constexpr auto enabled() noexcept -> bool
+  {
 #ifdef RTLX_ENABLE_TRACE
     return true;
 #else
