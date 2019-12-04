@@ -1,5 +1,5 @@
-#ifndef FMPI_MPI_TYPEMAPPER_H
-#define FMPI_MPI_TYPEMAPPER_H
+#ifndef FMPI_MPI_TYPEMAPPER_HPP
+#define FMPI_MPI_TYPEMAPPER_HPP
 
 #include <mpi.h>
 

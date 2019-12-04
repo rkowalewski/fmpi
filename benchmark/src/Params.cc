@@ -11,8 +11,6 @@
 #include <string>
 #include <tlx/cmdline_parser.hpp>
 
-extern char** environ;
-
 namespace fmpi {
 namespace benchmark {
 
@@ -43,7 +41,7 @@ class basic_onullstream : public std::basic_ostream<cT, traits> {
 using onullstream  = basic_onullstream<char>;
 using wonullstream = basic_onullstream<wchar_t>;
 
-static std::string getexepath()
+static auto getexepath() -> std::string
 {
   char    result[PATH_MAX];
   ssize_t count = readlink("/proc/self/exe", result, PATH_MAX);

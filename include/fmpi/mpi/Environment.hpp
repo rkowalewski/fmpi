@@ -1,5 +1,5 @@
-#ifndef FMPI_MPI_ENVIRONMENT_H
-#define FMPI_MPI_ENVIRONMENT_H
+#ifndef FMPI_MPI_ENVIRONMENT_HPP
+#define FMPI_MPI_ENVIRONMENT_HPP
 
 #include <mpi.h>
 

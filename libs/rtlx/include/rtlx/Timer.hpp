@@ -1,5 +1,5 @@
-#ifndef RTLX_TIMER_H
-#define RTLX_TIMER_H
+#ifndef RTLX_TIMER_HPP
+#define RTLX_TIMER_HPP
 
 #include <chrono>
 

@@ -1,5 +1,5 @@
-#ifndef FMPI_DEBUG_H
-#define FMPI_DEBUG_H
+#ifndef FMPI_DEBUG_HPP
+#define FMPI_DEBUG_HPP
 
 #ifndef NDEBUG
 #include <dbg.h>

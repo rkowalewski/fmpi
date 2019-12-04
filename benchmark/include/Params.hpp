@@ -1,5 +1,5 @@
-#ifndef PARAMS_H
-#define PARAMS_H
+#ifndef PARAMS_HPP
+#define PARAMS_HPP
 
 #include <fmpi/mpi/Environment.hpp>
 #include <iosfwd>

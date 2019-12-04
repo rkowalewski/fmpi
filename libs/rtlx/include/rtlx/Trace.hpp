@@ -1,5 +1,5 @@
-#ifndef RTLX_TRACE_H
-#define RTLX_TRACE_H
+#ifndef RTLX_TRACE_HPP
+#define RTLX_TRACE_HPP
 
 #include <iosfwd>
 #include <memory>

@@ -1,5 +1,5 @@
-#ifndef FMPI_MATH_H
-#define FMPI_MATH_H
+#ifndef FMPI_MATH_HPP
+#define FMPI_MATH_HPP
 
 #include <climits>
 #include <rtlx/Assert.hpp>

@@ -1,5 +1,5 @@
-#ifndef FMPI_MPI_ALGORITHM_H
-#define FMPI_MPI_ALGORITHM_H
+#ifndef FMPI_MPI_ALGORITHM_HPP
+#define FMPI_MPI_ALGORITHM_HPP
 
 #include <fmpi/mpi/Environment.hpp>
 #include <rtlx/Assert.hpp>

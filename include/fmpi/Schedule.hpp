@@ -1,5 +1,5 @@
-#ifndef FMPI_SCHEDULE_H
-#define FMPI_SCHEDULE_H
+#ifndef FMPI_SCHEDULE_HPP
+#define FMPI_SCHEDULE_HPP
 
 #include <fmpi/mpi/Environment.hpp>
 
