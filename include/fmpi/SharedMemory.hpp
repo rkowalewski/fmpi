@@ -3,10 +3,10 @@
 
 #include <cstdlib>
 
-#include <rtlx/Assert.h>
+#include <rtlx/Assert.hpp>
 
-#include <fmpi/Math.h>
-#include <fmpi/mpi/Mpi.h>
+#include <fmpi/Math.hpp>
+#include <fmpi/mpi/Mpi.hpp>
 
 #include <tlx/math/integer_log2.hpp>
 #include <tlx/simple_vector.hpp>

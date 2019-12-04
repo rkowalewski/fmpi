@@ -1,16 +1,16 @@
 #ifndef ALLTOALL_H
 #define ALLTOALL_H
 
-#include <fmpi/Constants.h>
-#include <fmpi/Debug.h>
-#include <fmpi/Memory.h>
-#include <fmpi/NumericRange.h>
-#include <fmpi/Schedule.h>
-#include <fmpi/detail/CommState.h>
-#include <fmpi/mpi/Algorithm.h>
-#include <fmpi/mpi/Request.h>
-#include <rtlx/Assert.h>
-#include <rtlx/Trace.h>
+#include <fmpi/Constants.hpp>
+#include <fmpi/Debug.hpp>
+#include <fmpi/Memory.hpp>
+#include <fmpi/NumericRange.hpp>
+#include <fmpi/Schedule.hpp>
+#include <fmpi/detail/CommState.hpp>
+#include <fmpi/mpi/Algorithm.hpp>
+#include <fmpi/mpi/Request.hpp>
+#include <rtlx/Assert.hpp>
+#include <rtlx/Trace.hpp>
 
 #include <algorithm>
 #include <cmath>

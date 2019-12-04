@@ -1,5 +1,5 @@
-#include <fmpi/Constants.h>
-#include <fmpi/Operation.h>
+#include <fmpi/Constants.hpp>
+#include <fmpi/Operation.hpp>
 
 namespace fmpi {
 auto isCacheLevel2Utilized(std::size_t nbytes) noexcept -> bool

@@ -1,6 +1,6 @@
-#include <rtlx/Assert.h>
-#include <rtlx/Timer.h>
-#include <rtlx/Trace.h>
+#include <rtlx/Assert.hpp>
+#include <rtlx/Timer.hpp>
+#include <rtlx/Trace.hpp>
 
 #include <cstring>
 #include <iostream>

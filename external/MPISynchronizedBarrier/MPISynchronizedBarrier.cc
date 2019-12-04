@@ -6,7 +6,7 @@
  * All rights reserved. Published under the BSD-2 license in the LICENSE file.
 ******************************************************************************/
 
-#include "MPISynchronizedBarrier.h"
+#include "MPISynchronizedBarrier.hpp"
 
 #include <mpi.h>
 

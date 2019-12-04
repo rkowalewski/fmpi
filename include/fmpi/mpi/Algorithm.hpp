@@ -1,9 +1,9 @@
 #ifndef FMPI_MPI_ALGORITHM_H
 #define FMPI_MPI_ALGORITHM_H
 
-#include <fmpi/mpi/Environment.h>
+#include <fmpi/mpi/Environment.hpp>
 
-#include <rtlx/Assert.h>
+#include <rtlx/Assert.hpp>
 
 namespace mpi {
 

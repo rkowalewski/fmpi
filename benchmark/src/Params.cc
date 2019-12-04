@@ -1,7 +1,7 @@
-#include <Params.h>
+#include <Params.hpp>
 #include <Version.h>
-#include <fmpi/NumericRange.h>
-#include <rtlx/Assert.h>
+#include <fmpi/NumericRange.hpp>
+#include <rtlx/Assert.hpp>
 #include <unistd.h>
 
 #include <climits>

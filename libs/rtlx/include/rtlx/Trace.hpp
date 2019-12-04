@@ -1,7 +1,7 @@
 #ifndef RTLX_TRACE_H
 #define RTLX_TRACE_H
 
-#include <rtlx/Timer.h>
+#include <rtlx/Timer.hpp>
 
 #include <iosfwd>
 #include <memory>

@@ -1,5 +1,5 @@
-#include <fmpi/Memory.h>
-#include <fmpi/mpi/Request.h>
+#include <fmpi/Memory.hpp>
+#include <fmpi/mpi/Request.hpp>
 
 namespace mpi {
 

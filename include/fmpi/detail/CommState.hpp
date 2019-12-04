@@ -1,9 +1,9 @@
 #ifndef FMPI__DETAIL__COMM_STATE_H
 #define FMPI__DETAIL__COMM_STATE_H
 
-#include <fmpi/Debug.h>
-#include <fmpi/Memory.h>
-#include <fmpi/NumericRange.h>
+#include <fmpi/Debug.hpp>
+#include <fmpi/Memory.hpp>
+#include <fmpi/NumericRange.hpp>
 
 #include <list>
 #include <tlx/simple_vector.hpp>

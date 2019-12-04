@@ -1,8 +1,8 @@
 #ifndef BENCHMARK__TWOSIDED_ALGORITHMS_H
 #define BENCHMARK__TWOSIDED_ALGORITHMS_H
 
-#include <rtlx/Timer.h>
-#include <rtlx/Trace.h>
+#include <rtlx/Timer.hpp>
+#include <rtlx/Trace.hpp>
 
 #include <functional>
 

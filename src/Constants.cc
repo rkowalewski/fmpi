@@ -1,4 +1,4 @@
-#include <fmpi/Constants.h>
+#include <fmpi/Constants.hpp>
 
 /* The FMPI_* Constants are given as compile time defition in CMake */
 

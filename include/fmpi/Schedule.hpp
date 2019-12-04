@@ -1,7 +1,7 @@
 #ifndef FMPI_SCHEDULE_H
 #define FMPI_SCHEDULE_H
 
-#include <fmpi/mpi/Environment.h>
+#include <fmpi/mpi/Environment.hpp>
 
 namespace fmpi {
 

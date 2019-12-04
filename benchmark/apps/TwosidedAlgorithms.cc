@@ -1,12 +1,12 @@
-#include <MPISynchronizedBarrier.h>
-#include <Params.h>
-#include <Random.h>
-#include <TwosidedAlgorithms.h>
-#include <fmpi/AlltoAll.h>
-#include <fmpi/Bruck.h>
-#include <fmpi/Math.h>
+#include <MPISynchronizedBarrier.hpp>
+#include <Params.hpp>
+#include <Random.hpp>
+#include <TwosidedAlgorithms.hpp>
+#include <fmpi/AlltoAll.hpp>
+#include <fmpi/Bruck.hpp>
+#include <fmpi/Math.hpp>
 #include <omp.h>
-#include <rtlx/ScopedLambda.h>
+#include <rtlx/ScopedLambda.hpp>
 
 #include <parallel/algorithm>
 #include <regex>

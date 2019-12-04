@@ -1,4 +1,4 @@
-#include <fmpi/mpi/Algorithm.h>
+#include <fmpi/mpi/Algorithm.hpp>
 
 namespace mpi {
 

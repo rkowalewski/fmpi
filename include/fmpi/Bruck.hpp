@@ -6,13 +6,13 @@
 #include <cmath>
 #include <memory>
 
-#include <rtlx/Assert.h>
-#include <rtlx/Trace.h>
+#include <rtlx/Assert.hpp>
+#include <rtlx/Trace.hpp>
 
-#include <fmpi/Constants.h>
-#include <fmpi/Math.h>
-#include <fmpi/mpi/Algorithm.h>
-#include <fmpi/mpi/Environment.h>
+#include <fmpi/Constants.hpp>
+#include <fmpi/Math.hpp>
+#include <fmpi/mpi/Algorithm.hpp>
+#include <fmpi/mpi/Environment.hpp>
 
 #include <tlx/math/integer_log2.hpp>
 

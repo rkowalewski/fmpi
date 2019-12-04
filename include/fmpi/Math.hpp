@@ -1,7 +1,7 @@
 #ifndef FMPI_MATH_H
 #define FMPI_MATH_H
 
-#include <rtlx/Assert.h>
+#include <rtlx/Assert.hpp>
 
 #include <type_traits>
 

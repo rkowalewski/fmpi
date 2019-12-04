@@ -1,5 +1,5 @@
-#include <fmpi/Math.h>
-#include <fmpi/Schedule.h>
+#include <fmpi/Math.hpp>
+#include <fmpi/Schedule.hpp>
 
 using Rank    = mpi::Rank;
 using Context = mpi::Context;

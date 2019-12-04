@@ -5,10 +5,10 @@
 #include <iostream>
 #include <sstream>
 
-#include <fmpi/mpi/Environment.h>
+#include <fmpi/mpi/Environment.hpp>
 
-#include <rtlx/Assert.h>
-#include <rtlx/ScopedLambda.h>
+#include <rtlx/Assert.hpp>
+#include <rtlx/ScopedLambda.hpp>
 
 int main(int argc, char** argv)
 {

@@ -1,9 +1,9 @@
 #ifndef FMPI_MPI_ENVIRONMENT_H
 #define FMPI_MPI_ENVIRONMENT_H
 
-#include <fmpi/mpi/TypeMapper.h>
+#include <fmpi/mpi/TypeMapper.hpp>
 #include <mpi.h>
-#include <rtlx/Assert.h>
+#include <rtlx/Assert.hpp>
 
 #include <cstdint>
 #include <iosfwd>

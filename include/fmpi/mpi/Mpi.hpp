@@ -7,11 +7,11 @@
 #include <tuple>
 #include <type_traits>
 
-#include <rtlx/Assert.h>
+#include <rtlx/Assert.hpp>
 
 #include <tlx/simple_vector.hpp>
 
-#include <fmpi/mpi/Algorithm.h>
+#include <fmpi/mpi/Algorithm.hpp>
 
 #if 0
 namespace mpi {

@@ -1,5 +1,5 @@
-#include <fmpi/mpi/Environment.h>
-#include <rtlx/Assert.h>
+#include <fmpi/mpi/Environment.hpp>
+#include <rtlx/Assert.hpp>
 
 #include <iosfwd>
 

@@ -12,15 +12,15 @@
 #include <mpi.h>
 #include <omp.h>
 
-#include <fmpi/AlltoAll.h>
-#include <fmpi/Debug.h>
-#include <fmpi/SharedMemory.h>
+#include <fmpi/AlltoAll.hpp>
+#include <fmpi/Debug.hpp>
+#include <fmpi/SharedMemory.hpp>
 
 #include <Random.h>
-#include <rtlx/Assert.h>
-#include <rtlx/ScopedLambda.h>
-#include <rtlx/Timer.h>
-#include <rtlx/Trace.h>
+#include <rtlx/Assert.hpp>
+#include <rtlx/ScopedLambda.hpp>
+#include <rtlx/Timer.hpp>
+#include <rtlx/Trace.hpp>
 
 #include <MPISynchronizedBarrier.h>
 #include <MpiAlltoAllBench.h>

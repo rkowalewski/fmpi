@@ -7,9 +7,9 @@
 #include <iterator>
 #include <vector>
 
-#include <rtlx/Assert.h>
+#include <rtlx/Assert.hpp>
 
-#include <fmpi/Debug.h>
+#include <fmpi/Debug.hpp>
 
 namespace mpi {
 

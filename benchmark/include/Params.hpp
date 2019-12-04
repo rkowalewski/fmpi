@@ -1,7 +1,7 @@
 #ifndef PARAMS_H
 #define PARAMS_H
 
-#include <fmpi/mpi/Environment.h>
+#include <fmpi/mpi/Environment.hpp>
 
 #include <iosfwd>
 #include <vector>
