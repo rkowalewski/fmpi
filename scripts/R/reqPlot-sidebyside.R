@@ -3,6 +3,7 @@
 suppressMessages(library(ggforce))
 suppressMessages(library(tidyverse))
 suppressMessages(library(argparser))
+suppressMessages(library(cowplot))
 
 thisFile <- function() {
     cmdArgs <- commandArgs(trailingOnly = FALSE)
@@ -20,6 +21,8 @@ thisFile <- function() {
 params <- arg_parser("visualizing comm progress efficiency")
 params <- add_argument(params, "--input", help = "input file", default = "-")
 params <- add_argument(params, "--output", help = "output file", default = "output.pdf")
+params <- add_argument(params, "--title", help = "title of plot", default = "")
+params <- add_argument(params, "--paper", help = "paper format", default = "special")
 
 argv <- parse_args(params)
 
@@ -54,24 +57,52 @@ mylimit <- function(x) {
     limits
 }
 
+mylimit2 <- function(x) {
+    limits <- c(min(x), max(x))
+    limits
+}
 
-pdf(argv$output,paper="a4")
 
-p <- ggplot(data = df.in) +
+pdf(argv$output, paper=argv$paper)
+
+p <- ggplot(data = df.in, aes(x = factor(Nodes), y = efficiency, colour = Algo, group = Algo)) +
     geom_line(
-        aes(x = factor(Nodes), y = efficiency, colour = Algo, group = Algo), position = pd) +
+        position = pd) +
     scale_y_continuous(limits = mylimit) +
     scale_colour_brewer(type="qal", palette="Paired") +
     geom_point(
-        aes(x = factor(Nodes), y = efficiency, colour = Algo, group = Algo, shape=Algo),
+        aes(shape=Algo),
         position = pd, size = 2) +
-    theme_bw() + xlab('Nodes') + ylab('Comm_Rounds') +
-    facet_wrap_paginate(~Blocksize, ncol=1, nrow=3, scales="free_y", page=NULL)
+    xlab('Nodes') + ylab('Progress Efficiency') +
+    theme_bw()
 
-# Here we add our special class
-if(!exists("print.gg_multiple", mode="function")) {
-    source(paste0(dirname(thisFile()), "/internal/", "gg_multiple.R"))
+if (argv$title != '') {
+    p <- p + ggtitle(argv$title)
 }
-class(p) <- c('gg_multiple', class(p))
 
-print(p)
+df.smooth <- df.in %>% filter(grepl("Ring.*some16", Algo))
+
+if (nrow(df.smooth %>% filter(grepl(".*Testsome.*", Algo))) > 0) {
+    df.smooth <- df.smooth %>% filter(Nodes %in% c(2,4,8,16,32))
+}
+
+p1 <- ggplot(data = df.in, aes(x = factor(Nodes), y = median)) +
+    geom_line(
+        aes(colour = Algo, group = Algo), position = pd) +
+    scale_y_continuous(trans="log2") +
+    scale_colour_brewer(type="qal", palette="Paired") +
+    geom_point(
+        aes(colour = Algo, group = Algo, shape=Algo),# & Nodes %in% c(2,4,8,16,32)
+        position = pd, size = 2) +
+    geom_smooth(data = df.smooth, aes(x = as.numeric(factor(Nodes)), y=median), method="lm", se = FALSE, linetype = "dashed", size=1, fullrange=TRUE) +
+    theme_bw()  + xlab('Nodes') + ylab('# Test / Wait Calls')
+
+cowplot::plot_grid(p, p1, ncol=1)
+
+## Here we add our special class
+#if(!exists("print.gg_multiple", mode="function")) {
+#    source(paste0(dirname(thisFile()), "/internal/", "gg_multiple.R"))
+#}
+#class(p) <- c('gg_multiple', class(p))
+
+#print(p)

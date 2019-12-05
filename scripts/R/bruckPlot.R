@@ -54,7 +54,7 @@ theme <- theme_bw()
 theme$axis.text.x <- element_text(angle = 45)
 
 my_labeller <- label_bquote(
-  cols = .(Nodes) / .(PPN) / .(Threads) / .(Blocksize)
+  cols = .(Nodes)
 )
 
 pd <- position_dodge(0.1)
@@ -67,7 +67,7 @@ p <- ggplot(data=df.pnt, aes(x=Algo, y=median, group=Algo)) +
     geom_errorbar(
         aes(ymin=med_lowerCI, ymax=med_upperCI), colour="black", width=.1, position=pd) +
     # Plotting the median of all algorithms
-    geom_point(position=pd, size=1, shape=21) +
+    geom_point(position=pd, size=2, shape=23) +
     #geom_hline(data=df.a2a, aes(yintercept=median), colour="black", linetype="dashed") +
     # To use for line and point colors, add
     scale_fill_brewer(type="qal", palette="Paired") +
