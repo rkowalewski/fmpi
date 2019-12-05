@@ -10,6 +10,7 @@
 #include <parallel/algorithm>
 #include <regex>
 #include <rtlx/ScopedLambda.hpp>
+#include <tlx/algorithm.hpp>
 #include <tlx/container/simple_vector.hpp>
 
 #ifdef NDEBUG
@@ -290,6 +291,7 @@ int main(int argc, char* argv[])
         RTLX_ASSERT(seqs.size());
         RTLX_ASSERT(res);
 
+#if 0
         __gnu_parallel::multiway_merge(
             std::begin(seqs),
             std::end(seqs),
@@ -297,6 +299,17 @@ int main(int argc, char* argv[])
             nels,
             std::less<>{},
             __gnu_parallel::parallel_tag{nthreads});
+#else
+        tlx::parallel_multiway_merge(
+            std::begin(seqs),
+            std::end(seqs),
+            res,
+            nels,
+            std::less<>{},
+            tlx::MultiwayMergeAlgorithm::MWMA_ALGORITHM_DEFAULT,
+            tlx::MultiwayMergeSplittingAlgorithm::MWMSA_DEFAULT,
+            nthreads == 0 ? std::thread::hardware_concurrency() : nthreads);
+#endif
       };
 
       // first we want to obtain the correct result which we can verify then

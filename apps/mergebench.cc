@@ -57,6 +57,56 @@ BENCHMARK(BM_OpenMP)
     ->UseRealTime();
 #endif
 
+static void BM_TlxMergeSequential(benchmark::State& state)
+{
+  using value_t = int;
+
+  auto const nblocks   = state.range(0);
+  auto const blocksize = state.range(1) / sizeof(value_t);
+
+  auto const size = nblocks * blocksize;
+
+  std::vector<value_t> src(size);
+  std::vector<value_t> target(size);
+
+  std::mt19937_64 generator(random_seed_seq::get_instance());
+  std::uniform_int_distribution<value_t> distribution(-1E6, 1E6);
+
+  using iterator = typename std::vector<value_t>::iterator;
+
+  // initialize vectors with random numbers
+  std::generate(
+      src.begin(), src.end(), [&]() { return distribution(generator); });
+
+  std::vector<std::pair<iterator, iterator>> chunks(nblocks);
+
+  for (auto b = 0; b < nblocks; ++b) {
+    auto f    = std::next(src.begin(), b * blocksize);
+    auto l    = std::next(f, blocksize);
+    std::sort(f, l);
+    chunks[b] = std::make_pair(f, l);
+  }
+
+  for (auto _ : state) {
+#if 1
+    auto res = tlx::multiway_merge(
+        chunks.begin(), chunks.end(), target.begin(), size);
+#else
+
+    auto res = __gnu_parallel::multiway_merge(
+        std::begin(chunks),
+        std::end(chunks),
+        target.begin(),
+        size,
+        std::less<>{},
+        __gnu_parallel::parallel_tag{0});
+#endif
+
+    benchmark::DoNotOptimize(res);
+  }
+}
+
+
 static void BM_TlxMerge(benchmark::State& state)
 {
   using value_t = int;
@@ -114,6 +164,7 @@ static void CustomArguments(benchmark::internal::Benchmark* b)
 }
 
 BENCHMARK(BM_TlxMerge)->Apply(CustomArguments)->UseRealTime();
+BENCHMARK(BM_TlxMergeSequential)->Apply(CustomArguments)->UseRealTime();
 
 // Run the benchmark
 BENCHMARK_MAIN();
