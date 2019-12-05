@@ -159,8 +159,36 @@ static void BM_TlxMerge(benchmark::State& state)
 static void CustomArguments(benchmark::internal::Benchmark* b)
 {
   constexpr long max_blocks = 48;
-  for (long i = 6; i <= max_blocks; i *= 2)
-    for (long j = 8; j <= 1024 * 1024; j *= 8) b->Args({i, j});
+
+  constexpr std::size_t l1dCache = 32768;
+  constexpr std::size_t l2Cache  = 1048576;
+  constexpr std::size_t l3Cache  = 2883584;
+
+  auto const num_threads = omp_get_max_threads();
+  std::vector<int> cpu_names(num_threads);
+
+  printf("hello\n");
+
+#pragma omp parallel default(none) shared(cpu_names)
+  {
+    auto thread_num = omp_get_thread_num(); //Test
+    int cpu = sched_getcpu();
+    cpu_names[thread_num] = cpu;
+  }
+
+#if 0
+  for (auto&& r : fmpi::range(cpu_names.size())) {
+    std::cout << "{" << r << ", " << cpu_names[r] << "}\n";
+  }
+#endif
+
+  for (long i = 6; i <= max_blocks; i *= 2) {
+    constexpr std::size_t multiplier = 4;
+    auto const max = num_threads * l2Cache * multiplier / i;
+    for (long j = 8; j <= max; j *= multiplier) {
+      b->Args({i, j});
+    }
+  }
 }
 
 BENCHMARK(BM_TlxMerge)->Apply(CustomArguments)->UseRealTime();
