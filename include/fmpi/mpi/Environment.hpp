@@ -3,11 +3,16 @@
 
 #include <mpi.h>
 
+#ifdef FMPI_USEHWLOC
+#include <hwloc.h>
+#endif
+
 #include <cstdint>
 #include <fmpi/mpi/TypeMapper.hpp>
 #include <iosfwd>
 #include <rtlx/Assert.hpp>
 #include <type_traits>
+
 
 namespace mpi {
 
@@ -45,6 +50,7 @@ class Context {
 
  public:
   explicit Context(MPI_Comm comm);
+  ~Context();
 
   [[nodiscard]] auto rank() const noexcept -> Rank;
 
@@ -52,10 +58,15 @@ class Context {
 
   [[nodiscard]] auto mpiComm() const noexcept -> MPI_Comm;
 
+  [[nodiscard]] auto getLastCPU() const -> int;
+
  private:
   size_type m_size{};
   Rank      m_rank{};
   MPI_Comm  m_comm{MPI_COMM_NULL};
+#ifdef FMPI_USEHWLOC
+  hwloc_topology_t topo_;
+#endif
 };
 
 auto splitSharedComm(Context const& baseComm) -> Context;

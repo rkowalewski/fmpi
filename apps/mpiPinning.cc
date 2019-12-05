@@ -35,6 +35,13 @@ int main(int argc, char** argv)
 
   std::vector<int> cpu_names(omp_get_max_threads());
 
+  {
+    std::ostringstream os;
+    os << "last cpu: " << worldCtx.getLastCPU() << "\n";
+    std::cout << os.str();
+  }
+
+
 #pragma omp parallel default(none) shared(cpu_names)
   {
     auto thread_num = omp_get_thread_num(); //Test

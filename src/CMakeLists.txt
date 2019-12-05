@@ -10,6 +10,11 @@ target_include_directories(fmpi PUBLIC ../include)
 target_link_libraries(fmpi PUBLIC MPI::MPI_CXX dbg_macro)
 target_link_libraries(fmpi PRIVATE rtlx tlx)
 
+if(HWLOC_FOUND)
+    target_link_libraries(fmpi PRIVATE fmpi::hwloc)
+    target_compile_definitions (fmpi PRIVATE FMPI_USEHWLOC)
+endif()
+
 if (UNIX)
     execute_process(COMMAND getconf LEVEL3_CACHE_SIZE
         OUTPUT_VARIABLE _l3CacheSize OUTPUT_STRIP_TRAILING_WHITESPACE)

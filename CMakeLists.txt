@@ -14,6 +14,9 @@ set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 
+
+list(APPEND CMAKE_MODULE_PATH "${CMAKE_SOURCE_DIR}/cmake/modules")
+
 if (NOT CMAKE_BUILD_TYPE)
     if ("${CMAKE_BINARY_DIR}" MATCHES ".*(R|r)elease$")
         message(STATUS "No build type selected, default to: Release")
@@ -52,10 +55,16 @@ endif()
 
 # Options
 option(MPI_CXX_SKIP_MPICXX "" ON)
+option(WITH_HWLOC           "Enable hwloc support" OFF)
 
 include(${CMAKE_SOURCE_DIR}/cmake/FindMPI.cmake)
 include(${CMAKE_SOURCE_DIR}/cmake/FindOpenMP.cmake)
 include(${CMAKE_SOURCE_DIR}/cmake/ClangTidy.cmake)
+
+if (WITH_HWLOC)
+    include(${CMAKE_SOURCE_DIR}/cmake/SetupHwloc.cmake)
+endif()
+
 
 set(BENCHMARK_ENABLE_GTEST_TESTS OFF CACHE BOOL "Disable")
 set(BENCHMARK_ENABLE_TESTING OFF CACHE BOOL "Disable")
