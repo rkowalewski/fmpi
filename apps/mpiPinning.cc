@@ -6,6 +6,7 @@
 #include <sstream>
 
 #include <fmpi/mpi/Environment.hpp>
+#include <fmpi/NumericRange.hpp>
 
 #include <rtlx/Assert.hpp>
 #include <rtlx/ScopedLambda.hpp>
@@ -32,18 +33,33 @@ int main(int argc, char** argv)
 
   std::string hostname(_hostname);
 
-  std::ostringstream os;
-  os << "I am " << hostname << " (rank " << me << " of " << nr << ")\n";
+  std::vector<int> cpu_names(omp_get_max_threads());
 
-  std::cout << os.str();
-
-#pragma omp parallel default(none) firstprivate(me)
+#pragma omp parallel default(none) shared(cpu_names)
   {
     auto thread_num = omp_get_thread_num(); //Test
     int cpu = sched_getcpu();
-
-    printf("Rank: %d, ThreadId: %d, cpu: %d\n", static_cast<int>(me), thread_num, cpu);
+    cpu_names[thread_num] = cpu;
   }
+
+
+  if (me == 0) {
+    std::cout << "Rank, CPU, Threads, ThreadID, Core\n";
+  }
+
+  MPI_Barrier(worldCtx.mpiComm());
+
+  std::ostringstream os;
+  for (auto&& r : fmpi::range(cpu_names.size())) {
+    os << me << ", "
+      << hostname << ", "
+      << cpu_names.size() << ", "
+      << r << ", "
+      << cpu_names[r] << "\n";
+  }
+
+  std::cout << os.str();
+
 
   return 0;
 }
