@@ -88,7 +88,7 @@ static void BM_TlxMerge(benchmark::State& state)
   }
 
   for (auto _ : state) {
-#if 0
+#if 1
     auto res = tlx::parallel_multiway_merge(
         chunks.begin(), chunks.end(), target.begin(), size);
 #else
