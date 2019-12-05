@@ -8,9 +8,11 @@
 #include <fmpi/Memory.hpp>
 #include <fmpi/NumericRange.hpp>
 #include <fmpi/Schedule.hpp>
+#include <fmpi/container/circularfifo.hpp>
 #include <fmpi/detail/CommState.hpp>
 #include <fmpi/mpi/Algorithm.hpp>
 #include <fmpi/mpi/Request.hpp>
+#include <future>
 #include <memory>
 #include <rtlx/Assert.hpp>
 #include <rtlx/Trace.hpp>
@@ -262,7 +264,8 @@ inline void scatteredPairwiseWaitsome(
 
   auto alreadyDone = reqsInFlight == totalExchanges;
 
-  auto chunks_to_merge = std::vector<std::pair<InputIt, InputIt>>{};
+  using iter_pair      = std::pair<InputIt, InputIt>;
+  auto chunks_to_merge = std::vector<iter_pair>{};
   chunks_to_merge.reserve(
       alreadyDone ?
                   // we add 1 due to the local portion
@@ -327,6 +330,13 @@ inline void scatteredPairwiseWaitsome(
   int n_comm_rounds = 0;
 
   trace.tock(COMMUNICATION);
+
+  using Fifo = CircularFifo<iter_pair, NReqs>;
+  Fifo queue;
+
+#if 0
+  auto consumer = std::async(std::launch::async, [n = nr]() {});
+#endif
 
   while (ncReqs < totalReqs) {
     ++n_comm_rounds;

@@ -2,6 +2,8 @@ add_subdirectory(tlx)
 add_subdirectory(libmorton)
 add_subdirectory(dbg-macro)
 
+add_subdirectory(google/benchmark)
+
 add_library(MPISynchronizedBarrier MPISynchronizedBarrier/MPISynchronizedBarrier.cc)
 
 target_include_directories(MPISynchronizedBarrier PUBLIC

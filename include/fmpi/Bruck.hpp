@@ -12,6 +12,7 @@
 #include <rtlx/Assert.hpp>
 #include <rtlx/Trace.hpp>
 #include <tlx/math/integer_log2.hpp>
+#include <numeric>
 
 namespace fmpi {
 

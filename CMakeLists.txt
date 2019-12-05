@@ -57,10 +57,12 @@ include(${CMAKE_SOURCE_DIR}/cmake/FindMPI.cmake)
 include(${CMAKE_SOURCE_DIR}/cmake/FindOpenMP.cmake)
 include(${CMAKE_SOURCE_DIR}/cmake/ClangTidy.cmake)
 
+set(BENCHMARK_ENABLE_GTEST_TESTS OFF CACHE BOOL "Disable")
+set(BENCHMARK_ENABLE_TESTING OFF CACHE BOOL "Disable")
+
 add_subdirectory(external)
 add_subdirectory(libs)
 add_subdirectory(src)
 
 add_subdirectory(apps)
 add_subdirectory(benchmark)
-

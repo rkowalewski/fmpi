@@ -1,5 +1,6 @@
 #ifndef RANDOM_H__INCLUDED
 #define RANDOM_H__INCLUDED
+
 #include <random>
 
 struct random_seed_seq {

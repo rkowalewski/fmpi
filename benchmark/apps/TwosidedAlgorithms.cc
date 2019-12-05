@@ -2,11 +2,11 @@
 
 #include <MPISynchronizedBarrier.hpp>
 #include <Params.hpp>
-#include <Random.hpp>
 #include <TwosidedAlgorithms.hpp>
 #include <fmpi/AlltoAll.hpp>
 #include <fmpi/Bruck.hpp>
 #include <fmpi/Math.hpp>
+#include <fmpi/Random.hpp>
 #include <parallel/algorithm>
 #include <regex>
 #include <rtlx/ScopedLambda.hpp>
@@ -320,7 +320,6 @@ int main(int argc, char* argv[])
       m.nbytes    = nels * nr * sizeof(value_t);
       m.blocksize = blocksize;
 
-
       for (auto const& algo : ALGORITHMS) {
         FMPI_DBG_STREAM("running algorithm: " << algo.first);
 
@@ -375,7 +374,6 @@ int main(int argc, char* argv[])
 
         traceStore.erase(algo.first);
       }
-
 
       // synchronize before advancing to the next stage
       FMPI_DBG("Iteration Finished");

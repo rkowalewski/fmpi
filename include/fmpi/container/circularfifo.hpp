@@ -23,7 +23,6 @@
 
 namespace fmpi {
 
-namespace memory_relaxed_aquire_release {
 template <typename Element, size_t Size>
 class CircularFifo {
  public:
@@ -110,6 +109,5 @@ size_t CircularFifo<Element, Size>::increment(size_t idx) const
   return (idx + 1) % Capacity;
 }
 
-}  // namespace memory_relaxed_aquire_release
 }  // namespace fmpi
 #endif /* CIRCULARFIFO_AQUIRE_RELEASE_H_ */

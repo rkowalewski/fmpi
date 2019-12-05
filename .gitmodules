@@ -7,3 +7,6 @@
 [submodule "external/dbg-macro"]
 	path = external/dbg-macro
 	url = git@github.com:sharkdp/dbg-macro.git
+[submodule "external/google/benchmark"]
+	path = external/google/benchmark
+	url = git@github.com:google/benchmark.git
