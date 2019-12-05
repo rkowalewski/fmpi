@@ -58,7 +58,7 @@ class Context {
 
   [[nodiscard]] auto mpiComm() const noexcept -> MPI_Comm;
 
-  [[nodiscard]] auto getLastCPU() const -> int;
+  [[nodiscard]] static auto getLastCPU() -> int;
 
  private:
   size_type m_size{};

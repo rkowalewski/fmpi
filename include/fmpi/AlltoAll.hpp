@@ -332,11 +332,39 @@ inline void scatteredPairwiseWaitsome(
   trace.tock(COMMUNICATION);
 
   using Fifo = CircularFifo<iter_pair, NReqs>;
+  static_assert(Fifo::isAlwaysLockFree, "");
   Fifo queue;
 
-#if 0
-  auto consumer = std::async(std::launch::async, [n = nr]() {});
-#endif
+  auto consumer = std::async(
+      std::launch::async,
+      [n = nr,
+       blocksize,
+       &queue,
+       chunks = std::move(chunks_to_merge),
+       &op,
+       target=out,
+       &mergedChunksPsum]() mutable {
+        iter_pair chunk;
+
+        std::size_t nmerged = 0;
+        while (nmerged < n) {
+          while (!queue.pop(chunk)) {
+            std::this_thread::yield();
+          }
+
+          chunks.emplace_back(chunk);
+
+          if (chunks.size() >= utilization_threshold) {
+            op(chunks, target);
+
+            nmerged += chunks.size();
+            mergedChunksPsum.push_back(
+                mergedChunksPsum.back() + nmerged * blocksize);
+
+            target += nmerged;
+          }
+        }
+      });
 
   while (ncReqs < totalReqs) {
     ++n_comm_rounds;

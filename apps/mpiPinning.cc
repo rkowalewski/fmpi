@@ -23,7 +23,7 @@ int main(int argc, char** argv)
   mpi::Context worldCtx{MPI_COMM_WORLD};
 
   auto const me = worldCtx.rank();
-  auto const nr = worldCtx.size();
+  //auto const nr = worldCtx.size();
 
   char _hostname[MPI_MAX_PROCESSOR_NAME];
   int  resultlen;

@@ -160,9 +160,9 @@ static void CustomArguments(benchmark::internal::Benchmark* b)
 {
   constexpr long max_blocks = 48;
 
-  constexpr std::size_t l1dCache = 32768;
+  //constexpr std::size_t l1dCache = 32768;
   constexpr std::size_t l2Cache  = 1048576;
-  constexpr std::size_t l3Cache  = 2883584;
+  //constexpr std::size_t l3Cache  = 2883584;
 
   auto const num_threads = omp_get_max_threads();
   std::vector<int> cpu_names(num_threads);
@@ -183,8 +183,8 @@ static void CustomArguments(benchmark::internal::Benchmark* b)
 #endif
 
   for (long i = 6; i <= max_blocks; i *= 2) {
-    constexpr std::size_t multiplier = 4;
-    auto const max = num_threads * l2Cache * multiplier / i;
+    constexpr long multiplier = 4;
+    long const max = num_threads * l2Cache * multiplier / i;
     for (long j = 8; j <= max; j *= multiplier) {
       b->Args({i, j});
     }

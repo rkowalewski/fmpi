@@ -9,14 +9,14 @@
  *
  * Code & platform dependent issues with it was originally
  * published at http://www.kjellkod.cc/threadsafecircularqueue
- * 2012-16-19  @author Kjell Hedström, hedstrom@kjellkod.cc */
+ * 2012-16-19  @author Kjell HedstrÃ¶m, hedstrom@kjellkod.cc */
 
 // should be mentioned the thinking of what goes where
 // it is a "controversy" whether what is tail and what is head
 // http://en.wikipedia.org/wiki/FIFO#Head_or_tail_first
 
-#ifndef FMPI__CIRCULARFIFO_AQUIRE_RELEASE_H_
-#define FMPI__CIRCULARFIFO_AQUIRE_RELEASE_H_
+#ifndef FMPI__CIRCULARFIFO_H_
+#define FMPI__CIRCULARFIFO_H_
 
 #include <atomic>
 #include <cstddef>
@@ -43,6 +43,10 @@ class CircularFifo {
   bool wasEmpty() const;
   bool wasFull() const;
   bool isLockFree() const;
+
+  static constexpr bool isAlwaysLockFree =
+      std::atomic<size_t>::is_always_lock_free &&
+      std::atomic<size_t>::is_always_lock_free;
 
  private:
   size_t increment(size_t idx) const;

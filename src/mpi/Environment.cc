@@ -48,8 +48,9 @@ auto Context::mpiComm() const noexcept -> MPI_Comm
   return m_comm;
 }
 
-auto Context::getLastCPU() const -> int
+auto Context::getLastCPU() -> int
 {
+#ifdef FMPI_USEHWLOC
   hwloc_cpuset_t set = hwloc_bitmap_alloc();
   auto ret = hwloc_get_last_cpu_location(topo_, set, HWLOC_CPUBIND_THREAD);
 
@@ -60,6 +61,9 @@ auto Context::getLastCPU() const -> int
   auto i = hwloc_bitmap_first(set);
   hwloc_bitmap_free(set);
   return i;
+#else
+  return -1;
+#endif
 }
 
 Rank::Rank(int32_t rank) noexcept
