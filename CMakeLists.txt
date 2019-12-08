@@ -60,6 +60,7 @@ option(WITH_HWLOC           "Enable hwloc support" ON)
 include(${CMAKE_SOURCE_DIR}/cmake/FindMPI.cmake)
 include(${CMAKE_SOURCE_DIR}/cmake/FindOpenMP.cmake)
 include(${CMAKE_SOURCE_DIR}/cmake/ClangTidy.cmake)
+include(${CMAKE_SOURCE_DIR}/cmake/SetupBoost.cmake)
 
 if (WITH_HWLOC)
     include(${CMAKE_SOURCE_DIR}/cmake/SetupHwloc.cmake)

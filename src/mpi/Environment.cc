@@ -16,6 +16,7 @@ Context::Context(MPI_Comm comm)
   RTLX_ASSERT_RETURNS(MPI_Comm_rank(m_comm, &rank), MPI_SUCCESS);
   m_rank = static_cast<Rank>(rank);
 
+#if 0
 #ifdef FMPI_USEHWLOC
   if (auto ret = hwloc_topology_init(&topo_) < 0) {
     throw std::runtime_error("cannot init hwloc");
@@ -25,11 +26,14 @@ Context::Context(MPI_Comm comm)
     throw std::runtime_error("cannot load hwloc topology");
   }
 #endif
+#endif
 }
 
 Context::~Context() {
+#if 0
 #ifdef FMPI_USEHWLOC
   hwloc_topology_destroy(topo_);
+#endif
 #endif
 }
 
@@ -48,6 +52,7 @@ auto Context::mpiComm() const noexcept -> MPI_Comm
   return m_comm;
 }
 
+#if 0
 auto Context::getLastCPU() -> int
 {
 #ifdef FMPI_USEHWLOC
@@ -65,6 +70,7 @@ auto Context::getLastCPU() -> int
   return -1;
 #endif
 }
+#endif
 
 Rank::Rank(int32_t rank) noexcept
   : m_rank(rank)

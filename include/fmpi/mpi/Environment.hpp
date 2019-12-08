@@ -58,14 +58,18 @@ class Context {
 
   [[nodiscard]] auto mpiComm() const noexcept -> MPI_Comm;
 
+#if 0
   [[nodiscard]] static auto getLastCPU() -> int;
+#endif
 
  private:
   size_type m_size{};
   Rank      m_rank{};
   MPI_Comm  m_comm{MPI_COMM_NULL};
+#if 0
 #ifdef FMPI_USEHWLOC
   hwloc_topology_t topo_;
+#endif
 #endif
 };
 

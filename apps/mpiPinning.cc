@@ -5,25 +5,24 @@
 #include <iostream>
 #include <sstream>
 
-#include <fmpi/mpi/Environment.hpp>
 #include <fmpi/NumericRange.hpp>
+#include <fmpi/mpi/Environment.hpp>
 
 #include <rtlx/Assert.hpp>
 #include <rtlx/ScopedLambda.hpp>
 
 int main(int argc, char** argv)
 {
-  //MPI_Init(&argc, &argv);
+  // MPI_Init(&argc, &argv);
   int provided;
   MPI_Init_thread(&argc, &argv, MPI_THREAD_FUNNELED, &provided);
-
 
   auto finalizer = rtlx::scope_exit([]() { MPI_Finalize(); });
 
   mpi::Context worldCtx{MPI_COMM_WORLD};
 
   auto const me = worldCtx.rank();
-  //auto const nr = worldCtx.size();
+  // auto const nr = worldCtx.size();
 
   char _hostname[MPI_MAX_PROCESSOR_NAME];
   int  resultlen;
@@ -35,20 +34,20 @@ int main(int argc, char** argv)
 
   std::vector<int> cpu_names(omp_get_max_threads());
 
+#if 0
   {
     std::ostringstream os;
     os << "last cpu: " << worldCtx.getLastCPU() << "\n";
     std::cout << os.str();
   }
-
+#endif
 
 #pragma omp parallel default(none) shared(cpu_names)
   {
-    auto thread_num = omp_get_thread_num(); //Test
-    int cpu = sched_getcpu();
+    auto thread_num       = omp_get_thread_num();  // Test
+    int  cpu              = sched_getcpu();
     cpu_names[thread_num] = cpu;
   }
-
 
   if (me == 0) {
     std::cout << "Rank, CPU, Threads, ThreadID, Core\n";
@@ -58,15 +57,11 @@ int main(int argc, char** argv)
 
   std::ostringstream os;
   for (auto&& r : fmpi::range(cpu_names.size())) {
-    os << me << ", "
-      << hostname << ", "
-      << cpu_names.size() << ", "
-      << r << ", "
-      << cpu_names[r] << "\n";
+    os << me << ", " << hostname << ", " << cpu_names.size() << ", " << r
+       << ", " << cpu_names[r] << "\n";
   }
 
   std::cout << os.str();
-
 
   return 0;
 }

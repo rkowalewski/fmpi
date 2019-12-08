@@ -114,4 +114,4 @@ size_t CircularFifo<Element, Size>::increment(size_t idx) const
 }
 
 }  // namespace fmpi
-#endif /* CIRCULARFIFO_AQUIRE_RELEASE_H_ */
+#endif /* FMPI__CIRCULARFIFO_H*/
