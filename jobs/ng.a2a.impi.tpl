@@ -26,8 +26,7 @@
 
 #Important
 module load slurm_setup
-
-export RTLX_ENABLE_TRACE=1
+module load hwloc
 
 export OMP_NUM_THREADS=<<NUM_THREADS>>
 

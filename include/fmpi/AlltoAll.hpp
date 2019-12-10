@@ -308,7 +308,7 @@ inline void scatteredPairwiseWaitsome(
     {
       for (auto&& idx : fmpi::range<int>(0, reqsInFlight)) {
         // mark everything as completed
-        chunks_to_merge.emplace_back(commState.markComplete(idx));
+        chunks_to_merge.emplace_back(commState.retrieveOccupied(idx));
       }
 
       op(chunks_to_merge, out);
@@ -388,7 +388,10 @@ inline void scatteredPairwiseWaitsome(
     auto* lastIdx =
         mpi::testsome(&(*reqs.begin()), &(*reqs.end()), &(*indices.begin()));
 
+    RTLX_ASSERT(lastIdx >= &*indices.begin());
+
     auto const nCompleted = std::distance(&(*indices.begin()), lastIdx);
+
 
     FMPI_DBG(nCompleted);
 
@@ -397,19 +400,27 @@ inline void scatteredPairwiseWaitsome(
     auto const reqsCompleted =
         std::make_pair(indices.begin(), indices.begin() + nCompleted);
 
+    for (auto it = reqsCompleted.first; it < reqsCompleted.second; ++it) {
+      reqs[*it] = MPI_REQUEST_NULL;
+    }
+
     FMPI_DBG_RANGE(reqsCompleted.first, reqsCompleted.second);
 
     // we want all receive requests on the left, and send requests on the
     // right
-    auto const fstSentIdx = std::partition(
+    auto const sreqs_pivot = std::partition(
         reqsCompleted.first, reqsCompleted.second, [reqsInFlight](auto req) {
           // left half of reqs array array are receives
           return req < static_cast<int>(reqsInFlight);
         });
 
-    auto const nrecv = std::distance(reqsCompleted.first, fstSentIdx);
+    auto const nrecv = std::distance(reqsCompleted.first, sreqs_pivot);
+
+    FMPI_DBG(nrecv);
 
     auto const nsent = nCompleted - nrecv;
+
+    FMPI_DBG(nsent);
 
     FMPI_DBG_STREAM(
         me << " available chunks to merge: "
@@ -418,9 +429,9 @@ inline void scatteredPairwiseWaitsome(
     // mark all receives
     std::for_each(
         reqsCompleted.first,
-        fstSentIdx,
+        sreqs_pivot,
         [&commState, &chunks_to_merge](auto reqIdx) {
-          auto c = commState.markComplete(reqIdx);
+          auto c = commState.retrieveOccupied(reqIdx);
           chunks_to_merge.emplace_back(c);
         });
 
@@ -428,12 +439,16 @@ inline void scatteredPairwiseWaitsome(
 
     auto const nrecvOpen = totalExchanges - nrreqs;
 
+    auto const avail_slots = lfq_chunks.read_available();
+
+    FMPI_DBG(avail_slots);
+
     auto const nslotsRecv = std::min(
-        std::min<std::size_t>(nrecv, nrecvOpen), lfq_chunks.read_available());
+        std::min<std::size_t>(nrecv, nrecvOpen), avail_slots);
 
     FMPI_DBG(nslotsRecv);
 
-    RTLX_ASSERT((reqsCompleted.first + nslotsRecv) <= fstSentIdx);
+    RTLX_ASSERT((reqsCompleted.first + nslotsRecv) <= sreqs_pivot);
 
     rphase = detail::enqueueMpiOps(
         rphase,
@@ -456,7 +471,7 @@ inline void scatteredPairwiseWaitsome(
         me,
         nslotsSend,
         sschedule,
-        [fstSentIdx](auto nreqs) { return *std::next(fstSentIdx, nreqs); },
+        [sreqs_pivot](auto nreqs) { return *std::next(sreqs_pivot, nreqs); },
         sbufAlloc,
         sendOp);
 
@@ -486,12 +501,21 @@ inline void scatteredPairwiseWaitsome(
       // 3) increase out iterator
       auto const nmerged = chunks_to_merge.size() * blocksize;
 
-      outIt += nmerged;
 
       mergedChunksPsum.push_back(mergedChunksPsum.back() + nmerged);
 
-      // 4) reset all completed Chunks
+      // 4) release completed buffers for future receives
+      auto fbuf = std::begin(chunks_to_merge);
+
+      if (outIt == out) std::advance(fbuf, 1);
+
+      auto const last_pushed = lfq_chunks.push(fbuf, std::end(chunks_to_merge));
+      auto const n_pushed = std::distance(fbuf, last_pushed);
+      FMPI_DBG(n_pushed);
+
       chunks_to_merge.clear();
+
+      std::advance(outIt, nmerged);
 
       trace.tock(MERGE);
     }
@@ -606,6 +630,8 @@ inline void scatteredPairwiseWaitall(
     std::size_t rphase, sphase;
     std::tie(rphase, sphase) = initialPhases;
 
+    FMPI_DBG(initialPhases);
+
     for (std::size_t nrreqs = 0; nrreqs < winsize && rphase < phaseCount;
          ++rphase) {
       // receive from
@@ -664,21 +690,17 @@ inline void scatteredPairwiseWaitall(
     static_cast<void>(win);
 
     trace.tick(COMMUNICATION);
-
     std::tie(rphase, sphase) =
         moveReqWindow(std::make_pair(rphase, sphase), reqWin);
-
     trace.tock(COMMUNICATION);
 
-    if (!reqWin.ready_pieces().empty()) {
-      trace.tick(MERGE);
-      op(reqWin.ready_pieces(), mergebuf);
-      auto const nMerged = reqWin.ready_pieces().size() * blocksize;
-      mergebuf += nMerged;
-      mergePsum.push_back(mergePsum.back() + nMerged);
-      reqWin.ready_pieces().clear();
-      trace.tock(MERGE);
-    }
+    trace.tick(MERGE);
+    op(reqWin.ready_pieces(), mergebuf);
+    auto const nMerged = reqWin.ready_pieces().size() * blocksize;
+    mergebuf += nMerged;
+    mergePsum.push_back(mergePsum.back() + nMerged);
+    reqWin.ready_pieces().clear();
+    trace.tock(MERGE);
 
     trace.tick(COMMUNICATION);
     FMPI_CHECK(mpi::waitall(&(*std::begin(reqs)), &(*std::end(reqs))));
@@ -715,7 +737,13 @@ inline void scatteredPairwiseWaitall(
   FMPI_DBG("final merge");
   FMPI_DBG(reqWin.ready_pieces().size());
 
+  for (auto&& c : reqWin.ready_pieces()) {
+    FMPI_DBG_RANGE(c.first, c.second);
+  }
   op(reqWin.ready_pieces(), target);
+
+
+  FMPI_DBG(reqWin.ready_pieces());
 
   if (target != &*out) {
     std::move(target, target + nels, out);

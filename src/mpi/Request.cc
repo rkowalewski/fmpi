@@ -40,6 +40,11 @@ auto testsome(MPI_Request* begin, MPI_Request* end, int* indices) -> int*
       MPI_Testsome(n, begin, &completed, indices, MPI_STATUSES_IGNORE),
       MPI_SUCCESS);
 
+  if (completed == MPI_UNDEFINED) {
+    auto nulls = std::count_if(begin, end, [](auto r) {return r == MPI_REQUEST_NULL;});
+    RTLX_ASSERT(nulls < n);
+  }
+
   return std::next(indices, completed);
 }
 

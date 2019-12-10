@@ -26,6 +26,7 @@
 
 #Important
 module load slurm_setup
+module load hwloc
 
 # Note: We do not need any additional pinning here.
 # Intel MPI is smart enough and can handle both hyperthreading and
@@ -33,6 +34,8 @@ module load slurm_setup
 
 export OMP_NUM_THREADS=<<NUM_THREADS>>
 export I_MPI_DEBUG=4
+export OMP_PROC_BIND=true
+export OMP_PLACES=cores
 
 mpiexec -n $((<<NUM_PROCS>> * <<NUM_NODES>>)) \
     ./build.release/apps/mpiPinning

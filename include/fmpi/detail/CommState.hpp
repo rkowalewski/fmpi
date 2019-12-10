@@ -37,13 +37,15 @@ class CommState {
   void markOccupied(int key, iter_pair chunk)
   {
     RTLX_ASSERT(0 <= key && std::size_t(key) < NReqs);
+    FMPI_DBG_STREAM("markOccupied: " << key);
     m_occupied[key] = chunk;
   }
 
-  auto markComplete(int key)
+  auto retrieveOccupied(int key)
   {
     RTLX_ASSERT(0 <= key && std::size_t(key) < NReqs);
 
+    FMPI_DBG_STREAM("markComplete: " << key);
     return m_occupied[key];
   }
 
@@ -84,7 +86,9 @@ struct SlidingReqWindow {
 
   void buffer_swap()
   {
+    //swap chunks
     std::swap(pending_, ready_);
+    //swap buffers
     std::swap(recvbuf_, mergebuf_);
   }
 

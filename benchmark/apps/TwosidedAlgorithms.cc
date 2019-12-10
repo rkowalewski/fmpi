@@ -159,7 +159,9 @@ static std::vector<std::pair<
                       fmpi::bruck_mod<
                           iterator_t,
                           iterator_t,
-                          merger_t<iterator_t, iterator_t>>)};
+                          merger_t<iterator_t, iterator_t>>)
+
+    };
 
 int main(int argc, char* argv[])
 {
@@ -282,7 +284,7 @@ int main(int argc, char* argv[])
             std::next(data.begin(), (block + 1) * sendcount)));
       }
 
-      auto merger = [nels](
+      auto merger = [](
                         std::vector<std::pair<iterator_t, iterator_t>> seqs,
                         iterator_t                                     res,
                         std::uint16_t nthreads = 0) {
@@ -290,6 +292,10 @@ int main(int argc, char* argv[])
         // nels must be the number of elements in all sequences
         RTLX_ASSERT(seqs.size());
         RTLX_ASSERT(res);
+
+        auto const size = std::accumulate(std::begin(seqs), std::end(seqs), std::size_t(0), [](auto acc, auto c) {
+            return acc + std::distance(c.first, c.second);
+            });
 
 #if 0
         __gnu_parallel::multiway_merge(
@@ -304,11 +310,11 @@ int main(int argc, char* argv[])
             std::begin(seqs),
             std::end(seqs),
             res,
-            nels,
+            size,
             std::less<>{},
             tlx::MultiwayMergeAlgorithm::MWMA_ALGORITHM_DEFAULT,
             tlx::MultiwayMergeSplittingAlgorithm::MWMSA_DEFAULT,
-            nthreads == 0 ? std::thread::hardware_concurrency() : nthreads);
+            omp_get_max_threads());
 #endif
       };
 
