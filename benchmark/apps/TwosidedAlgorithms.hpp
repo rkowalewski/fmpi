@@ -1,5 +1,5 @@
-#ifndef BENCHMARK__TWOSIDED_ALGORITHMS_H
-#define BENCHMARK__TWOSIDED_ALGORITHMS_H
+#ifndef TWOSIDEDALGORITHMS_HPP
+#define TWOSIDEDALGORITHMS_HPP
 
 #include <functional>
 #include <rtlx/Timer.hpp>

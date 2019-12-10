@@ -1,5 +1,5 @@
-#ifndef RANDOM_H__INCLUDED
-#define RANDOM_H__INCLUDED
+#ifndef FMPI_RANDOM_HPP
+#define FMPI_RANDOM_HPP
 
 #include <random>
 

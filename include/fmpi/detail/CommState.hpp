@@ -1,5 +1,5 @@
-#ifndef FMPI__DETAIL__COMM_STATE_H
-#define FMPI__DETAIL__COMM_STATE_H
+#ifndef FMPI_DETAIL_COMMSTATE_HPP
+#define FMPI_DETAIL_COMMSTATE_HPP
 
 #include <fmpi/Debug.hpp>
 #include <fmpi/Memory.hpp>
@@ -79,7 +79,7 @@ struct SlidingReqWindow {
     ready_.reserve(winsize + 1);
   }
 
-  auto winsize() const noexcept
+  [[nodiscard]] auto winsize() const noexcept
   {
     return winsize_;
   }
@@ -92,12 +92,12 @@ struct SlidingReqWindow {
     std::swap(recvbuf_, mergebuf_);
   }
 
-  auto rbuf() const noexcept -> iterator
+  [[nodiscard]] auto rbuf() const noexcept -> iterator
   {
     return recvbuf_;
   }
 
-  auto mergebuf() const noexcept -> iterator
+  [[nodiscard]] auto mergebuf() const noexcept -> iterator
   {
     return mergebuf_;
   }
@@ -107,7 +107,7 @@ struct SlidingReqWindow {
     return pending_;
   }
 
-  auto const& pending_pieces() const noexcept
+  [[nodiscard]] auto const& pending_pieces() const noexcept
   {
     return pending_;
   }
@@ -117,7 +117,7 @@ struct SlidingReqWindow {
     return ready_;
   }
 
-  auto const& ready_pieces() const noexcept
+  [[nodiscard]] auto const& ready_pieces() const noexcept
   {
     return ready_;
   }

@@ -1,5 +1,5 @@
-#ifndef RTLX_H
-#define RTLX_H
+#ifndef RTLX_SCOPEDLAMBDA_HPP
+#define RTLX_SCOPEDLAMBDA_HPP
 #include <type_traits>
 #include <utility>
 

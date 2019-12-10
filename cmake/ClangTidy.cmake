@@ -31,7 +31,7 @@ if(CMAKE_VERSION VERSION_GREATER 3.6 AND ENABLE_CLANG_TIDY MATCHES "ON")
     endif()
 
     execute_process(
-        COMMAND bash "-c" "git -C ${CMAKE_SOURCE_DIR} ls-files | grep \".*\\(external\\|libs\\|src\\).*\\.cc$\""
+        COMMAND bash "-c" "git -C ${CMAKE_SOURCE_DIR} ls-files | grep \".*\\(external\\|libs\\|benchmark\\|src\\).*\\.cc$\""
         OUTPUT_VARIABLE TRACKED_FILES)
 
 
@@ -43,7 +43,7 @@ if(CMAKE_VERSION VERSION_GREATER 3.6 AND ENABLE_CLANG_TIDY MATCHES "ON")
     list(APPEND RUN_CLANG_TIDY_BIN_ARGS
         -clang-tidy-binary ${CLANG_TIDY_BIN}
         "\"-header-filter=.*${CMAKE_SOURCE_DIR}.*/(include|libs|src|benchmark)/.*\""
-        "\"-checks=*,-hicpp-no-array-decay,-fuchsia*,-cppcoreguidelines-pro-bounds-array-to-pointer-decay,-clang-analyzer-core.NonNull*,-clang-analyzer-core.NullDereference,-clang-analyzer-core.uninitialized.Branch,-modernize-concat-nested-namespaces\""
+        "\"-checks=*,-hicpp-no-array-decay,-fuchsia*,-cppcoreguidelines-pro-bounds-array-to-pointer-decay,-clang-analyzer-core.NonNull*,-clang-analyzer-core.NullDereference,-clang-analyzer-core.uninitialized.Branch,-modernize-concat-nested-namespaces,-modernize-use-trailing-return-type\""
         )
 
     list(APPEND RUN_CLANG_TIDY_BIN_ARGS

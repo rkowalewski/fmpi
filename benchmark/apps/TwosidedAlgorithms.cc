@@ -284,10 +284,8 @@ int main(int argc, char* argv[])
             std::next(data.begin(), (block + 1) * sendcount)));
       }
 
-      auto merger = [](
-                        std::vector<std::pair<iterator_t, iterator_t>> seqs,
-                        iterator_t                                     res,
-                        std::uint16_t nthreads = 0) {
+      auto merger = [](std::vector<std::pair<iterator_t, iterator_t>> seqs,
+                       iterator_t                                     res) {
         // parallel merge does not support inplace merging
         // nels must be the number of elements in all sequences
         RTLX_ASSERT(seqs.size());

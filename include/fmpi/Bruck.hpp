@@ -1,5 +1,5 @@
-#ifndef BRUCK_H
-#define BRUCK_H
+#ifndef FMPI_BRUCK_HPP
+#define FMPI_BRUCK_HPP
 
 #include <mpi.h>
 
@@ -9,10 +9,10 @@
 #include <fmpi/mpi/Algorithm.hpp>
 #include <fmpi/mpi/Environment.hpp>
 #include <memory>
+#include <numeric>
 #include <rtlx/Assert.hpp>
 #include <rtlx/Trace.hpp>
 #include <tlx/math/integer_log2.hpp>
-#include <numeric>
 
 namespace fmpi {
 
@@ -101,7 +101,9 @@ inline void bruck(
 
   for (auto&& r : range(tlx::integer_log2_ceil(nr))) {
     auto      j = static_cast<mpi::Rank>(1 << r);
-    mpi::Rank recvfrom, sendto;
+    mpi::Rank recvfrom;
+
+    mpi::Rank sendto;
 
     auto reqs =
         std::array<MPI_Request, 2>{MPI_REQUEST_NULL, MPI_REQUEST_NULL};
@@ -260,7 +262,9 @@ inline void bruck_indexed(
 
   for (auto&& r : range(tlx::integer_log2_ceil(nr))) {
     auto      j = static_cast<mpi::Rank>(1 << r);
-    mpi::Rank recvfrom, sendto;
+    mpi::Rank recvfrom;
+
+    mpi::Rank sendto;
 
     auto reqs =
         std::array<MPI_Request, 2>{MPI_REQUEST_NULL, MPI_REQUEST_NULL};
@@ -475,7 +479,9 @@ inline void bruck_interleave(
 
     FMPI_DBG(r);
 
-    mpi::Rank recvfrom, sendto;
+    mpi::Rank recvfrom;
+
+    mpi::Rank sendto;
 
     auto reqs =
         std::array<MPI_Request, 2>{MPI_REQUEST_NULL, MPI_REQUEST_NULL};
@@ -668,7 +674,7 @@ inline void bruck_mod(
   auto const nels = size_t(nr) * blocksize;
 
   {
-    // TODO: this can be more efficient
+    // TODO(rkowalewski): this can be more efficient
     if (isPow2(nr)) {
       // Phase 1: Local Rotate, out[(me + block) % nr] = begin[(me - block) %
       // nr] This procedure can be achieved efficiently in two substeps
@@ -710,7 +716,8 @@ inline void bruck_mod(
   // range = [0..log2(nr)]
   for (auto&& r : range(tlx::integer_log2_ceil(nr))) {
     auto      j = static_cast<mpi::Rank>(one << r);
-    mpi::Rank recvfrom, sendto;
+    mpi::Rank recvfrom;
+    mpi::Rank sendto;
 
     FMPI_DBG(r);
 

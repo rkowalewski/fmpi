@@ -1,5 +1,5 @@
-#ifndef ALLTOALL_H
-#define ALLTOALL_H
+#ifndef FMPI_ALLTOALL_HPP
+#define FMPI_ALLTOALL_HPP
 
 #include <algorithm>
 #include <cmath>
@@ -8,7 +8,6 @@
 #include <fmpi/Memory.hpp>
 #include <fmpi/NumericRange.hpp>
 #include <fmpi/Schedule.hpp>
-#include <fmpi/container/circularfifo.hpp>
 #include <fmpi/detail/CommState.hpp>
 #include <fmpi/mpi/Algorithm.hpp>
 #include <fmpi/mpi/Request.hpp>
@@ -126,8 +125,6 @@ inline void scatteredPairwise_lt3(
   trace.tock(MERGE);
 
   trace.put(detail::N_COMM_ROUNDS, 1);
-
-  return;
 }
 
 }  // namespace detail
@@ -205,13 +202,15 @@ inline void scatteredPairwiseWaitsome(
 
   auto winbuf = window_buffer{blocksize * winsz};
 
-  auto lfq_chunks = lfq_fifo{};
+  auto lfq_freelist = lfq_fifo{};
+  auto lfq_done = lfq_fifo{};
   // fill freelist
   for (auto&& c : range<std::size_t>(winsz)) {
-    while (!lfq_chunks.push(std::make_pair(
+    while (!lfq_freelist.push(std::make_pair(
         std::next(winbuf.begin(), c * blocksize),
-        std::next(winbuf.begin(), (c + 1) * blocksize))))
+        std::next(winbuf.begin(), (c + 1) * blocksize)))) {
       ;
+    }
   }
 
   // allocate the communication state which provides the receive buffer
@@ -220,17 +219,21 @@ inline void scatteredPairwiseWaitsome(
 
   RTLX_ASSERT(2 * reqsInFlight <= reqs.size());
 
-  std::size_t nsreqs = 0, nrreqs = 0, sphase = 0, rphase = 0;
+  std::size_t nsreqs = 0;
+  std::size_t nrreqs = 0;
+  std::size_t sphase = 0;
+  std::size_t rphase = 0;
 
   auto rschedule = [&ctx](auto phase) {
     Schedule commAlgo{};
     return commAlgo.recvRank(ctx, phase);
   };
 
-  auto rbufAlloc = [&commState, &lfq_chunks](auto /*peer*/, auto reqIdx) {
+  auto rbufAlloc = [&commState, &lfq_freelist](auto /*peer*/, auto reqIdx) {
     typename lfq_fifo::value_type chunk;
-    while (!lfq_chunks.pop(chunk))
+    while (!lfq_freelist.pop(chunk)) {
       ;
+    }
     commState.markOccupied(reqIdx, chunk);
 
     return chunk.first;
@@ -392,7 +395,6 @@ inline void scatteredPairwiseWaitsome(
 
     auto const nCompleted = std::distance(&(*indices.begin()), lastIdx);
 
-
     FMPI_DBG(nCompleted);
 
     ncReqs += nCompleted;
@@ -439,12 +441,12 @@ inline void scatteredPairwiseWaitsome(
 
     auto const nrecvOpen = totalExchanges - nrreqs;
 
-    auto const avail_slots = lfq_chunks.read_available();
+    auto const avail_slots = lfq_freelist.read_available();
 
     FMPI_DBG(avail_slots);
 
-    auto const nslotsRecv = std::min(
-        std::min<std::size_t>(nrecv, nrecvOpen), avail_slots);
+    auto const nslotsRecv =
+        std::min(std::min<std::size_t>(nrecv, nrecvOpen), avail_slots);
 
     FMPI_DBG(nslotsRecv);
 
@@ -501,17 +503,21 @@ inline void scatteredPairwiseWaitsome(
       // 3) increase out iterator
       auto const nmerged = chunks_to_merge.size() * blocksize;
 
-
       mergedChunksPsum.push_back(mergedChunksPsum.back() + nmerged);
 
       // 4) release completed buffers for future receives
       auto fbuf = std::begin(chunks_to_merge);
 
-      if (outIt == out) std::advance(fbuf, 1);
+      if (outIt == out) {
+        std::advance(fbuf, 1);
+      }
 
-      auto const last_pushed = lfq_chunks.push(fbuf, std::end(chunks_to_merge));
-      auto const n_pushed = std::distance(fbuf, last_pushed);
-      FMPI_DBG(n_pushed);
+      auto const last_pushed =
+          lfq_freelist.push(fbuf, std::end(chunks_to_merge));
+
+      RTLX_ASSERT(
+          std::distance(fbuf, last_pushed) ==
+          std::distance(fbuf, std::end(chunks_to_merge)));
 
       chunks_to_merge.clear();
 
@@ -610,7 +616,8 @@ inline void scatteredPairwiseWaitall(
 
   FMPI_DBG(nrounds);
 
-  std::size_t rphase = 0, sphase = 0;
+  std::size_t rphase   = 0;
+  std::size_t sphase   = 0;
   auto        mergebuf = out;
 
   auto const nels = nr * blocksize;
@@ -627,7 +634,8 @@ inline void scatteredPairwiseWaitall(
     auto const phaseCount = schedule.phaseCount(ctx);
     auto const winsize    = reqWin.winsize();
 
-    std::size_t rphase, sphase;
+    std::size_t rphase;
+    std::size_t sphase;
     std::tie(rphase, sphase) = initialPhases;
 
     FMPI_DBG(initialPhases);
@@ -637,7 +645,9 @@ inline void scatteredPairwiseWaitall(
       // receive from
       auto recvfrom = schedule.recvRank(ctx, rphase);
 
-      if (recvfrom == ctx.rank()) continue;
+      if (recvfrom == ctx.rank()) {
+        continue;
+      }
 
       FMPI_DBG(recvfrom);
 
@@ -656,7 +666,9 @@ inline void scatteredPairwiseWaitall(
          ++sphase) {
       auto sendto = schedule.sendRank(ctx, sphase);
 
-      if (sendto == ctx.rank()) continue;
+      if (sendto == ctx.rank()) {
+        continue;
+      }
 
       FMPI_DBG(sendto);
 
@@ -741,7 +753,6 @@ inline void scatteredPairwiseWaitall(
     FMPI_DBG_RANGE(c.first, c.second);
   }
   op(reqWin.ready_pieces(), target);
-
 
   FMPI_DBG(reqWin.ready_pieces());
 
