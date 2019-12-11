@@ -32,10 +32,14 @@ module load hwloc
 # Intel MPI is smart enough and can handle both hyperthreading and
 # non hyperthreading cases here
 
+unset KMP_AFFINITY
+
 export OMP_NUM_THREADS=<<NUM_THREADS>>
 export I_MPI_DEBUG=4
-export OMP_PROC_BIND=true
+export OMP_PROC_BIND=close
 export OMP_PLACES=cores
+
+#export OMP_PLACES="{0:<<NUM_THREADS>>:1}"
 
 mpiexec -n $((<<NUM_PROCS>> * <<NUM_NODES>>)) \
     ./build.release/apps/mpiPinning

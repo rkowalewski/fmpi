@@ -399,7 +399,6 @@ inline void scatteredPairwiseWaitsome(
           FMPI_DBG(n_merges);
 
           if (enough_work) {
-            // trace.tick(MERGE);
 
             // 2) merge all chunks
             auto last = op(chunks_to_merge, first);
@@ -419,7 +418,6 @@ inline void scatteredPairwiseWaitsome(
             processed.emplace_back(std::make_pair(first, last));
             std::swap(first, last);
 
-            // trace.tock(MERGE);
           }
           else {
             // we can eventually replace this with a wait method
@@ -448,8 +446,6 @@ inline void scatteredPairwiseWaitsome(
         // switch buffer back to output iterator
         std::move(mergeBuffer.begin(), mergeBuffer.end(), outputIt);
 
-        // trace.tock(MERGE);
-
         FMPI_DBG(processed);
         return last;
       });
@@ -469,14 +465,11 @@ inline void scatteredPairwiseWaitsome(
 
   int n_comm_rounds = 0;
 
-  trace.tock(COMMUNICATION);
-
   std::vector<chunk> arrived_chunks;
   arrived_chunks.reserve(winsz);
 
   while (ncReqs < totalReqs) {
     ++n_comm_rounds;
-    trace.tick(COMMUNICATION);
 
 #if 1
     auto* lastIdx =
@@ -594,15 +587,17 @@ inline void scatteredPairwiseWaitsome(
 
     nsreqs += nslotsSend;
 
-    trace.tock(COMMUNICATION);
   }
 
-  trace.tick(MERGE);
+  trace.tock(COMMUNICATION);
+
   trace.put(detail::N_COMM_ROUNDS, n_comm_rounds);
 
   FMPI_DBG("waiting for compute");
 
+  trace.tick(MERGE);
   auto last = compute.get();
+  trace.tock(MERGE);
   RTLX_ASSERT(last == out + (std::size_t(nr) * blocksize));
 
 }  // namespace fmpi
