@@ -148,7 +148,6 @@ void push_fifo(
           Capacity));
   for (auto it = begin; it != end;) {
     it = fifo.push(it, end);
-    std::this_thread::yield();
   }
 }
 }  // namespace detail
@@ -423,13 +422,6 @@ inline void scatteredPairwiseWaitsome(
 
         auto const nels = static_cast<std::size_t>(nr) * blocksize;
 
-        if (n_messages > 0) {
-          RTLX_ASSERT(
-              std::distance(
-                  processed.back().first, processed.back().second) ==
-              static_cast<int64_t>(nels));
-        }
-
         using merge_buffer_t = tlx::
             SimpleVector<value_type, tlx::SimpleVectorMode::NoInitNoDestroy>;
 
@@ -461,7 +453,6 @@ inline void scatteredPairwiseWaitsome(
 
   size_t ncReqs     = 0;
   size_t nrecvTotal = 0;
-  // auto   outIt      = out;
 
   typename indices_buffer_t::arena  indices_arena{};
   typename indices_buffer_t::vector indices(
