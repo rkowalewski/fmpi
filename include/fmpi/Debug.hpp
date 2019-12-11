@@ -29,7 +29,7 @@ class DebugOutput {
   }
 
   template <typename T>
-  auto print(const std::string& type, T&& value) const -> T&&
+  auto print(const std::string& type, T&& value) const -> T&& // NOLINT
   {
     int flag;
 

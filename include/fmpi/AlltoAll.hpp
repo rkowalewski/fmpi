@@ -138,8 +138,11 @@ void push_fifo(
     lfq_fifo<typename std::iterator_traits<Iterator>::value_type, Capacity>&
         fifo)
 {
+  FMPI_DBG_STREAM(
+      "pushing " << std::distance(begin, end) << " on fifo of capacity "
+                 << Capacity);
   RTLX_ASSERT(
-      std::distance(begin, end) <
+      std::distance(begin, end) <=
       static_cast<typename std::iterator_traits<Iterator>::difference_type>(
           Capacity));
   for (auto it = begin; it != end;) {
@@ -197,14 +200,17 @@ inline void scatteredPairwiseWaitsome(
 
   trace.tick(COMMUNICATION);
 
-  constexpr auto winsz       = 2 * NReqs;
-  constexpr auto mpiReqBytes = winsz * sizeof(MPI_Request);
+  constexpr auto winsz       = NReqs;
+  constexpr auto winreqs     = 2 * NReqs;
+  constexpr auto mpiReqBytes = winreqs * sizeof(MPI_Request);
 
   using req_buffer_t = SmallVector<MPI_Request, mpiReqBytes>;
 
   typename req_buffer_t::arena  reqs_arena{};
   typename req_buffer_t::vector reqs(
-      winsz, MPI_REQUEST_NULL, typename req_buffer_t::allocator{reqs_arena});
+      winreqs,
+      MPI_REQUEST_NULL,
+      typename req_buffer_t::allocator{reqs_arena});
 
   auto const totalExchanges = static_cast<size_t>(nr - 1);
   auto const totalReqs      = 2 * totalExchanges;
@@ -213,15 +219,15 @@ inline void scatteredPairwiseWaitsome(
   using window_buffer =
       tlx::SimpleVector<value_type, tlx::SimpleVectorMode::NoInitNoDestroy>;
 
-  auto winbuf = window_buffer{blocksize * winsz};
+  auto winbuf = window_buffer{blocksize * winreqs};
   using bufit = typename window_buffer::iterator;
   using chunk = std::pair<bufit, bufit>;
 
-  auto lfq_freelist = detail::lfq_fifo<chunk, NReqs>{};
-  auto lfq_done     = detail::lfq_fifo<chunk, NReqs>{};
+  auto lfq_freelist = detail::lfq_fifo<chunk, winreqs>{};
+  auto lfq_done     = detail::lfq_fifo<chunk, winsz>{};
 
   {
-    auto chunks = std::array<chunk, winsz>{};
+    auto chunks = std::array<chunk, winreqs>{};
     auto r      = range<std::size_t>(chunks.size());
 
     std::transform(
@@ -359,8 +365,6 @@ inline void scatteredPairwiseWaitsome(
 
   indices.resize(std::distance(reqs.begin(), reqs.end()));
 
-  RTLX_ASSERT(indices.size() <= winsz);
-
   int n_comm_rounds = 0;
 
   trace.tock(COMMUNICATION);
@@ -405,7 +409,7 @@ inline void scatteredPairwiseWaitsome(
 #endif
 
   std::vector<chunk> arrived_chunks;
-  arrived_chunks.reserve(NReqs);
+  arrived_chunks.reserve(winsz);
 
   std::vector<chunk> chunks_merge;
   chunks_merge.reserve(reqsInFlight + 1);
@@ -454,8 +458,7 @@ inline void scatteredPairwiseWaitsome(
     FMPI_DBG(nsent);
 
     FMPI_DBG_STREAM(
-        me << " available chunks to merge: "
-           << lfq_done.read_available() + nrecv);
+        "available chunks to merge: " << lfq_done.read_available() + nrecv);
 
     {
       std::transform(
@@ -518,7 +521,9 @@ inline void scatteredPairwiseWaitsome(
 
     auto const allReceivesDone = nrecvTotal == totalExchanges;
 
-    auto const mergeCount = lfq_done.pop(std::back_inserter(chunks_merge));
+    auto const nchunks    = chunks_merge.size();
+    auto const mergeCount = lfq_done.pop(std::back_inserter(chunks_merge)) +
+                            (outIt == out) + nchunks;
 
     // minimum number of chunks to merge: ideally we have a full level2
     // cache
@@ -563,8 +568,7 @@ inline void scatteredPairwiseWaitsome(
   RTLX_ASSERT(mergedChunksPsum.size() > 2);
   RTLX_ASSERT(mergedChunksPsum.back() == nels);
 
-  using chunks_vector =
-      std::vector<chunk>;
+  using chunks_vector = std::vector<chunk>;
 
   using merge_buffer_t =
       tlx::SimpleVector<value_type, tlx::SimpleVectorMode::NoInitNoDestroy>;

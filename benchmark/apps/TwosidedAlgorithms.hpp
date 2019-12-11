@@ -1,5 +1,5 @@
-#ifndef TWOSIDEDALGORITHMS_HPP
-#define TWOSIDEDALGORITHMS_HPP
+#ifndef TWOSIDEDALGORITHMS_HPP //NOLINT
+#define TWOSIDEDALGORITHMS_HPP //NOLINT
 
 #include <functional>
 #include <rtlx/Timer.hpp>
