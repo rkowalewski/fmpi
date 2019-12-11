@@ -28,6 +28,14 @@ namespace fmpi {
 
 namespace detail {
 
+template <typename F, typename... Ts>
+inline auto make_async(F&& f, Ts&&... params)
+{
+  // Suggested in effective modern C++ to get true asynchrony
+  return std::async(
+      std::launch::async, std::forward<F>(f), std::forward<Ts>(params)...);
+}
+
 static constexpr char N_COMM_ROUNDS[] = "Ncomm_rounds";
 
 template <class Schedule, class ReqIdx, class BufAlloc, class CommOp>
@@ -352,8 +360,7 @@ inline void scatteredPairwiseWaitsome(
       std::next(begin, me * blocksize),
       std::next(begin, (me + 1) * blocksize));
 
-  auto compute = std::async(
-      std::launch::async,
+  auto compute = detail::make_async(
       [&lfq_done,
        &lfq_freelist,
        lchunk,
