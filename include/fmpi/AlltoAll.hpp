@@ -127,6 +127,25 @@ inline void scatteredPairwise_lt3(
   trace.put(detail::N_COMM_ROUNDS, 1);
 }
 
+template <class T, std::size_t Capacity>
+using lfq_fifo =
+    boost::lockfree::spsc_queue<T, boost::lockfree::capacity<Capacity>>;
+
+template <class Iterator, std::size_t Capacity>
+void push_fifo(
+    Iterator begin,
+    Iterator end,
+    lfq_fifo<typename std::iterator_traits<Iterator>::value_type, Capacity>&
+        fifo)
+{
+  RTLX_ASSERT(
+      std::distance(begin, end) <
+      static_cast<typename std::iterator_traits<Iterator>::difference_type>(
+          Capacity));
+  for (auto it = begin; it != end;) {
+    it = fifo.push(it, end);
+  }
+}
 }  // namespace detail
 
 template <
@@ -194,23 +213,28 @@ inline void scatteredPairwiseWaitsome(
   using window_buffer =
       tlx::SimpleVector<value_type, tlx::SimpleVectorMode::NoInitNoDestroy>;
 
-  using lfq_fifo = boost::lockfree::spsc_queue<
-      std::pair<
-          typename window_buffer::iterator,
-          typename window_buffer::iterator>,
-      boost::lockfree::capacity<winsz>>;
-
   auto winbuf = window_buffer{blocksize * winsz};
+  using bufit = typename window_buffer::iterator;
+  using chunk = std::pair<bufit, bufit>;
 
-  auto lfq_freelist = lfq_fifo{};
-  auto lfq_done = lfq_fifo{};
-  // fill freelist
-  for (auto&& c : range<std::size_t>(winsz)) {
-    while (!lfq_freelist.push(std::make_pair(
-        std::next(winbuf.begin(), c * blocksize),
-        std::next(winbuf.begin(), (c + 1) * blocksize)))) {
-      ;
-    }
+  auto lfq_freelist = detail::lfq_fifo<chunk, NReqs>{};
+  auto lfq_done     = detail::lfq_fifo<chunk, NReqs>{};
+
+  {
+    auto chunks = std::array<chunk, winsz>{};
+    auto r      = range<std::size_t>(chunks.size());
+
+    std::transform(
+        std::begin(r),
+        std::end(r),
+        std::begin(chunks),
+        [begin = std::begin(winbuf), blocksize](auto idx) {
+          return std::make_pair(
+              std::next(begin, idx * blocksize),
+              std::next(begin, (idx + 1) * blocksize));
+        });
+
+    detail::push_fifo(std::begin(chunks), std::end(chunks), lfq_freelist);
   }
 
   // allocate the communication state which provides the receive buffer
@@ -230,13 +254,13 @@ inline void scatteredPairwiseWaitsome(
   };
 
   auto rbufAlloc = [&commState, &lfq_freelist](auto /*peer*/, auto reqIdx) {
-    typename lfq_fifo::value_type chunk;
-    while (!lfq_freelist.pop(chunk)) {
-      ;
+    chunk c;
+    while (!lfq_freelist.pop(c)) {
+      // std::this_thread::yield();
     }
-    commState.markOccupied(reqIdx, chunk);
+    commState.markOccupied(reqIdx, c);
 
-    return chunk.first;
+    return c.first;
   };
 
   auto receiveOp = [&reqs, blocksize, &ctx](
@@ -286,20 +310,16 @@ inline void scatteredPairwiseWaitsome(
 
   auto alreadyDone = reqsInFlight == totalExchanges;
 
-  using iter_pair      = std::pair<InputIt, InputIt>;
-  auto chunks_to_merge = std::vector<iter_pair>{};
-  chunks_to_merge.reserve(
-      alreadyDone ?
-                  // we add 1 due to the local portion
-          (reqsInFlight + 1)
-                  : nr);
-
-  // local portion
-  auto f = std::next(begin, me * blocksize);
-  auto l = std::next(f, blocksize);
-  chunks_to_merge.push_back(std::make_pair(f, l));
+  using iter_pair = std::pair<InputIt, InputIt>;
 
   if (alreadyDone) {
+    auto chunks_to_merge = std::vector<iter_pair>{};
+
+    chunks_to_merge.reserve(nr);
+    chunks_to_merge.push_back(std::make_pair(
+        std::next(begin, me * blocksize),
+        std::next(begin, (me + 1) * blocksize)));
+
     // We are already done
     // Wait for previous round
     FMPI_CHECK(mpi::waitall(&(*reqs.begin()), &(*reqs.end())));
@@ -384,6 +404,15 @@ inline void scatteredPairwiseWaitsome(
 
 #endif
 
+  std::vector<chunk> arrived_chunks;
+  arrived_chunks.reserve(NReqs);
+
+  std::vector<chunk> chunks_merge;
+  chunks_merge.reserve(reqsInFlight + 1);
+  chunks_merge.push_back(std::make_pair(
+      std::next(begin, me * blocksize),
+      std::next(begin, (me + 1) * blocksize)));
+
   while (ncReqs < totalReqs) {
     ++n_comm_rounds;
     trace.tick(COMMUNICATION);
@@ -426,16 +455,22 @@ inline void scatteredPairwiseWaitsome(
 
     FMPI_DBG_STREAM(
         me << " available chunks to merge: "
-           << chunks_to_merge.size() + nrecv);
+           << lfq_done.read_available() + nrecv);
 
-    // mark all receives
-    std::for_each(
-        reqsCompleted.first,
-        sreqs_pivot,
-        [&commState, &chunks_to_merge](auto reqIdx) {
-          auto c = commState.retrieveOccupied(reqIdx);
-          chunks_to_merge.emplace_back(c);
-        });
+    {
+      std::transform(
+          reqsCompleted.first,
+          sreqs_pivot,
+          std::back_inserter(arrived_chunks),
+          [&commState](auto reqIdx) {
+            return commState.retrieveOccupied(reqIdx);
+          });
+
+      detail::push_fifo(
+          std::begin(arrived_chunks), std::end(arrived_chunks), lfq_done);
+
+      arrived_chunks.clear();
+    }
 
     nrecvTotal += nrecv;
 
@@ -483,7 +518,7 @@ inline void scatteredPairwiseWaitsome(
 
     auto const allReceivesDone = nrecvTotal == totalExchanges;
 
-    auto const mergeCount = chunks_to_merge.size();
+    auto const mergeCount = lfq_done.pop(std::back_inserter(chunks_merge));
 
     // minimum number of chunks to merge: ideally we have a full level2
     // cache
@@ -494,32 +529,26 @@ inline void scatteredPairwiseWaitsome(
     if (enough_work || (allReceivesDone && mergeCount)) {
       trace.tick(MERGE);
 
-      FMPI_DBG_STREAM(
-          me << " merging " << chunks_to_merge.size() << " chunks");
+      FMPI_DBG_STREAM(me << " merging " << chunks_merge.size() << " chunks");
 
       // 2) merge all chunks
-      op(chunks_to_merge, outIt);
+      op(chunks_merge, outIt);
 
       // 3) increase out iterator
-      auto const nmerged = chunks_to_merge.size() * blocksize;
+      auto const nmerged = chunks_merge.size() * blocksize;
 
       mergedChunksPsum.push_back(mergedChunksPsum.back() + nmerged);
 
       // 4) release completed buffers for future receives
-      auto fbuf = std::begin(chunks_to_merge);
+      auto fbuf = std::begin(chunks_merge);
 
       if (outIt == out) {
         std::advance(fbuf, 1);
       }
 
-      auto const last_pushed =
-          lfq_freelist.push(fbuf, std::end(chunks_to_merge));
+      detail::push_fifo(fbuf, std::end(chunks_merge), lfq_freelist);
 
-      RTLX_ASSERT(
-          std::distance(fbuf, last_pushed) ==
-          std::distance(fbuf, std::end(chunks_to_merge)));
-
-      chunks_to_merge.clear();
+      chunks_merge.clear();
 
       std::advance(outIt, nmerged);
 
@@ -530,31 +559,33 @@ inline void scatteredPairwiseWaitsome(
   trace.tick(MERGE);
   trace.put(detail::N_COMM_ROUNDS, n_comm_rounds);
 
-  auto const needsFinalMerge = mergedChunksPsum.size() > 2;
-  if (needsFinalMerge) {
-    RTLX_ASSERT(chunks_to_merge.empty());
+  auto const nels = static_cast<std::size_t>(nr) * blocksize;
+  RTLX_ASSERT(mergedChunksPsum.size() > 2);
+  RTLX_ASSERT(mergedChunksPsum.back() == nels);
 
-    using merge_buffer_t =
-        tlx::SimpleVector<value_type, tlx::SimpleVectorMode::NoInitNoDestroy>;
+  using chunks_vector =
+      std::vector<chunk>;
 
-    auto mergeBuffer = merge_buffer_t{std::size_t(nr) * blocksize};
-    // generate pairs of chunks to merge
-    std::transform(
-        std::begin(mergedChunksPsum),
-        std::prev(std::end(mergedChunksPsum)),
-        std::next(std::begin(mergedChunksPsum)),
-        std::back_inserter(chunks_to_merge),
-        [rbuf = out](auto first, auto last) {
-          return std::make_pair(
-              std::next(rbuf, first), std::next(rbuf, last));
-        });
+  using merge_buffer_t =
+      tlx::SimpleVector<value_type, tlx::SimpleVectorMode::NoInitNoDestroy>;
 
-    FMPI_DBG(chunks_to_merge.size());
-    // merge
-    op(chunks_to_merge, mergeBuffer.begin());
-    // switch buffer back to output iterator
-    std::move(mergeBuffer.begin(), mergeBuffer.end(), out);
-  }
+  auto chunks_to_merge = chunks_vector{mergedChunksPsum.size() - 1};
+  auto mergeBuffer     = merge_buffer_t{nels};
+  // generate pairs of chunks to merge
+  std::transform(
+      std::begin(mergedChunksPsum),
+      std::prev(std::end(mergedChunksPsum)),
+      std::next(std::begin(mergedChunksPsum)),
+      std::begin(chunks_to_merge),
+      [rbuf = out](auto first, auto last) {
+        return std::make_pair(std::next(rbuf, first), std::next(rbuf, last));
+      });
+
+  FMPI_DBG(chunks_to_merge.size());
+  // merge
+  op(chunks_to_merge, mergeBuffer.begin());
+  // switch buffer back to output iterator
+  std::move(mergeBuffer.begin(), mergeBuffer.end(), out);
 
   trace.tock(MERGE);
 
