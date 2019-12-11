@@ -26,7 +26,7 @@ using storage_t =
 using iterator_t = typename storage_t::iterator;
 
 template <class InputIterator, class OutputIterator>
-using merger_t = std::function<void(
+using merger_t = std::function<OutputIterator(
     std::vector<std::pair<InputIterator, InputIterator>>, OutputIterator)>;
 
 static std::vector<std::pair<
@@ -161,7 +161,7 @@ static std::vector<std::pair<
                           iterator_t,
                           merger_t<iterator_t, iterator_t>>)
 
-    };
+};
 
 int main(int argc, char* argv[])
 {
@@ -291,8 +291,12 @@ int main(int argc, char* argv[])
         RTLX_ASSERT(seqs.size());
         RTLX_ASSERT(res);
 
-        auto const size = std::accumulate(std::begin(seqs), std::end(seqs), std::size_t(0), [](auto acc, auto c) {
-            return acc + std::distance(c.first, c.second);
+        auto const size = std::accumulate(
+            std::begin(seqs),
+            std::end(seqs),
+            std::size_t(0),
+            [](auto acc, auto c) {
+              return acc + std::distance(c.first, c.second);
             });
 
 #if 0
@@ -304,7 +308,7 @@ int main(int argc, char* argv[])
             std::less<>{},
             __gnu_parallel::parallel_tag{nthreads});
 #else
-        tlx::parallel_multiway_merge(
+        return tlx::parallel_multiway_merge(
             std::begin(seqs),
             std::end(seqs),
             res,
