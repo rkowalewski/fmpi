@@ -222,7 +222,6 @@ inline void scatteredPairwiseWaitsome(
       typename req_buffer_t::allocator{reqs_arena});
 
   auto const totalExchanges = static_cast<size_t>(nr - 1);
-  auto const totalReqs      = 2 * totalExchanges;
   auto const reqsInFlight   = std::min(totalExchanges, NReqs);
 
   using window_buffer =
@@ -232,9 +231,9 @@ inline void scatteredPairwiseWaitsome(
   using bufit = typename window_buffer::iterator;
   using chunk = std::pair<bufit, bufit>;
 
-  auto lfq_freelist = detail::lfq_fifo<chunk, winreqs>{};
-  auto lfq_done     = detail::lfq_fifo<chunk, winsz>{};
+  auto lfq_done = detail::lfq_fifo<chunk, winsz>{};
 
+  auto lfq_freelist = detail::lfq_fifo<chunk, winreqs>{};
   {
     auto chunks = std::array<chunk, winreqs>{};
     auto r      = range<std::size_t>(chunks.size());
@@ -252,16 +251,101 @@ inline void scatteredPairwiseWaitsome(
     detail::push_fifo(std::begin(chunks), std::end(chunks), lfq_freelist);
   }
 
+  auto const lchunk = std::make_pair(
+      std::next(begin, me * blocksize),
+      std::next(begin, (me + 1) * blocksize));
+
+  auto compute = detail::make_async([&lfq_done,
+                                     &lfq_freelist,
+                                     lchunk,
+                                     n_messages = totalExchanges,
+                                     nr,
+                                     outputIt = out,
+                                     op]() {
+    // chunks to merge
+    std::vector<chunk> chunks_to_merge;
+    chunks_to_merge.reserve(n_messages);
+    chunks_to_merge.push_back(lchunk);
+
+    auto const blocksize = std::distance(lchunk.first, lchunk.second);
+
+    // prefix sum over all processed chunks
+    std::vector<chunk> processed;
+    processed.reserve(nr);
+
+    std::size_t n_arrivals = 0;
+
+    auto first = outputIt;
+
+    while (n_arrivals < n_messages) {
+      auto const n_old = chunks_to_merge.size();
+      auto const n_new = lfq_done.pop(std::back_inserter(chunks_to_merge));
+      FMPI_DBG(n_new);
+      auto const n_merges = n_old + n_new;
+
+      n_arrivals += n_new;
+
+      // minimum number of chunks to merge: ideally we have a full level2
+      // cache
+      bool const enough_work = n_merges >= utilization_threshold;
+
+      FMPI_DBG(n_merges);
+
+      if (enough_work) {
+        // 2) merge all chunks
+        auto last = op(chunks_to_merge, first);
+
+        // 4) release completed buffers for future receives
+        auto fbuf = std::begin(chunks_to_merge);
+
+        if (first == outputIt) {
+          std::advance(fbuf, 1);
+        }
+
+        detail::push_fifo(fbuf, std::end(chunks_to_merge), lfq_freelist);
+
+        chunks_to_merge.clear();
+
+        // 3) increase out iterator
+        processed.emplace_back(std::make_pair(first, last));
+        std::swap(first, last);
+      }
+      else {
+        // we can eventually replace this with a wait method
+        std::this_thread::yield();
+      }
+    }
+
+    auto const nels = static_cast<std::size_t>(nr) * blocksize;
+
+    using merge_buffer_t =
+        tlx::SimpleVector<value_type, tlx::SimpleVectorMode::NoInitNoDestroy>;
+
+    auto mergeBuffer = merge_buffer_t{nels};
+    // generate pairs of chunks to merge
+    std::copy(
+        std::begin(processed),
+        std::end(processed),
+        std::back_inserter(chunks_to_merge));
+
+    FMPI_DBG(chunks_to_merge.size());
+    // merge
+    auto const last = op(chunks_to_merge, mergeBuffer.begin());
+
+    RTLX_ASSERT(last == mergeBuffer.end());
+
+    // switch buffer back to output iterator
+    std::move(mergeBuffer.begin(), mergeBuffer.end(), outputIt);
+
+    FMPI_DBG(processed);
+    return last;
+  });
+
   // allocate the communication state which provides the receive buffer
   // enough blocks of size blocksize.
   detail::CommState<value_type, NReqs> commState{};
 
   RTLX_ASSERT(2 * reqsInFlight <= reqs.size());
-
-  std::size_t nsreqs = 0;
-  std::size_t nrreqs = 0;
-  std::size_t sphase = 0;
-  std::size_t rphase = 0;
 
   auto rschedule = [&ctx](auto phase) {
     Schedule commAlgo{};
@@ -286,17 +370,6 @@ inline void scatteredPairwiseWaitsome(
         buf, blocksize, peer, EXCH_TAG_RING, ctx, &reqs[reqIdx]);
   };
 
-  rphase = detail::enqueueMpiOps(
-      rphase,
-      me,
-      reqsInFlight,
-      rschedule,
-      [](auto nreqs) { return nreqs; },
-      rbufAlloc,
-      receiveOp);
-
-  nrreqs += reqsInFlight;
-
   auto sschedule = [&ctx](auto phase) {
     Schedule commAlgo{};
     return commAlgo.sendRank(ctx, phase);
@@ -312,150 +385,9 @@ inline void scatteredPairwiseWaitsome(
         buf, blocksize, peer, EXCH_TAG_RING, ctx, &reqs[reqIdx]);
   };
 
-  sphase = detail::enqueueMpiOps(
-      sphase,
-      me,
-      reqsInFlight,
-      sschedule,
-      [reqsInFlight](auto nreqs) { return nreqs + reqsInFlight; },
-      sbufAlloc,
-      sendOp);
-
-  nsreqs += reqsInFlight;
-
-  auto alreadyDone = reqsInFlight == totalExchanges;
-
-  using iter_pair = std::pair<InputIt, InputIt>;
-
-  if (alreadyDone) {
-    auto chunks_to_merge = std::vector<iter_pair>{};
-
-    chunks_to_merge.reserve(nr);
-    chunks_to_merge.push_back(std::make_pair(
-        std::next(begin, me * blocksize),
-        std::next(begin, (me + 1) * blocksize)));
-
-    // We are already done
-    // Wait for previous round
-    FMPI_CHECK(mpi::waitall(&(*reqs.begin()), &(*reqs.end())));
-
-    trace.tock(COMMUNICATION);
-
-    trace.tick(MERGE);
-
-    {
-      for (auto&& idx : fmpi::range<int>(0, reqsInFlight)) {
-        // mark everything as completed
-        chunks_to_merge.emplace_back(commState.retrieveOccupied(idx));
-      }
-
-      op(chunks_to_merge, out);
-    }
-    trace.tock(MERGE);
-    trace.put(detail::N_COMM_ROUNDS, 1);
-    return;
-  }
-
-  auto const lchunk = std::make_pair(
-      std::next(begin, me * blocksize),
-      std::next(begin, (me + 1) * blocksize));
-
-  auto compute = detail::make_async(
-      [&lfq_done,
-       &lfq_freelist,
-       lchunk,
-       n_messages = totalExchanges,
-       nr,
-       outputIt = out,
-       op]() {
-        // chunks to merge
-        std::vector<chunk> chunks_to_merge;
-        chunks_to_merge.reserve(n_messages);
-        chunks_to_merge.push_back(lchunk);
-
-        auto const blocksize = std::distance(lchunk.first, lchunk.second);
-
-        // prefix sum over all processed chunks
-        std::vector<chunk> processed;
-        processed.reserve(nr);
-
-        std::size_t n_arrivals = 0;
-
-        auto first = outputIt;
-
-        while (n_arrivals < n_messages) {
-          auto const n_old = chunks_to_merge.size();
-          auto const n_new =
-              lfq_done.pop(std::back_inserter(chunks_to_merge));
-          FMPI_DBG(n_new);
-          auto const n_merges = n_old + n_new;
-
-          n_arrivals += n_new;
-
-          // minimum number of chunks to merge: ideally we have a full level2
-          // cache
-          bool const enough_work = n_merges >= utilization_threshold;
-
-          FMPI_DBG(n_merges);
-
-          if (enough_work) {
-
-            // 2) merge all chunks
-            auto last = op(chunks_to_merge, first);
-
-            // 4) release completed buffers for future receives
-            auto fbuf = std::begin(chunks_to_merge);
-
-            if (first == outputIt) {
-              std::advance(fbuf, 1);
-            }
-
-            detail::push_fifo(fbuf, std::end(chunks_to_merge), lfq_freelist);
-
-            chunks_to_merge.clear();
-
-            // 3) increase out iterator
-            processed.emplace_back(std::make_pair(first, last));
-            std::swap(first, last);
-
-          }
-          else {
-            // we can eventually replace this with a wait method
-            std::this_thread::yield();
-          }
-        }
-
-        auto const nels = static_cast<std::size_t>(nr) * blocksize;
-
-        using merge_buffer_t = tlx::
-            SimpleVector<value_type, tlx::SimpleVectorMode::NoInitNoDestroy>;
-
-        auto mergeBuffer = merge_buffer_t{nels};
-        // generate pairs of chunks to merge
-        std::copy(
-            std::begin(processed),
-            std::end(processed),
-            std::back_inserter(chunks_to_merge));
-
-        FMPI_DBG(chunks_to_merge.size());
-        // merge
-        auto const last = op(chunks_to_merge, mergeBuffer.begin());
-
-        RTLX_ASSERT(last == mergeBuffer.end());
-
-        // switch buffer back to output iterator
-        std::move(mergeBuffer.begin(), mergeBuffer.end(), outputIt);
-
-        FMPI_DBG(processed);
-        return last;
-      });
-
   using index_type = int;
   using indices_buffer_t =
       SmallVector<index_type, winsz * sizeof(index_type)>;
-
-  size_t ncReqs     = 0;
-  size_t nrecvTotal = 0;
 
   typename indices_buffer_t::arena  indices_arena{};
   typename indices_buffer_t::vector indices(
@@ -463,31 +395,55 @@ inline void scatteredPairwiseWaitsome(
 
   indices.resize(std::distance(reqs.begin(), reqs.end()));
 
-  int n_comm_rounds = 0;
-
   std::vector<chunk> arrived_chunks;
   arrived_chunks.reserve(winsz);
+
+  auto const  totalReqs     = 2 * totalExchanges;
+  std::size_t ncReqs        = 0;
+  std::size_t nsreqs        = 0;
+  std::size_t nrreqs        = 0;
+  std::size_t sphase        = 0;
+  std::size_t rphase        = 0;
+  int         n_comm_rounds = 0;
+
+  std::size_t nSlotsRecv = reqsInFlight;
+  std::size_t nSlotsSend = reqsInFlight;
 
   while (ncReqs < totalReqs) {
     ++n_comm_rounds;
 
-#if 1
+    FMPI_DBG(n_comm_rounds);
+
+    FMPI_DBG("receiving...");
+    FMPI_DBG(nSlotsRecv);
+
+    rphase = detail::enqueueMpiOps(
+        rphase,
+        me,
+        nSlotsRecv,
+        rschedule,
+        [](auto nreqs) { return nreqs; },
+        rbufAlloc,
+        receiveOp);
+
+    nrreqs += reqsInFlight;
+
+    FMPI_DBG("sending...");
+    FMPI_DBG(nSlotsSend);
+
+    sphase = detail::enqueueMpiOps(
+        sphase,
+        me,
+        nSlotsSend,
+        sschedule,
+        [reqsInFlight](auto nreqs) { return nreqs + reqsInFlight; },
+        sbufAlloc,
+        sendOp);
+
+    nsreqs += reqsInFlight;
+
     auto* lastIdx =
         mpi::testsome(&(*reqs.begin()), &(*reqs.end()), &(*indices.begin()));
-#else
-    auto n =
-        std::count_if(reqs.begin(), reqs.begin() + reqsInFlight, [](auto r) {
-          return r != MPI_REQUEST_NULL;
-        });
-
-    FMPI_DBG(n);
-
-    mpi::waitall(&(*reqs.begin()), &(*reqs.end()));
-    std::iota(indices.begin(), indices.begin() + n, 0);
-    std::iota(indices.begin() + n, indices.begin() + 2 * n, reqsInFlight);
-    auto* lastIdx = &(*(indices.begin() + 2 * n));
-
-#endif
 
     RTLX_ASSERT(lastIdx >= &*indices.begin());
 
@@ -539,54 +495,17 @@ inline void scatteredPairwiseWaitsome(
       arrived_chunks.clear();
     }
 
-    FMPI_DBG_STREAM("push successful...");
-
-    nrecvTotal += nrecv;
-
-    auto const nrecvOpen = totalExchanges - nrreqs;
-
+    auto const nrecvOpen   = totalExchanges - nrreqs;
     auto const avail_slots = lfq_freelist.read_available();
-
     FMPI_DBG(avail_slots);
 
-    auto const nslotsRecv =
+    nSlotsRecv =
         std::min(std::min<std::size_t>(nrecv, nrecvOpen), avail_slots);
 
-    FMPI_DBG(nslotsRecv);
 
-    RTLX_ASSERT((reqsCompleted.first + nslotsRecv) <= sreqs_pivot);
+    nSlotsSend = std::min<std::size_t>(totalExchanges - nsreqs, nsent);
 
-    FMPI_DBG("receiving...");
-
-    rphase = detail::enqueueMpiOps(
-        rphase,
-        me,
-        nslotsRecv,
-        rschedule,
-        [fstRecvIdx = reqsCompleted.first](auto nreqs) {
-          return *std::next(fstRecvIdx, nreqs);
-        },
-        rbufAlloc,
-        receiveOp);
-
-    nrreqs += nslotsRecv;
-
-    auto const nslotsSend =
-        std::min<std::size_t>(totalExchanges - nsreqs, nsent);
-
-    FMPI_DBG("sending...");
-
-    sphase = detail::enqueueMpiOps(
-        sphase,
-        me,
-        nslotsSend,
-        sschedule,
-        [sreqs_pivot](auto nreqs) { return *std::next(sreqs_pivot, nreqs); },
-        sbufAlloc,
-        sendOp);
-
-    nsreqs += nslotsSend;
-
+    RTLX_ASSERT((reqsCompleted.first + nSlotsRecv) <= sreqs_pivot);
   }
 
   trace.tock(COMMUNICATION);
