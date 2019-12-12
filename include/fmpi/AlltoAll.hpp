@@ -209,11 +209,10 @@ inline void scatteredPairwiseWaitsome(
 
   trace.tick(COMMUNICATION);
 
-  constexpr auto winsz       = NReqs;
-  constexpr auto winreqs     = 2 * NReqs;
-  constexpr auto mpiReqBytes = winreqs * sizeof(MPI_Request);
+  constexpr auto winsz   = NReqs;
+  constexpr auto winreqs = 2 * NReqs;
 
-  using req_buffer_t = SmallVector<MPI_Request, mpiReqBytes>;
+  using req_buffer_t = SmallVector<MPI_Request, winreqs>;
 
   typename req_buffer_t::arena  reqs_arena{};
   typename req_buffer_t::vector reqs(
@@ -227,7 +226,7 @@ inline void scatteredPairwiseWaitsome(
   using window_buffer =
       tlx::SimpleVector<value_type, tlx::SimpleVectorMode::NoInitNoDestroy>;
 
-  auto winbuf = window_buffer{blocksize * winreqs};
+  auto winbuf = window_buffer{blocksize * 2 * reqsInFlight};
   using bufit = typename window_buffer::iterator;
   using chunk = std::pair<bufit, bufit>;
 
@@ -277,6 +276,8 @@ inline void scatteredPairwiseWaitsome(
 
     auto first = outputIt;
 
+    FMPI_DBG(n_messages);
+
     while (n_arrivals < n_messages) {
       auto const n_old = chunks_to_merge.size();
       auto const n_new = lfq_done.pop(std::back_inserter(chunks_to_merge));
@@ -284,6 +285,7 @@ inline void scatteredPairwiseWaitsome(
       auto const n_merges = n_old + n_new;
 
       n_arrivals += n_new;
+      FMPI_DBG(n_arrivals);
 
       // minimum number of chunks to merge: ideally we have a full level2
       // cache
@@ -335,10 +337,11 @@ inline void scatteredPairwiseWaitsome(
     RTLX_ASSERT(last == mergeBuffer.end());
 
     // switch buffer back to output iterator
-    std::move(mergeBuffer.begin(), mergeBuffer.end(), outputIt);
+    auto const ret =
+        std::move(mergeBuffer.begin(), mergeBuffer.end(), outputIt);
 
     FMPI_DBG(processed);
-    return last;
+    return ret;
   });
 
   // allocate the communication state which provides the receive buffer
@@ -385,15 +388,17 @@ inline void scatteredPairwiseWaitsome(
         buf, blocksize, peer, EXCH_TAG_RING, ctx, &reqs[reqIdx]);
   };
 
-  using index_type = int;
-  using indices_buffer_t =
-      SmallVector<index_type, winsz * sizeof(index_type)>;
+  using index_type       = int;
+  using indices_buffer_t = SmallVector<index_type, winsz>;
 
   typename indices_buffer_t::arena  indices_arena{};
   typename indices_buffer_t::vector indices(
       typename indices_buffer_t::allocator{indices_arena});
 
   indices.resize(std::distance(reqs.begin(), reqs.end()));
+  // initially we can use the full array of request indices for send and
+  // receives
+  std::iota(indices.begin(), std::next(indices.begin(), reqsInFlight * 2), 0);
 
   std::vector<chunk> arrived_chunks;
   arrived_chunks.reserve(winsz);
@@ -409,7 +414,9 @@ inline void scatteredPairwiseWaitsome(
   std::size_t nSlotsRecv = reqsInFlight;
   std::size_t nSlotsSend = reqsInFlight;
 
-  while (ncReqs < totalReqs) {
+  auto sreqs_pivot = std::next(std::begin(indices), reqsInFlight);
+
+  do {
     ++n_comm_rounds;
 
     FMPI_DBG(n_comm_rounds);
@@ -422,11 +429,13 @@ inline void scatteredPairwiseWaitsome(
         me,
         nSlotsRecv,
         rschedule,
-        [](auto nreqs) { return nreqs; },
+        [it = std::begin(indices)](auto nreqs) {
+          return *std::next(it, nreqs);
+        },
         rbufAlloc,
         receiveOp);
 
-    nrreqs += reqsInFlight;
+    nrreqs += nSlotsRecv;
 
     FMPI_DBG("sending...");
     FMPI_DBG(nSlotsSend);
@@ -436,14 +445,21 @@ inline void scatteredPairwiseWaitsome(
         me,
         nSlotsSend,
         sschedule,
-        [reqsInFlight](auto nreqs) { return nreqs + reqsInFlight; },
+        [it = sreqs_pivot](auto nreqs) { return *std::next(it, nreqs); },
         sbufAlloc,
         sendOp);
 
-    nsreqs += reqsInFlight;
+    nsreqs += nSlotsSend;
+
+    FMPI_DBG(ncReqs);
+
+    FMPI_ASSERT(
+        (!(ncReqs < totalReqs)) ||
+        static_cast<std::size_t>(std::count(
+            reqs.begin(), reqs.end(), MPI_REQUEST_NULL)) < reqs.size());
 
     auto* lastIdx =
-        mpi::testsome(&(*reqs.begin()), &(*reqs.end()), &(*indices.begin()));
+        mpi::waitsome(&(*reqs.begin()), &(*reqs.end()), &(*indices.begin()));
 
     RTLX_ASSERT(lastIdx >= &*indices.begin());
 
@@ -464,7 +480,7 @@ inline void scatteredPairwiseWaitsome(
 
     // we want all receive requests on the left, and send requests on the
     // right
-    auto const sreqs_pivot = std::partition(
+    sreqs_pivot = std::partition(
         reqsCompleted.first, reqsCompleted.second, [reqsInFlight](auto req) {
           // left half of reqs array array are receives
           return req < static_cast<int>(reqsInFlight);
@@ -502,11 +518,10 @@ inline void scatteredPairwiseWaitsome(
     nSlotsRecv =
         std::min(std::min<std::size_t>(nrecv, nrecvOpen), avail_slots);
 
-
     nSlotsSend = std::min<std::size_t>(totalExchanges - nsreqs, nsent);
 
     RTLX_ASSERT((reqsCompleted.first + nSlotsRecv) <= sreqs_pivot);
-  }
+  } while (ncReqs < totalReqs);
 
   trace.tock(COMMUNICATION);
 

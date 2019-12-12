@@ -17,18 +17,10 @@ class CommState {
   using iterator  = T*;
   using iter_pair = std::pair<iterator, iterator>;
 
-  // Buffer for up to 2 * NReqs occupied chunks
-  static constexpr size_t MAX_FREE      = 2 * NReqs;
-  static constexpr size_t MAX_COMPLETED = MAX_FREE;
-
-  static_assert(MAX_FREE > 0, "buffer size must be > 0");
-
-  template <std::size_t N>
-  using small_vector = SmallVector<iter_pair, N * sizeof(iter_pair)>;
-
  public:
   explicit CommState()
-    : m_occupied(typename small_vector<NReqs>::allocator{m_arena_occupied})
+    : m_occupied(
+          typename SmallVector<iter_pair, NReqs>::allocator{m_arena_occupied})
   {
     // here we explicitly resize the container
     m_occupied.resize(NReqs);
@@ -51,8 +43,8 @@ class CommState {
 
  private:
   // occupied request slots
-  typename small_vector<NReqs>::arena  m_arena_occupied{};
-  typename small_vector<NReqs>::vector m_occupied{};
+  typename SmallVector<iter_pair, NReqs>::arena  m_arena_occupied{};
+  typename SmallVector<iter_pair, NReqs>::vector m_occupied{};
 };
 
 template <class T>
@@ -86,9 +78,9 @@ struct SlidingReqWindow {
 
   void buffer_swap()
   {
-    //swap chunks
+    // swap chunks
     std::swap(pending_, ready_);
-    //swap buffers
+    // swap buffers
     std::swap(recvbuf_, mergebuf_);
   }
 

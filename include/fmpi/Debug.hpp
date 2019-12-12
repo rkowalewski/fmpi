@@ -29,7 +29,7 @@ class DebugOutput {
   }
 
   template <typename T>
-  auto print(const std::string& type, T&& value) const -> T&& // NOLINT
+  auto print(const std::string& type, T&& value) const -> T&&  // NOLINT
   {
     int flag;
 
@@ -150,5 +150,21 @@ auto operator<<(std::ostream& os, std::pair<F, T> const& p) -> std::ostream&
     auto success = (expr);               \
     RTLX_ASSERT(success == MPI_SUCCESS); \
   } while (0)
+
+#if defined(NDEBUG)
+#define FMPI_ASSERT(expr) \
+  (false ? static_cast<void>(expr) : static_cast<void>(0))
+#else
+#include <exception>
+#define FMPI_ASSERT(expr)                                  \
+  (RTLX_PREDICT_TRUE((expr)) ? static_cast<void>(0) : [] { \
+    int me;                                                \
+    MPI_Comm_rank(MPI_COMM_WORLD, &me);                    \
+    std::ostringstream os;                                 \
+    os << "[rank " << me << "] " << #expr;                 \
+    throw std::runtime_error{os.str()};                    \
+  }())  // NOLINT
+#define RTLX_ASSERT_RETURNS(expr, ret) RTLX_ASSERT(((expr) == (ret)))
+#endif
 
 #endif
