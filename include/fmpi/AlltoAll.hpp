@@ -336,12 +336,9 @@ inline void scatteredPairwiseWaitsome(
 
     RTLX_ASSERT(last == mergeBuffer.end());
 
-    // switch buffer back to output iterator
-    auto const ret =
-        std::move(mergeBuffer.begin(), mergeBuffer.end(), outputIt);
-
     FMPI_DBG(processed);
-    return ret;
+
+    return std::move(mergeBuffer.begin(), mergeBuffer.end(), outputIt);
   });
 
   // allocate the communication state which provides the receive buffer
@@ -403,17 +400,20 @@ inline void scatteredPairwiseWaitsome(
   std::vector<chunk> arrived_chunks;
   arrived_chunks.reserve(winsz);
 
-  auto const  totalReqs     = 2 * totalExchanges;
-  std::size_t ncReqs        = 0;
-  std::size_t nsreqs        = 0;
-  std::size_t nrreqs        = 0;
-  std::size_t sphase        = 0;
-  std::size_t rphase        = 0;
-  int         n_comm_rounds = 0;
+  std::size_t const total_reqs = 2 * totalExchanges;
+  std::size_t       nc_reqs    = 0;
+  std::size_t       nsreqs     = 0;
+  std::size_t       nrreqs     = 0;
+  std::size_t       sphase     = 0;
+  std::size_t       rphase     = 0;
+  std::size_t       nSlotsRecv = reqsInFlight;
+  std::size_t       nSlotsSend = reqsInFlight;
 
-  std::size_t nSlotsRecv = reqsInFlight;
-  std::size_t nSlotsSend = reqsInFlight;
+  // Yes, this is an int due to API requirements in our trace module
+  int n_comm_rounds = 0;
 
+  // Indices smaller than the pivot are receive requests, then we have send
+  // requests
   auto sreqs_pivot = std::next(std::begin(indices), reqsInFlight);
 
   do {
@@ -451,10 +451,10 @@ inline void scatteredPairwiseWaitsome(
 
     nsreqs += nSlotsSend;
 
-    FMPI_DBG(ncReqs);
+    FMPI_DBG(nc_reqs);
 
     FMPI_ASSERT(
-        (!(ncReqs < totalReqs)) ||
+        (!(nc_reqs < total_reqs)) ||
         static_cast<std::size_t>(std::count(
             reqs.begin(), reqs.end(), MPI_REQUEST_NULL)) < reqs.size());
 
@@ -467,7 +467,7 @@ inline void scatteredPairwiseWaitsome(
 
     FMPI_DBG(nCompleted);
 
-    ncReqs += nCompleted;
+    nc_reqs += nCompleted;
 
     auto const reqsCompleted =
         std::make_pair(indices.begin(), indices.begin() + nCompleted);
@@ -521,7 +521,8 @@ inline void scatteredPairwiseWaitsome(
     nSlotsSend = std::min<std::size_t>(totalExchanges - nsreqs, nsent);
 
     RTLX_ASSERT((reqsCompleted.first + nSlotsRecv) <= sreqs_pivot);
-  } while (ncReqs < totalReqs);
+
+  } while (nc_reqs < total_reqs);
 
   trace.tock(COMMUNICATION);
 
