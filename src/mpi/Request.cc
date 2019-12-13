@@ -1,4 +1,3 @@
-#include <fmpi/Memory.hpp>
 #include <fmpi/mpi/Request.hpp>
 
 namespace mpi {
