@@ -2,7 +2,6 @@
 #define FMPI_DETAIL_COMMSTATE_HPP
 
 #include <fmpi/Debug.hpp>
-#include <fmpi/Memory.hpp>
 #include <fmpi/NumericRange.hpp>
 #include <list>
 #include <tlx/simple_vector.hpp>
@@ -11,41 +10,6 @@
 
 namespace fmpi {
 namespace detail {
-
-template <class T, std::size_t NReqs>
-class CommState {
-  using iterator  = T*;
-  using iter_pair = std::pair<iterator, iterator>;
-
- public:
-  explicit CommState()
-    : m_occupied(
-          typename SmallVector<iter_pair, NReqs>::allocator{m_arena_occupied})
-  {
-    // here we explicitly resize the container
-    m_occupied.resize(NReqs);
-  }
-
-  void markOccupied(int key, iter_pair chunk)
-  {
-    RTLX_ASSERT(0 <= key && std::size_t(key) < NReqs);
-    FMPI_DBG_STREAM("markOccupied: " << key);
-    m_occupied[key] = chunk;
-  }
-
-  auto retrieveOccupied(int key)
-  {
-    RTLX_ASSERT(0 <= key && std::size_t(key) < NReqs);
-
-    FMPI_DBG_STREAM("markComplete: " << key);
-    return m_occupied[key];
-  }
-
- private:
-  // occupied request slots
-  typename SmallVector<iter_pair, NReqs>::arena  m_arena_occupied{};
-  typename SmallVector<iter_pair, NReqs>::vector m_occupied{};
-};
 
 template <class T>
 struct SlidingReqWindow {
