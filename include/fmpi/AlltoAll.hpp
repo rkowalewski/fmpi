@@ -453,13 +453,15 @@ inline void scatteredPairwiseWaitsome(
 
     FMPI_DBG(nc_reqs);
 
-    FMPI_ASSERT(
-        (!(nc_reqs < total_reqs)) ||
-        static_cast<std::size_t>(std::count(
-            reqs.begin(), reqs.end(), MPI_REQUEST_NULL)) < reqs.size());
+    auto const null_reqs = static_cast<std::size_t>(
+        std::count(reqs.begin(), reqs.end(), MPI_REQUEST_NULL));
+
+
+    // (nc_reqs < total_reqs) $\implies$ (there is at least one non-null
+    FMPI_ASSERT((!(nc_reqs < total_reqs)) || null_reqs < reqs.size());
 
     auto* lastIdx =
-        mpi::waitsome(&(*reqs.begin()), &(*reqs.end()), &(*indices.begin()));
+        mpi::testsome(&(*reqs.begin()), &(*reqs.end()), &(*indices.begin()));
 
     RTLX_ASSERT(lastIdx >= &*indices.begin());
 

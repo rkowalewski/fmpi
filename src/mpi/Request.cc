@@ -15,23 +15,11 @@ auto waitsome(MPI_Request* begin, MPI_Request* end, int* indices) -> int*
 
   auto const n = std::distance(begin, end);
 
-  auto const nulls = std::count(begin, end, MPI_REQUEST_NULL);
-
-  if (n == 0 || nulls == n) {
-    return indices;
-  }
-
-  auto const nreqs = n - nulls;
-  FMPI_DBG(nreqs);
-
   RTLX_ASSERT_RETURNS(
       MPI_Waitsome(n, begin, &completed, indices, MPI_STATUSES_IGNORE),
       MPI_SUCCESS);
 
-  if (completed == MPI_UNDEFINED) {
-    auto nulls = std::count_if(begin, end, [](auto r) {return r == MPI_REQUEST_NULL;});
-    RTLX_ASSERT(nulls < n);
-  }
+  RTLX_ASSERT(completed != MPI_UNDEFINED);
 
   return std::next(indices, completed);
 }
@@ -50,10 +38,7 @@ auto testsome(MPI_Request* begin, MPI_Request* end, int* indices) -> int*
       MPI_Testsome(n, begin, &completed, indices, MPI_STATUSES_IGNORE),
       MPI_SUCCESS);
 
-  if (completed == MPI_UNDEFINED) {
-    auto nulls = std::count_if(begin, end, [](auto r) {return r == MPI_REQUEST_NULL;});
-    RTLX_ASSERT(nulls < n);
-  }
+  RTLX_ASSERT(completed != MPI_UNDEFINED);
 
   return std::next(indices, completed);
 }
