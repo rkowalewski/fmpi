@@ -504,7 +504,8 @@ inline void scatteredPairwiseWaitsome(
           return req < static_cast<int>(reqsInFlight);
         });
 
-    auto const nrecv = std::distance(reqsCompleted.first, sreqs_pivot);
+    auto const nrecv = static_cast<std::size_t>(
+        std::distance(reqsCompleted.first, sreqs_pivot));
 
     FMPI_DBG(nrecv);
 
