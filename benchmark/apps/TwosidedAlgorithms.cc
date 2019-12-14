@@ -165,7 +165,7 @@ static std::vector<std::pair<
 
 int main(int argc, char* argv[])
 {
-  constexpr auto required = MPI_THREAD_FUNNELED;
+  constexpr auto required = MPI_THREAD_SERIALIZED;
 
   int provided;
 
