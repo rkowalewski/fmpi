@@ -34,7 +34,7 @@ class StackContainer {
     : allocator_(arena_)
     , container_(allocator_)
   {
-    container_.reserve(stack_capacity);
+    container_.reserve(Size);
   }
 
   // Getters for the actual container.

@@ -14,13 +14,16 @@ auto waitsome(MPI_Request* begin, MPI_Request* end, int* indices) -> int*
 
   auto const n = std::distance(begin, end);
 
+  if (n == 0) {
+    return indices;
+  }
+
   RTLX_ASSERT_RETURNS(
       MPI_Waitsome(n, begin, &completed, indices, MPI_STATUSES_IGNORE),
       MPI_SUCCESS);
 
-  RTLX_ASSERT(completed != MPI_UNDEFINED);
-
-  return std::next(indices, completed);
+  return (completed != MPI_UNDEFINED) ? std::next(indices, completed)
+                                      : indices;
 }
 
 auto testsome(MPI_Request* begin, MPI_Request* end, int* indices) -> int*
@@ -37,9 +40,8 @@ auto testsome(MPI_Request* begin, MPI_Request* end, int* indices) -> int*
       MPI_Testsome(n, begin, &completed, indices, MPI_STATUSES_IGNORE),
       MPI_SUCCESS);
 
-  RTLX_ASSERT(completed != MPI_UNDEFINED);
-
-  return std::next(indices, completed);
+  return (completed != MPI_UNDEFINED) ? std::next(indices, completed)
+                                      : indices;
 }
 
 }  // namespace mpi

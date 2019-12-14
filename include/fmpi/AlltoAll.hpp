@@ -216,7 +216,9 @@ inline OutputIterator compute(
       if (first == output) {
         std::advance(fbuf, 1);
       }
+      auto const nready = std::distance(fbuf, std::end(chunks_to_merge));
 
+      FMPI_DBG_STREAM("pushing " << nready << " on done queue...");
       detail::push_fifo(fbuf, std::end(chunks_to_merge), q_done);
 
       chunks_to_merge.clear();
@@ -358,7 +360,19 @@ inline void scatteredPairwiseWaitsome(
       });
 
   StackVector<MPI_Request, winreqs> reqs{};
+  FMPI_ASSERT(reqs->capacity() == winreqs);
   reqs->resize(reqs->capacity(), MPI_REQUEST_NULL);
+
+  StackVector<chunk, NReqs> arrived_chunks;
+  arrived_chunks->resize(arrived_chunks->capacity());
+
+  StackVector<int, winreqs> indices{};
+  FMPI_ASSERT(indices->capacity() == winreqs);
+  indices->resize(indices->capacity());
+  // initially we can use the full array of request indices for send and
+  // receives
+  std::iota(
+      indices->begin(), std::next(indices->begin(), reqsInFlight * 2), 0);
 
   StackVector<chunk, NReqs> occupied{};
   occupied->resize(occupied->capacity());
@@ -401,16 +415,6 @@ inline void scatteredPairwiseWaitsome(
     return mpi::isend(
         buf, blocksize, peer, EXCH_TAG_RING, ctx, &reqs[reqIdx]);
   };
-
-  StackVector<int, NReqs> indices{};
-  indices->resize(std::distance(reqs->begin(), reqs->end()));
-  // initially we can use the full array of request indices for send and
-  // receives
-  std::iota(
-      indices->begin(), std::next(indices->begin(), reqsInFlight * 2), 0);
-
-  std::vector<chunk> arrived_chunks;
-  arrived_chunks.reserve(NReqs);
 
   std::size_t const total_reqs = 2 * totalExchanges;
   std::size_t       nc_reqs    = 0;
@@ -466,6 +470,9 @@ inline void scatteredPairwiseWaitsome(
     auto const null_reqs = static_cast<std::size_t>(
         std::count(reqs->begin(), reqs->end(), MPI_REQUEST_NULL));
 
+    auto const n_active_reqs = reqs->size() - null_reqs;
+    FMPI_DBG(n_active_reqs);
+
     // (nc_reqs < total_reqs) $\implies$ (there is at least one non-null
     FMPI_ASSERT((!(nc_reqs < total_reqs)) || null_reqs < reqs->size());
 
@@ -505,28 +512,22 @@ inline void scatteredPairwiseWaitsome(
 
     FMPI_DBG(nsent);
 
-    FMPI_DBG_STREAM("pushing " << nrecv << " on queue...");
-
     {
-      std::transform(
+      FMPI_DBG_STREAM("pushing " << nrecv << " on comp queue...");
+
+      // ensure that we never try to push more than we have available capacity
+      FMPI_ASSERT(nrecv <= arrived_chunks->size());
+
+      auto last = std::transform(
           reqsCompleted.first,
           sreqs_pivot,
-          std::back_inserter(arrived_chunks),
+          arrived_chunks->begin(),
           [&occupied](auto reqIdx) { return occupied[reqIdx]; });
 
-      detail::push_fifo(
-          std::begin(arrived_chunks), std::end(arrived_chunks), lfq_done);
-
-      arrived_chunks.clear();
+      detail::push_fifo(arrived_chunks->begin(), last, lfq_done);
     }
 
-    auto const nrecvOpen   = totalExchanges - nrreqs;
-    auto const avail_slots = lfq_freelist.read_available();
-    FMPI_DBG(avail_slots);
-
-    nSlotsRecv =
-        std::min(std::min<std::size_t>(nrecv, nrecvOpen), avail_slots);
-
+    nSlotsRecv = std::min<std::size_t>(totalExchanges - nrreqs, nrecv);
     nSlotsSend = std::min<std::size_t>(totalExchanges - nsreqs, nsent);
 
     FMPI_ASSERT((reqsCompleted.first + nSlotsRecv) <= sreqs_pivot);
