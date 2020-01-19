@@ -13,7 +13,6 @@
 #include <rtlx/Assert.hpp>
 #include <type_traits>
 
-
 namespace mpi {
 
 using mpi_rank = int32_t;
@@ -79,11 +78,9 @@ auto splitSharedComm(Context const& baseComm) -> Context;
 
 namespace std {
 template <>
-struct is_signed<mpi::Rank> : std::true_type {
-};
+struct is_signed<mpi::Rank> : std::true_type {};
 template <>
-struct is_integral<mpi::Rank> : std::true_type {
-};
+struct is_integral<mpi::Rank> : std::true_type {};
 }  // namespace std
 
 #endif

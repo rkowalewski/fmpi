@@ -102,7 +102,6 @@ inline void bruck(
   for (auto&& r : range(tlx::integer_log2_ceil(nr))) {
     auto      j = static_cast<mpi::Rank>(1 << r);
     mpi::Rank recvfrom;
-
     mpi::Rank sendto;
 
     auto reqs =

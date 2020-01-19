@@ -55,7 +55,7 @@ endif()
 
 # Options
 option(MPI_CXX_SKIP_MPICXX "" ON)
-option(WITH_HWLOC           "Enable hwloc support" ON)
+option(WITH_HWLOC           "Enable hwloc support" OFF)
 
 include(${CMAKE_SOURCE_DIR}/cmake/FindMPI.cmake)
 include(${CMAKE_SOURCE_DIR}/cmake/FindOpenMP.cmake)

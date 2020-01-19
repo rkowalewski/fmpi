@@ -68,5 +68,7 @@ struct type_mapper {
   }
 };
 
+using result_t = int;
+
 }  // namespace mpi
 #endif

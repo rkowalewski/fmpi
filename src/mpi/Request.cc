@@ -2,46 +2,46 @@
 
 namespace mpi {
 
-auto waitall(MPI_Request* begin, MPI_Request* end) -> bool
-{
+auto waitall(MPI_Request* begin, MPI_Request* end, MPI_Status* statuses)
+    -> bool {
   auto n = std::distance(begin, end);
-  return MPI_Waitall(n, begin, MPI_STATUSES_IGNORE) == MPI_SUCCESS;
+  return MPI_Waitall(n, begin, statuses) == MPI_SUCCESS;
 }
 
-auto waitsome(MPI_Request* begin, MPI_Request* end, int* indices) -> int*
-{
+int waitsome(
+    MPI_Request* begin,
+    MPI_Request* end,
+    int*         indices,
+    MPI_Status*  statuses,
+    int*&        last) {
   int completed;
 
   auto const n = std::distance(begin, end);
 
-  if (n == 0) {
-    return indices;
-  }
+  auto ret = MPI_Waitsome(n, begin, &completed, indices, statuses);
 
-  RTLX_ASSERT_RETURNS(
-      MPI_Waitsome(n, begin, &completed, indices, MPI_STATUSES_IGNORE),
-      MPI_SUCCESS);
+  last =
+      (completed != MPI_UNDEFINED) ? std::next(indices, completed) : indices;
 
-  return (completed != MPI_UNDEFINED) ? std::next(indices, completed)
-                                      : indices;
+  return ret;
 }
 
-auto testsome(MPI_Request* begin, MPI_Request* end, int* indices) -> int*
-{
+int testsome(
+    MPI_Request* begin,
+    MPI_Request* end,
+    int*         indices,
+    MPI_Status*  statuses,
+    int*&        last) {
   int completed;
 
   auto const n = std::distance(begin, end);
 
-  if (n == 0) {
-    return indices;
-  }
+  auto ret = MPI_Testsome(n, begin, &completed, indices, statuses);
 
-  RTLX_ASSERT_RETURNS(
-      MPI_Testsome(n, begin, &completed, indices, MPI_STATUSES_IGNORE),
-      MPI_SUCCESS);
+  last =
+      (completed != MPI_UNDEFINED) ? std::next(indices, completed) : indices;
 
-  return (completed != MPI_UNDEFINED) ? std::next(indices, completed)
-                                      : indices;
+  return ret;
 }
 
 }  // namespace mpi

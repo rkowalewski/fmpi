@@ -7,7 +7,7 @@ add_library(fmpi
 
 target_include_directories(fmpi PUBLIC ../include)
 
-target_link_libraries(fmpi PUBLIC MPI::MPI_CXX Boost::boost dbg_macro)
+target_link_libraries(fmpi PUBLIC MPI::MPI_CXX Boost::boost Boost::fiber dbg_macro)
 target_link_libraries(fmpi PRIVATE rtlx tlx)
 
 if(HWLOC_FOUND)
@@ -23,4 +23,9 @@ if (UNIX)
     target_compile_definitions (fmpi PRIVATE FMPI_CACHELEVEL3_SIZE=${_l3CacheSize})
     target_compile_definitions (fmpi PRIVATE FMPI_CACHELEVEL2_SIZE=${_l2CacheSize})
 endif()
+
+if ("${CMAKE_BUILD_TYPE}" MATCHES ".*(D|d)ebug$")
+    target_compile_definitions (fmpi PRIVATE DBG_MACRO_NO_WARNING)
+endif()
+
 

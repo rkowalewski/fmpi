@@ -182,7 +182,7 @@ int main(int argc, char* argv[])
 
   if (provided < required) {
     if (me == 0) {
-      std::cout << "MPI_THREAD_FUNNELED is not supported!\n";
+      std::cout << "MPI_THREAD_SERIALIZED is not supported!\n";
       return 1;
     }
   }

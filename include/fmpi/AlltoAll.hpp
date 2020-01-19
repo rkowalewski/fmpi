@@ -30,8 +30,7 @@ namespace fmpi {
 namespace detail {
 
 template <typename F, typename... Ts>
-inline auto make_async(F&& f, Ts&&... params)
-{
+inline auto make_async(F&& f, Ts&&... params) {
   // Suggested in effective modern C++ to get true asynchrony
   return std::async(
       std::launch::async, std::forward<F>(f), std::forward<Ts>(params)...);
@@ -47,8 +46,7 @@ inline auto enqueueMpiOps(
     Schedule&& partner,
     ReqIdx&&   reqIdx,
     BufAlloc&& bufAlloc,
-    CommOp&&   commOp)
-{
+    CommOp&&   commOp) {
   uint32_t nreqs;
 
   for (nreqs = 0; nreqs < reqsInFlight; ++phase) {
@@ -65,9 +63,7 @@ inline auto enqueueMpiOps(
         "exchanging data with " << peer << " phase " << phase << " reqIdx "
                                 << idx);
 
-    auto* buf = bufAlloc(peer, idx);
-
-    FMPI_ASSERT(buf);
+    auto buf = bufAlloc(peer, idx);
 
     FMPI_CHECK(commOp(buf, peer, idx));
 
@@ -84,8 +80,7 @@ inline void scatteredPairwise_lt3(
     int                 blocksize,
     mpi::Context const& ctx,
     Op&&                op,
-    rtlx::TimeTrace&    trace)
-{
+    rtlx::TimeTrace&    trace) {
   using value_type = typename std::iterator_traits<OutputIt>::value_type;
 
   using merge_buffer_t =
@@ -146,8 +141,7 @@ void push_fifo(
     Iterator begin,
     Iterator end,
     lfq_fifo<typename std::iterator_traits<Iterator>::value_type, Capacity>&
-        fifo)
-{
+        fifo) {
   FMPI_DBG_STREAM(
       "pushing " << std::distance(begin, end) << " on fifo of capacity "
                  << Capacity);
@@ -169,8 +163,7 @@ inline OutputIterator compute(
     std::size_t                    n_producers,
     OutputIterator                 output,
     Op&&                           op,
-    std::size_t                    op_threshold)
-{
+    std::size_t                    op_threshold) {
   using value_type =
       typename std::iterator_traits<OutputIterator>::value_type;
   using Task = typename TaskQueue::value_type;
@@ -226,8 +219,7 @@ inline OutputIterator compute(
       // 3) increase out iterator
       processed.emplace_back(std::make_pair(first, last));
       std::swap(first, last);
-    }
-    else {
+    } else {
       // we can eventually replace this with a wait method
       // std::this_thread::yield();
     }
@@ -268,8 +260,7 @@ inline void scatteredPairwiseWaitsome(
     OutputIt            out,
     int                 blocksize,
     mpi::Context const& ctx,
-    Op&&                op)
-{
+    Op&&                op) {
   // Tuning Parameters:
 
   // NReqs: Maximum Number of pending receives
@@ -389,16 +380,15 @@ inline void scatteredPairwiseWaitsome(
     while (!lfq_freelist.pop(c)) {
       // std::this_thread::yield();
     }
-    occupied[reqIdx] = c;
-    return c.first;
+    return (occupied[reqIdx] = c);
   };
 
-  auto receiveOp = [&reqs, blocksize, &ctx](
-                       auto* buf, auto peer, auto reqIdx) {
+  auto receiveOp = [&reqs, &ctx](auto chunk, auto peer, auto reqIdx) {
     FMPI_DBG_STREAM("receiving from " << peer << " reqIdx " << reqIdx);
 
+    auto const nels = std::distance(chunk.first, chunk.second);
     return mpi::irecv(
-        buf, blocksize, peer, EXCH_TAG_RING, ctx, &reqs[reqIdx]);
+        &*chunk.first, nels, peer, EXCH_TAG_RING, ctx, &reqs[reqIdx]);
   };
 
   auto sschedule = [&ctx](auto phase) {
@@ -407,13 +397,16 @@ inline void scatteredPairwiseWaitsome(
   };
 
   auto sbufAlloc = [begin, blocksize](auto peer, auto /*reqIdx*/) {
-    return &*std::next(begin, peer * blocksize);
+    auto first = std::next(begin, peer * blocksize);
+    return std::make_pair(first, std::next(first, blocksize));
   };
 
-  auto sendOp = [&reqs, blocksize, ctx](auto* buf, auto peer, auto reqIdx) {
+  auto sendOp = [&reqs, ctx](auto chunk, auto peer, auto reqIdx) {
     FMPI_DBG_STREAM("sending to " << peer << " reqIdx " << reqIdx);
+
+    auto const nels = std::distance(chunk.first, chunk.second);
     return mpi::isend(
-        buf, blocksize, peer, EXCH_TAG_RING, ctx, &reqs[reqIdx]);
+        &*chunk.first, nels, peer, EXCH_TAG_RING, ctx, &reqs[reqIdx]);
   };
 
   std::size_t const total_reqs = 2 * totalExchanges;
@@ -473,11 +466,16 @@ inline void scatteredPairwiseWaitsome(
     auto const n_active_reqs = reqs->size() - null_reqs;
     FMPI_DBG(n_active_reqs);
 
-    // (nc_reqs < total_reqs) $\implies$ (there is at least one non-null
+    // (nc_reqs < total_reqs) $\implies$ (there is at least one non-null)
     FMPI_ASSERT((!(nc_reqs < total_reqs)) || null_reqs < reqs->size());
 
-    auto* lastIdx = mpi::testsome(
-        &(*reqs->begin()), &(*reqs->end()), &(*indices->begin()));
+    int* lastIdx{};
+    FMPI_CHECK_MPI(mpi::testsome(
+        &(*reqs->begin()),
+        &(*reqs->end()),
+        &(*indices->begin()),
+        MPI_STATUSES_IGNORE,
+        lastIdx));
 
     FMPI_ASSERT(lastIdx >= &*indices->begin());
 
@@ -559,8 +557,7 @@ inline void scatteredPairwiseWaitall(
     OutputIt            out,
     int                 blocksize,
     mpi::Context const& ctx,
-    Op&&                op)
-{
+    Op&&                op) {
   using value_type = typename std::iterator_traits<OutputIt>::value_type;
   using buffer_t =
       tlx::SimpleVector<value_type, tlx::SimpleVectorMode::NoInitNoDestroy>;
@@ -757,8 +754,7 @@ inline void MpiAlltoAll(
     OutputIt            out,
     int                 blocksize,
     mpi::Context const& ctx,
-    Op&&                op)
-{
+    Op&&                op) {
   using value_type = typename std::iterator_traits<InputIt>::value_type;
 
   auto nr = ctx.size();

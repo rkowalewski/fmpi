@@ -31,7 +31,7 @@ if(CMAKE_VERSION VERSION_GREATER 3.6 AND ENABLE_CLANG_TIDY MATCHES "ON")
     endif()
 
     execute_process(
-        COMMAND bash "-c" "git -C ${CMAKE_SOURCE_DIR} ls-files | grep \".*\\(external\\|libs\\|benchmark\\|src\\).*\\.cc$\""
+        COMMAND bash "-c" "git -C ${CMAKE_SOURCE_DIR} ls-files | grep \"\\.cc$\""
         OUTPUT_VARIABLE TRACKED_FILES)
 
 

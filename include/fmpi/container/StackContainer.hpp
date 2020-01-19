@@ -3,6 +3,8 @@
 
 #include <tlx/stack_allocator.hpp>
 
+#include <vector>
+
 namespace fmpi {
 
 namespace detail {
@@ -10,8 +12,7 @@ namespace detail {
 constexpr std::size_t MAX_STACK_SIZE_BUF = 1024;
 
 template <class T, std::size_t N>
-constexpr std::size_t stackCapacity()
-{
+constexpr std::size_t stackCapacity() {
   constexpr auto requested = N * sizeof(T);
 
   return (MAX_STACK_SIZE_BUF < requested) ? MAX_STACK_SIZE_BUF : requested;
@@ -32,8 +33,7 @@ class StackContainer {
 
   StackContainer()
     : allocator_(arena_)
-    , container_(allocator_)
-  {
+    , container_(allocator_) {
     container_.reserve(Size);
   }
 
@@ -43,21 +43,17 @@ class StackContainer {
   // shorter lifetimes than the source. The copy will share the same allocator
   // and therefore the same stack buffer as the original. Use std::copy to
   // copy into a "real" container for longer-lived objects.
-  container_type& container()
-  {
+  container_type& container() {
     return container_;
   }
-  const container_type& container() const
-  {
+  const container_type& container() const {
     return container_;
   }
 
-  ContainerType* operator->()
-  {
+  ContainerType* operator->() {
     return &container_;
   }
-  const ContainerType* operator->() const
-  {
+  const ContainerType* operator->() const {
     return &container_;
   }
 
@@ -85,30 +81,25 @@ class StackVector
 
  public:
   StackVector()
-    : base()
-  {
+    : base() {
   }
 
   // Copy Constructor if we want to put this into a different STL container
   StackVector(const StackVector<T, Size>& other)
-    : base()
-  {
+    : base() {
     this->container().assign(other->begin(), other->end());
   }
 
-  StackVector<T, Size>& operator=(const StackVector<T, Size>& other)
-  {
+  StackVector<T, Size>& operator=(const StackVector<T, Size>& other) {
     this->container().assign(other->begin(), other->end());
     return *this;
   }
 
   // just for convenience
-  T& operator[](size_t i)
-  {
+  T& operator[](size_t i) {
     return this->container().operator[](i);
   }
-  const T& operator[](size_t i) const
-  {
+  const T& operator[](size_t i) const {
     return this->container().operator[](i);
   }
 };

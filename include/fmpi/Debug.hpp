@@ -19,8 +19,7 @@ class DebugOutput {
     , m_filepath(filepath)
     , m_line(line)
     , m_function_name(function_name)
-    , m_expression(expression)
-  {
+    , m_expression(expression) {
     const std::size_t path_length = m_filepath.length();
     if (path_length > MAX_PATH_LENGTH) {
       m_filepath = ".." + m_filepath.substr(
@@ -39,7 +38,7 @@ class DebugOutput {
     const T&          ref = value;
     std::stringstream stream_value;
     const bool        print_expr_and_type =
-        dbg_macro::pretty_print(stream_value, ref);
+        ::dbg_macro::pretty_print(stream_value, ref);
 
     std::stringstream output;
     output << ansi(ANSI_DEBUG) << "[" << m_filepath << ":" << m_line << " ("
@@ -67,8 +66,7 @@ class DebugOutput {
   }
 
  private:
-  auto ansi(const char* code) const -> const char*
-  {
+  auto ansi(const char* code) const -> const char* {
     if (m_use_colorized_output) {
       return code;
     }
@@ -100,8 +98,7 @@ class DebugOutput {
 namespace std {
 
 template <class F, class T>
-auto operator<<(std::ostream& os, std::pair<F, T> const& p) -> std::ostream&
-{
+auto operator<<(std::ostream& os, std::pair<F, T> const& p) -> std::ostream& {
   os << std::string("(") << p.first << ", " << p.second << ")";
   return os;
 }

@@ -11,10 +11,25 @@
 
 namespace mpi {
 
-auto waitsome(MPI_Request* begin, MPI_Request* end, int* indices) -> int*;
-auto testsome(MPI_Request* begin, MPI_Request* end, int* indices) -> int*;
+int testsome(
+    MPI_Request* begin,
+    MPI_Request* end,
+    int*         indices,
+    MPI_Status*  statuses,
+    int*&        last);
 
-auto waitall(MPI_Request* begin, MPI_Request* end) -> bool;
+int waitsome(
+    MPI_Request* begin,
+    MPI_Request* end,
+    int*         indices,
+    MPI_Status*  statuses,
+    int*&        last);
+
+bool waitall(
+    MPI_Request* begin,
+    MPI_Request* end,
+    MPI_Status*  statuses = MPI_STATUSES_IGNORE);
+
 }  // namespace mpi
 
 #endif

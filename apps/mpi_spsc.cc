@@ -2,103 +2,153 @@
 #include <omp.h>
 #include <sched.h>
 
+#include <boost/lockfree/spsc_queue.hpp>
+#include <fmpi/NumericRange.hpp>
+#include <fmpi/Span.hpp>
+#include <fmpi/container/BoundedBuffer.hpp>
+#include <fmpi/detail/Capture.hpp>
+#include <fmpi/mpi/Algorithm.hpp>
+#include <fmpi/mpi/Dispatcher.hpp>
+#include <fmpi/mpi/Environment.hpp>
+#include <fmpi/mpi/Request.hpp>
 #include <future>
 #include <iostream>
 #include <numeric>
+#include <random>
+#include <rtlx/Assert.hpp>
+#include <rtlx/ScopedLambda.hpp>
 #include <sstream>
 #include <thread>
 
-#include <fmpi/NumericRange.hpp>
-#include <fmpi/mpi/Environment.hpp>
+const unsigned long QUEUE_SIZE     = 5L;
+const unsigned long TOTAL_ELEMENTS = QUEUE_SIZE * 10L;
 
-#include <rtlx/Assert.hpp>
-#include <rtlx/ScopedLambda.hpp>
+std::vector<int> gen_random_vec() {
+  auto randomNumberBetween = [](int low, int high) {
+    auto randomFunc =
+        [distribution_  = std::uniform_int_distribution<int>(low, high),
+         random_engine_ = std::mt19937{std::random_device{}()}]() mutable {
+          return distribution_(random_engine_);
+        };
+    return randomFunc;
+  };
 
-#include <boost/lockfree/spsc_queue.hpp>
+  std::vector<int> expect;
+  std::generate_n(
+      std::back_inserter(expect),
+      TOTAL_ELEMENTS,
+      randomNumberBetween(1, 1000));
 
-constexpr std::size_t N         = 100;
-constexpr std::size_t threshold = 10;
-
-using Message = int;
-using MessageQueue =
-    boost::lockfree::spsc_queue<Message, boost::lockfree::capacity<100>>;
-
-// The producer functionality
-std::vector<Message> Producer(
-    MessageQueue& queue, const size_t enough_processed)
-{
-  std::vector<Message> all_data;
-  all_data.resize(enough_processed);
-
-  std::iota(all_data.begin(), all_data.end(), 0);
-
-  std::vector<Message> pushed_data;  // for later verification
-  for (Message m : all_data) {
-    while (!queue.push(m)) {
-      // std::this_thread::yield();
-      std::this_thread::sleep_for(std::chrono::milliseconds(100));
-    }
-  }
-  return pushed_data;
+  return expect;
 }
 
-int main(int argc, char* argv[])
-{
+int test();
+
+int main(int argc, char* argv[]) {
   // MPI_Init(&argc, &argv);
   int provided;
-  MPI_Init_thread(&argc, &argv, MPI_THREAD_FUNNELED, &provided);
-
-  if (provided < MPI_THREAD_FUNNELED) {
-    std::cerr << "MPI_THREAD_FUNNELED not supported\n";
-    return 1;
-  }
-
-  int f;
-  MPI_Is_thread_main(&f);
-
-  if (f == 0) {
-    std::cerr << "is not main thread\n";
-    return 1;
-  }
-
+  MPI_Init_thread(&argc, &argv, MPI_THREAD_SERIALIZED, &provided);
   auto finalizer = rtlx::scope_exit([]() { MPI_Finalize(); });
 
-  auto q = MessageQueue{};
+  if (provided < MPI_THREAD_SERIALIZED) {
+    std::cerr << "MPI_THREAD_SERIALIZED not supported\n";
+    return 1;
+  }
 
-  auto consumer = std::async(std::launch::async, [&q]() {
-    std::vector<Message> recv;
+  test();
 
-    std::size_t nrecv = 0;
+  return 0;
+}
 
-    while (nrecv < N) {
-      while (q.read_available() < threshold) {
-        std::this_thread::yield();
-      }
+int test() {
+  mpi::Context const world{MPI_COMM_WORLD};
 
-      auto nr = q.consume_all([&recv](auto v) { recv.emplace_back(v); });
+  if (world.size() != 2) return -1;
 
-      std::ostringstream os;
-      os << "received " << nr << " messages:\n";
+  using result_t = int;
+  using buffer_t = fmpi::Span<int>;
+  using rank_t   = mpi::Rank;
+  using tag_t    = int;
 
-      std::copy(
-          std::next(std::begin(recv), nrecv),
-          std::next(std::begin(recv), nrecv + nr),
-          std::ostream_iterator<Message>(os, ", "));
+  using task_t = fmpi::MpiTask<result_t, buffer_t, rank_t, tag_t>;
+  using callback_t =
+      fmpi::FixedFunction<void(MPI_Status, buffer_t, fmpi::Ticket), 16>;
 
-      os << "\n";
+  struct workload_item {
+    task_t       task{};
+    callback_t   callback{};
+    fmpi::Ticket ticket{};
+  };
 
-      std::cout << os.str();
+  int one = 1;
+  int buf = 100;
 
-      nrecv += nr;
-    }
+  fmpi::CommDispatcher<int> dispatcher{world, 2};
 
-    return recv.size();
-  });
+  dispatcher.start_worker();
 
-  Producer(q, N);
+  // sleep for one second
+  std::this_thread::sleep_for(std::chrono::seconds(1));
 
-  auto ret = consumer.get();
+  FMPI_DBG(&buf);
 
-  std::cout << "consumer processed " << ret << "items\n";
+  auto ready_tasks = fmpi::ThreadsafeQueue<fmpi::Span<int>>{};
+
+  constexpr int mpi_tag = 0;
+
+  mpi::Rank peer    = static_cast<mpi::Rank>(1) - world.rank();
+  auto      rticket = dispatcher.postAsyncRecv(
+      fmpi::make_span(&buf, 1),
+      peer,
+      mpi_tag,
+      [me = world.rank(), &ready_tasks](
+          fmpi::Ticket ticket, MPI_Status status, fmpi::Span<int> data) {
+        std::ostringstream os;
+        os << "[ Rank: " << me << "] [Ticket: " << ticket.id
+           << " ] { status.MPI_SOURCE = " << status.MPI_SOURCE << ", "
+           << "status.MPI_TAG = " << status.MPI_TAG << ", "
+           << "status.MPI_ERROR = " << status.MPI_ERROR << "}\n";
+
+        std::cout << os.str();
+        ready_tasks.push_front(data);
+      });
+
+  auto sticket = dispatcher.postAsyncSend(
+      fmpi::make_span(&one, 1),
+      peer,
+      mpi_tag,
+      [](fmpi::Ticket, MPI_Status, fmpi::Span<int>) {
+        std::cout << "callback fire for send\n";
+      });
+
+  std::cout << "enqueued ticket" << rticket.id << "\n";
+  std::cout << "enqueued ticket" << sticket.id << "\n";
+
+  auto consumer =
+      std::async(std::launch::async, [&ready_tasks, ntasks = 1]() {
+        std::this_thread::sleep_for(std::chrono::seconds(2));
+
+        auto n = ntasks;
+        while (n--) {
+          fmpi::Span<int> data;
+          ready_tasks.pop_back(data);
+          std::ostringstream os;
+          os << "received chunk: " << data.size() << " nels\n";
+          std::cout << os.str();
+        }
+      });
+
+  dispatcher.loop_until_done();
+  std::cout << "dispatcher done...waiting for consumer\n";
+  consumer.wait();
+
+  std::cout << "consumer done...\n";
+
+  FMPI_DBG(buf);
+
+  if (buf == 1 && world.rank() == 0) {
+    std::cout << "test successful\n";
+  }
+
   return 0;
 }
