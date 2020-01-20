@@ -28,17 +28,6 @@
 module load slurm_setup
 module load hwloc
 
-export OMP_NUM_THREADS=<<NUM_THREADS>>
-
-#if [[ "$OMP_NUM_THREADS" -gt 1 ]]
-#then
-#    export OMP_NUM_THREADS=<<NUM_THREADS>>
-#    export OMP_PROC_BIND=close
-#    export OMP_PLACES=cores
-#    echo "multithreaded..."
-#fi
-
 mpiexec \
     -n $SLURM_NTASKS  \
-    build.release/benchmark/twoSidedAlgorithms \
-    $SLURM_JOB_NUM_NODES <<ARGS>>
+    build.release/apps/mpiSpsc

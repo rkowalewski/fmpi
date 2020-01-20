@@ -66,7 +66,8 @@ int test() {
   // int one = 1;
   // int buf = 100;
 
-  fmpi::CommDispatcher<int> dispatcher{world, 2};
+  constexpr std::size_t winsz = 4;
+  fmpi::CommDispatcher<int> dispatcher{world, winsz};
 
   constexpr std::size_t blocksize = 1;
 
@@ -144,6 +145,8 @@ int test() {
   if (!std::equal(std::begin(rbuf), std::end(rbuf), std::begin(expect))) {
     throw std::runtime_error("invalid result");
   }
+
+  std::cout << "success...\n";
 
   return 0;
 }

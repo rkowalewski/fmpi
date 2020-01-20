@@ -34,12 +34,13 @@ module load hwloc
 
 unset KMP_AFFINITY
 
-export OMP_NUM_THREADS=<<NUM_THREADS>>
-export I_MPI_DEBUG=4
-export OMP_PROC_BIND=close
-export OMP_PLACES=cores
-
-#export OMP_PLACES="{0:<<NUM_THREADS>>:1}"
+export OMP_NUM_THREADS="<<NUM_THREADS>>"
+export OMP_PROC_BIND="true"
+export OMP_PLACES="$(./scripts/genPlaces.sh <<NUM_PROCS>>)"
+echo "places: $OMP_PLACES"
+export I_MPI_DEBUG="4"
 
 mpiexec -n $((<<NUM_PROCS>> * <<NUM_NODES>>)) \
+    -env I_MPI_PIN_DOMAIN $((96 / <<NUM_PROCS>>)) \
     ./build.release/apps/mpiPinning
+
