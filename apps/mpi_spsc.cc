@@ -65,20 +65,10 @@ int test() {
 
   if (world.size() != 2) return -1;
 
-  using result_t = int;
-  using buffer_t = fmpi::Span<int>;
-  using rank_t   = mpi::Rank;
-  using tag_t    = int;
-
-  using task_t = fmpi::MpiTask<result_t, buffer_t, rank_t, tag_t>;
-  using callback_t =
-      fmpi::FixedFunction<void(MPI_Status, buffer_t, fmpi::Ticket), 16>;
-
-  struct workload_item {
-    task_t       task{};
-    callback_t   callback{};
-    fmpi::Ticket ticket{};
-  };
+//  using result_t = int;
+//  using buffer_t = fmpi::Span<int>;
+//  using rank_t   = mpi::Rank;
+//  using tag_t    = int;
 
   int one = 1;
   int buf = 100;

@@ -3,6 +3,7 @@
 
 #include <mpi.h>
 
+#include <atomic>
 #include <deque>
 #include <mutex>
 #include <numeric>
@@ -39,57 +40,6 @@ struct Ticket {
   uint32_t id{};
 };
 
-template <typename R, typename... Args>
-class MpiTask {
-  /// We want to make sure that our function fits into a single cache line
-  static constexpr std::size_t overhead = sizeof(FixedFunction<void(), 0>);
-
-  static constexpr std::size_t size =
-      std::min<std::size_t>(128, 64 - overhead);
-
-  fmpi::FixedFunction<R(Args..., MPI_Request*), size> f_;
-
-  std::tuple<Args...> args_;
-  status              status_{status::pending};
-
- public:
-  MpiTask() = default;
-
-  template <typename U>
-  MpiTask(U&& u, std::tuple<Args...>&& args)
-    : f_(std::forward<U>(u))
-    , args_(std::move(args)) {
-    FMPI_DBG(sizeof(f_));
-    FMPI_DBG(sizeof(args_));
-    FMPI_DBG(sizeof(*this));
-
-    // static_assert(
-    //    sizeof(std::aligned_storage<6 * sizeof(void*)>::type) <=
-    //        sizeof(decltype(*this)),
-    //    "");
-  }
-
-  R operator()(MPI_Request* req) {
-    FMPI_ASSERT(status_ == status::pending);
-    auto params = std::tuple_cat(std::move(args_), std::make_tuple(req));
-    auto ret    = std::apply(f_, std::move(params));
-
-    status_ = status::running;
-
-    return ret;
-  };
-
-  status status() const noexcept {
-    return status_;
-  }
-};  // namespace fmpi
-
-template <typename F, typename... Args>
-auto captureMpiTask(F&& f, Args&&... args)
-    -> MpiTask<int, std::decay_t<Args>...> {
-  return {std::forward<F>(f), std::make_tuple(std::forward<Args>(args)...)};
-}
-
 template <class T>
 class CommDispatcher {
   using result_t = int;
@@ -98,10 +48,10 @@ class CommDispatcher {
   using tag_t    = int;
 
   /// Task Signature
-  using task_t = MpiTask<result_t, buffer_t, rank_t, tag_t>;
+  using task_t = Function<int(MPI_Request*)>;
 
   /// Callback Signature
-  using callback_t = FixedFunction<void(Ticket, MPI_Status, buffer_t), 64>;
+  using callback_t = Function<void(Ticket, MPI_Status, buffer_t)>;
 
   template <class _T>
   using simple_vector =
@@ -121,11 +71,21 @@ class CommDispatcher {
   static_assert(n_types == 2, "only two request types supported for now");
 
   /// Workload Item keeping a task, done callback and a ticket
-  struct alignas(CACHE_ALIGNMENT) workload_item {
+  struct workload_item {
     task_t     task{};
     callback_t callback{};
     buffer_t   data{};
     Ticket     ticket{};
+    status     state{status::pending};
+
+    workload_item() = default;
+
+    workload_item(task_t&& f, callback_t&& c, buffer_t d, Ticket t)
+      : task(std::move(f))
+      , callback(std::move(c))
+      , data(d)
+      , ticket(t) {
+    }
   };
 
   // All communication requests need to be in a single MPI context.
@@ -171,7 +131,7 @@ class CommDispatcher {
   // free slots for each request type
   std::array<tlx::RingBuffer<int>, n_types> req_slots_;
 
-  std::thread      consumer_;
+  std::thread      thread_;
   std::atomic_bool running_;
 
  public:
@@ -199,6 +159,8 @@ class CommDispatcher {
   void start_worker();
   void stop_worker();
 
+  void pinToCore(int coreId);
+
  private:
   Ticket enqueue_task(
       request_type type,
@@ -219,7 +181,8 @@ class CommDispatcher {
 };
 
 template <class T>
-CommDispatcher<T>::CommDispatcher(mpi::Context const& ctx, std::size_t winsz)
+inline CommDispatcher<T>::CommDispatcher(
+    mpi::Context const& ctx, std::size_t winsz)
   : ctx_(&ctx)
   , winsz_(winsz)
   , reqs_in_flight_(winsz_ / n_types)
@@ -244,74 +207,65 @@ CommDispatcher<T>::CommDispatcher(mpi::Context const& ctx, std::size_t winsz)
         [n = i * reqs_in_flight_]() mutable { return n++; });
   }
 
-  FMPI_DBG(sizeof(workload_item));
-
   FMPI_ASSERT((winsz % n_types) == 0);
 }
 
 template <class T>
-CommDispatcher<T>::~CommDispatcher() {
+inline CommDispatcher<T>::~CommDispatcher() {
   stop_worker();
-  consumer_.join();
+  thread_.join();
 }
 
 template <class T>
-void CommDispatcher<T>::stop_worker() {
+inline void CommDispatcher<T>::stop_worker() {
   running_.store(false, std::memory_order_relaxed);
 }
 
 template <class T>
 void CommDispatcher<T>::start_worker() {
-  consumer_ = std::thread(&CommDispatcher::worker, this);
+  thread_ = std::thread(&CommDispatcher::worker, this);
 }
 
 template <class T>
 template <class Callback>
-Ticket CommDispatcher<T>::postAsyncRecv(
+inline Ticket CommDispatcher<T>::postAsyncRecv(
     buffer_t buffer, rank_t source, tag_t tag, Callback&& cb) {
   auto const* ctx = ctx_;
 
-  auto task = fmpi::captureMpiTask(
-      [ctx](auto buffer, auto peer, auto tag, MPI_Request* req) {
+  auto task = fmpi::makeCapture<int>(
+      [ctx, buffer, peer = source, tag](MPI_Request* req) {
         return mpi::irecv(buffer.data(), buffer.size(), peer, tag, *ctx, req);
-      },
-      buffer,
-      source,
-      tag);
+      });
+
+  auto callback = fmpi::makeCapture<void>(std::forward<Callback>(cb));
 
   return enqueue_task(
-      request_type::IRECV,
-      std::move(task),
-      callback_t{std::forward<Callback>(cb)},
-      buffer);
+      request_type::IRECV, std::move(task), std::move(callback), buffer);
 }
 
 template <class T>
 template <class Callback>
-Ticket CommDispatcher<T>::postAsyncSend(
-    buffer_t buffer, rank_t source, tag_t tag, Callback&& cb) {
+inline Ticket CommDispatcher<T>::postAsyncSend(
+    buffer_t buffer, rank_t dest, tag_t tag, Callback&& cb) {
   FMPI_ASSERT(!buffer.empty());
 
+  std::ignore = cb;
+
   auto const* ctx = ctx_;
 
-  auto task = fmpi::captureMpiTask(
-      [ctx](auto buffer, auto peer, auto tag, MPI_Request* req) {
-        return mpi::isend(
-            buffer.begin(), buffer.size(), peer, tag, *ctx, req);
-      },
-      buffer,
-      source,
-      tag);
+  auto task = fmpi::makeCapture<int>([ctx, buffer, peer = dest, tag](
+                                         MPI_Request* req) {
+    return mpi::isend(buffer.begin(), buffer.size(), peer, tag, *ctx, req);
+  });
+
+  auto callback = fmpi::makeCapture<void>(std::forward<Callback>(cb));
 
   return enqueue_task(
-      request_type::ISEND,
-      std::move(task),
-      callback_t{std::forward<Callback>(cb)},
-      buffer);
+      request_type::ISEND, std::move(task), std::move(callback), buffer);
 }
 
 template <class T>
-Ticket CommDispatcher<T>::enqueue_task(
+inline Ticket CommDispatcher<T>::enqueue_task(
     request_type type, task_t&& task, callback_t&& callback, buffer_t data) {
   Ticket ticket;
   {
@@ -333,7 +287,7 @@ Ticket CommDispatcher<T>::enqueue_task(
 }
 
 template <class T>
-void CommDispatcher<T>::worker() {
+inline void CommDispatcher<T>::worker() {
   std::vector<int> new_reqs;
   new_reqs.reserve(winsz_);
 
@@ -354,7 +308,7 @@ void CommDispatcher<T>::worker() {
       if (!ntasks_) {
         // wait for new tasks for a maximum of 10ms
         // If a timeout occurs, unlock and
-        auto const ten_ms = std::chrono::milliseconds(10);
+        constexpr auto ten_ms = std::chrono::milliseconds(10);
         if (!cv_tasks_.wait_for(
                 lk, ten_ms, [this]() { return ntasks_ > 0; })) {
           // lock is again released...
@@ -387,14 +341,16 @@ void CommDispatcher<T>::worker() {
       auto* mpi_req = &mpi_reqs_[slot];
       // initiate the task
       pending_[slot].task(mpi_req);
+      auto prev = std::exchange(pending_[slot].state, status::running);
+      FMPI_ASSERT(prev == status::pending);
     }
 
     new_reqs.clear();
   }
-}  // namespace fmpi
+}
 
 template <class T>
-std::size_t CommDispatcher<T>::process_requests() {
+inline std::size_t CommDispatcher<T>::process_requests() {
   int* last;
 
   auto mpi_ret = mpi::testsome(
@@ -433,10 +389,29 @@ std::size_t CommDispatcher<T>::process_requests() {
     mpi_statuses_[*it].MPI_ERROR =
         (mpi_ret == MPI_SUCCESS) ? MPI_SUCCESS : mpi_statuses_[*it].MPI_ERROR;
 
+    auto const prev = std::exchange(
+        processed.state,
+        (mpi_ret == MPI_SUCCESS) ? status::resolved : status::rejected);
+
+    FMPI_ASSERT(prev == status::running);
+
+    // TODO error handling if some requests fail?
+
     processed.callback(processed.ticket, mpi_statuses_[*it], processed.data);
   }
 
   return nCompleted;
+}
+
+template <class T>
+inline void CommDispatcher<T>::pinToCore(int coreId) {
+  int cpuSetSize = sizeof(cpu_set_t);
+  if (coreId >= 0 && (coreId <= cpuSetSize * 8)) {
+    cpu_set_t cpuSet;
+    CPU_ZERO(&cpuSet);
+    CPU_SET(coreId, &cpuSet);
+    pthread_setaffinity_np(thread_.native_handle(), cpuSetSize, &cpuSet);
+  }
 }
 
 }  // namespace fmpi
