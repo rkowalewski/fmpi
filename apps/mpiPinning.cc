@@ -29,7 +29,7 @@ int main(int argc, char** argv)
   printf("omp_get_num_places: %d\n", nplaces);
 
   std::vector<int> myprocs;
-  for(std::size_t i = 0; i < nplaces; ++i) {
+  for(int i = 0; i < nplaces; ++i) {
     int nprocs = omp_get_place_num_procs(i);
     myprocs.resize(nprocs);
     omp_get_place_proc_ids(i, myprocs.data());
