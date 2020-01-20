@@ -63,68 +63,73 @@ int main(int argc, char* argv[]) {
 int test() {
   mpi::Context const world{MPI_COMM_WORLD};
 
-  if (world.size() != 2) return -1;
-
-//  using result_t = int;
-//  using buffer_t = fmpi::Span<int>;
-//  using rank_t   = mpi::Rank;
-//  using tag_t    = int;
-
-  int one = 1;
-  int buf = 100;
+  // int one = 1;
+  // int buf = 100;
 
   fmpi::CommDispatcher<int> dispatcher{world, 2};
+
+  constexpr std::size_t blocksize = 1;
+
+  std::vector<int> sbuf(world.size() * blocksize);
+  std::vector<int> rbuf(world.size() * blocksize);
+
+  int const first = world.rank() * world.size();
+  std::iota(std::begin(sbuf), std::end(sbuf), first);
+
+  std::vector<int> expect(world.size() * blocksize);
+
+  int val = world.rank();
+  std::generate(
+      std::begin(expect),
+      std::end(expect),
+      [&val, size = world.size()]() mutable {
+        return std::exchange(val, val + size);
+      });
+
+  FMPI_DBG_RANGE(std::begin(sbuf), std::end(sbuf));
 
   dispatcher.start_worker();
 
   // sleep for one second
   std::this_thread::sleep_for(std::chrono::seconds(1));
 
-  FMPI_DBG(&buf);
+  // FMPI_DBG(&buf);
 
   auto ready_tasks = fmpi::ThreadsafeQueue<fmpi::Span<int>>{};
 
   constexpr int mpi_tag = 0;
 
-  mpi::Rank peer    = static_cast<mpi::Rank>(1) - world.rank();
-  auto      rticket = dispatcher.postAsyncRecv(
-      fmpi::make_span(&buf, 1),
-      peer,
-      mpi_tag,
-      [me = world.rank(), &ready_tasks](
-          fmpi::Ticket ticket, MPI_Status status, fmpi::Span<int> data) {
-        std::ostringstream os;
-        os << "[ Rank: " << me << "] [Ticket: " << ticket.id
-           << " ] { status.MPI_SOURCE = " << status.MPI_SOURCE << ", "
-           << "status.MPI_TAG = " << status.MPI_TAG << ", "
-           << "status.MPI_ERROR = " << status.MPI_ERROR << "}\n";
+  for (auto&& peer : fmpi::range(world.size())) {
+    auto rticket = dispatcher.postAsyncRecv(
+        fmpi::make_span(&rbuf[peer], blocksize),
+        static_cast<mpi::Rank>(peer),
+        mpi_tag,
+        [me = world.rank(), &ready_tasks](
+            fmpi::Ticket, MPI_Status status, fmpi::Span<int> data) {
+          FMPI_CHECK(status.MPI_ERROR == MPI_SUCCESS);
+          ready_tasks.push_front(data);
+        });
 
-        std::cout << os.str();
-        ready_tasks.push_front(data);
-      });
+    auto sticket = dispatcher.postAsyncSend(
+        fmpi::make_span(&sbuf[peer], blocksize),
+        static_cast<mpi::Rank>(peer),
+        mpi_tag,
+        [](fmpi::Ticket, MPI_Status, fmpi::Span<int>) {
+          std::cout << "callback fire for send\n";
+        });
 
-  auto sticket = dispatcher.postAsyncSend(
-      fmpi::make_span(&one, 1),
-      peer,
-      mpi_tag,
-      [](fmpi::Ticket, MPI_Status, fmpi::Span<int>) {
-        std::cout << "callback fire for send\n";
-      });
-
-  std::cout << "enqueued ticket" << rticket.id << "\n";
-  std::cout << "enqueued ticket" << sticket.id << "\n";
+    FMPI_DBG(rticket.id);
+    FMPI_DBG(sticket.id);
+  }
 
   auto consumer =
-      std::async(std::launch::async, [&ready_tasks, ntasks = 1]() {
+      std::async(std::launch::async, [&ready_tasks, ntasks = world.size()]() {
         std::this_thread::sleep_for(std::chrono::seconds(2));
 
         auto n = ntasks;
         while (n--) {
           fmpi::Span<int> data;
           ready_tasks.pop_back(data);
-          std::ostringstream os;
-          os << "received chunk: " << data.size() << " nels\n";
-          std::cout << os.str();
         }
       });
 
@@ -134,10 +139,10 @@ int test() {
 
   std::cout << "consumer done...\n";
 
-  FMPI_DBG(buf);
+  FMPI_DBG_RANGE(std::begin(rbuf), std::end(rbuf));
 
-  if (buf == 1 && world.rank() == 0) {
-    std::cout << "test successful\n";
+  if (!std::equal(std::begin(rbuf), std::end(rbuf), std::begin(expect))) {
+    throw std::runtime_error("invalid result");
   }
 
   return 0;

@@ -115,7 +115,6 @@ class ThreadsafeQueue {
     cv_not_empty_.wait(lock, [this]() { return is_not_empty(); });
     value = std::move(container_.back());
     container_.pop_back();
-    FMPI_DBG(container_.size());
   }
 
   template <class OutputIterator>
