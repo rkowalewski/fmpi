@@ -5,6 +5,12 @@
 
 namespace fmpi {
 
+#ifdef cpp_lib_byte
+using byte = std::byte;
+#else
+using byte = unsigned char;
+#endif
+
 template <class T>
 class Span {
   T*          data_ = nullptr;
@@ -53,75 +59,90 @@ class Span {
 
       @param size The number of elements pointed to by `data`
   */
-  Span(T* data, std::size_t size)
+  Span(T* data, std::size_t size) noexcept
     : data_(data)
     , size_(size) {
   }
 
   template <class CharT, class Traits, class Allocator>
-  explicit Span(std::basic_string<CharT, Traits, Allocator>& s)
+  explicit Span(std::basic_string<CharT, Traits, Allocator>& s) noexcept
     : data_(&s[0])
     , size_(s.size()) {
   }
 
   template <class CharT, class Traits, class Allocator>
-  explicit Span(std::basic_string<CharT, Traits, Allocator> const& s)
+  explicit Span(std::basic_string<CharT, Traits, Allocator> const& s) noexcept
     : data_(s.data())
     , size_(s.size()) {
   }
 
   template <class CharT, class Traits, class Allocator>
-  Span& operator=(std::basic_string<CharT, Traits, Allocator>& s) {
+  Span& operator=(std::basic_string<CharT, Traits, Allocator>& s) noexcept {
     data_ = &s[0];
     size_ = s.size();
     return *this;
   }
 
   template <class CharT, class Traits, class Allocator>
-  Span& operator=(std::basic_string<CharT, Traits, Allocator> const& s) {
+  Span& operator=(
+      std::basic_string<CharT, Traits, Allocator> const& s) noexcept {
     data_ = s.data();
     size_ = s.size();
     return *this;
   }
 
   /// Returns `true` if the Span is empty
-  bool empty() const {
+  [[nodiscard]] bool empty() const noexcept {
     return size_ == 0;
   }
 
   /// Returns a pointer to the beginning of the Span
-  T* data() const {
+  [[nodiscard]] element_type* data() const {
     return data_;
   }
 
   /// Returns the number of elements in the Span
-  std::size_t size() const {
+  [[nodiscard]] constexpr std::size_t size() const noexcept {
     return size_;
   }
 
+  [[nodiscard]] constexpr std::size_t size_bytes() const noexcept {
+    return size() * sizeof(element_type);
+  }
+
   /// Returns an iterator to the beginning of the Span
-  const_iterator begin() const {
+  [[nodiscard]] const_iterator begin() const noexcept {
     return data_;
   }
 
   /// Returns an iterator to the beginning of the Span
-  const_iterator cbegin() const {
+  [[nodiscard]] const_iterator cbegin() const noexcept {
     return data_;
   }
 
   /// Returns an iterator to one past the end of the Span
-  const_iterator end() const {
+  [[nodiscard]] const_iterator end() const noexcept {
     return data_ + size_;
   }
 
   /// Returns an iterator to one past the end of the Span
-  const_iterator cend() const {
+  [[nodiscard]] const_iterator cend() const noexcept {
     return data_ + size_;
   }
 };
 
+template <class T>
+Span<byte> as_bytes(Span<T> s) noexcept {
+  return {reinterpret_cast<const byte*>(s.data()), s.size_bytes()};
+}
+
+template <class T>
+Span<byte> as_writable_bytes(Span<T> s) noexcept {
+  return {reinterpret_cast<byte*>(s.data()), s.size_bytes()};
+}
+
 template <class Iter>
-auto make_span(Iter begin, std::size_t count) {
+auto make_span(Iter begin, std::size_t count) noexcept {
   return Span<typename std::iterator_traits<Iter>::value_type>(
       &*begin, count);
 }

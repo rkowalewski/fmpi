@@ -65,9 +65,12 @@ inline auto oneFactor_even(int nr)
     res[0].push_back(RankPair(r, r));
   }
 
-  for (size_t phase = 0; phase < res.size(); ++phase) {
+  for (auto& re : res) {
     std::cout << "{";
-    std::copy(std::begin(res[phase]), std::end(res[phase]), std::ostream_iterator<RankPair>(std::cout, ", "));
+    std::copy(
+        std::begin(re),
+        std::end(re),
+        std::ostream_iterator<RankPair>(std::cout, ", "));
     std::cout << "}\n";
   }
 

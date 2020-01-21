@@ -67,7 +67,7 @@ int test() {
   // int buf = 100;
 
   constexpr std::size_t winsz = 4;
-  fmpi::CommDispatcher<int> dispatcher{world, winsz};
+  fmpi::CommDispatcher  dispatcher{winsz};
 
   constexpr std::size_t blocksize = 1;
 
@@ -101,21 +101,37 @@ int test() {
   constexpr int mpi_tag = 0;
 
   for (auto&& peer : fmpi::range(world.size())) {
-    auto rticket = dispatcher.postAsyncRecv(
-        fmpi::make_span(&rbuf[peer], blocksize),
-        static_cast<mpi::Rank>(peer),
-        mpi_tag,
-        [me = world.rank(), &ready_tasks](
-            fmpi::Ticket, MPI_Status status, fmpi::Span<int> data) {
+    auto rb      = fmpi::Span<int>(&rbuf[peer], blocksize);
+    auto rticket = dispatcher.postAsync(
+        fmpi::request_type::IRECV,
+        [rb, peer, &world](MPI_Request* req) -> int {
+          return static_cast<int>(mpi::irecv(
+              rb.data(),
+              rb.size(),
+              static_cast<mpi::Rank>(peer),
+              mpi_tag,
+              world,
+              req));
+        },
+        [rb, &ready_tasks](fmpi::Ticket /*unused*/, MPI_Status status) {
           FMPI_CHECK(status.MPI_ERROR == MPI_SUCCESS);
-          ready_tasks.push_front(data);
+          ready_tasks.push_front(rb);
         });
 
-    auto sticket = dispatcher.postAsyncSend(
-        fmpi::make_span(&sbuf[peer], blocksize),
-        static_cast<mpi::Rank>(peer),
-        mpi_tag,
-        [](fmpi::Ticket, MPI_Status, fmpi::Span<int>) {
+    auto sb = fmpi::Span<const int>(&sbuf[peer], blocksize);
+
+    auto sticket = dispatcher.postAsync(
+        fmpi::request_type::ISEND,
+        [sb, peer, &world](MPI_Request* req) -> int {
+          return static_cast<int>(mpi::isend(
+              sb.data(),
+              sb.size(),
+              static_cast<mpi::Rank>(peer),
+              mpi_tag,
+              world,
+              req));
+        },
+        [](fmpi::Ticket /*unused*/, MPI_Status /*unused*/) {
           std::cout << "callback fire for send\n";
         });
 
@@ -128,7 +144,7 @@ int test() {
         std::this_thread::sleep_for(std::chrono::seconds(2));
 
         auto n = ntasks;
-        while (n--) {
+        while ((n--) != 0u) {
           fmpi::Span<int> data;
           ready_tasks.pop_back(data);
         }

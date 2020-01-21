@@ -1,5 +1,5 @@
-#ifndef FMPI__CONTAINER__BOUNDED_BUFFER_H
-#define FMPI__CONTAINER__BOUNDED_BUFFER_H
+#ifndef FMPI_CONTAINER_BOUNDEDBUFFER_HPP
+#define FMPI_CONTAINER_BOUNDEDBUFFER_HPP
 
 #include <boost/circular_buffer.hpp>
 #include <condition_variable>
@@ -68,10 +68,10 @@ class BoundedThreadsafeQueue {
   }
 
  private:
-  bool is_not_empty() const {
+  [[nodiscard]] bool is_not_empty() const {
     return container_.size() > 0;
   }
-  bool is_not_full() const {
+  [[nodiscard]] bool is_not_full() const {
     return container_.size() < container_.capacity();
   }
 
@@ -128,14 +128,14 @@ class ThreadsafeQueue {
     container_.erase_end(n);
   }
 
-  bool empty() const {
+  [[nodiscard]] bool empty() const {
     std::unique_lock<std::mutex> lock(mutex_);
     return is_not_empty();
   }
 
  private:
-  bool is_not_empty() const noexcept {
-    return container_.size() > 0;
+  [[nodiscard]] bool is_not_empty() const noexcept {
+    return !container_.empty();
   }
 
   container_type          container_;

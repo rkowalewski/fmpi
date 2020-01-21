@@ -15,7 +15,7 @@ template <typename RET, typename FUNC, typename... ARGS>
 class Capture {
  public:
   template <typename F, typename... T>
-  Capture(F&& func, T&&... args);
+  explicit Capture(F&& func, T&&... args);
 
   template <typename... T>
   RET operator()(T&&... t);
@@ -63,20 +63,20 @@ class Function<RET(ARGS...), STORAGE_SIZE> {
   explicit operator bool() const;
 
  private:
-  static void dummy(void*) {
+  static void dummy(void* /*unused*/) {
   }
 
   template <typename FUNCTOR>
-  void initFunctor(FUNCTOR&& functor, std::true_type);
+  void initFunctor(FUNCTOR&& functor, std::true_type /*unused*/);
 
   template <typename FUNCTOR>
-  void initFunctor(FUNCTOR&& functor, std::false_type);
+  void initFunctor(FUNCTOR&& functor, std::false_type /*unused*/);
 
   union Data {
     Data() {
       // Default constructor
     }
-    void*                                             ptr_;
+    void*                                             ptr_{};
     typename std::aligned_storage<STORAGE_SIZE>::type storage_;
   };
 
@@ -159,7 +159,9 @@ Function<RET(ARGS...), STORAGE_SIZE>& Function<RET(ARGS...), STORAGE_SIZE>::
 
 template <typename RET, typename... ARGS, std::size_t STORAGE_SIZE>
 Function<RET(ARGS...), STORAGE_SIZE>::~Function() {
-  if (destructor_) destructor_(callable_);
+  if (destructor_) {
+    destructor_(callable_);
+  }
 }
 
 template <typename RET, typename... ARGS, std::size_t STORAGE_SIZE>
@@ -169,13 +171,13 @@ RET Function<RET(ARGS...), STORAGE_SIZE>::operator()(ARGS... args) {
 
 template <typename RET, typename... ARGS, std::size_t STORAGE_SIZE>
 Function<RET(ARGS...), STORAGE_SIZE>::operator bool() const {
-  return !!callable_;
+  return !(callable_ == nullptr);
 }
 
 template <typename RET, typename... ARGS, std::size_t STORAGE_SIZE>
 template <typename FUNCTOR>
 void Function<RET(ARGS...), STORAGE_SIZE>::initFunctor(
-    FUNCTOR&& functor, std::true_type) {
+    FUNCTOR&& functor, std::true_type /*unused*/) {
   callable_ = std::addressof(functor);
   invoker_  = [](void* ptr, ARGS... args) -> RET {
     return (*reinterpret_cast<FUNCTOR*>(ptr))(std::forward<ARGS>(args)...);
@@ -185,13 +187,15 @@ void Function<RET(ARGS...), STORAGE_SIZE>::initFunctor(
 template <typename RET, typename... ARGS, std::size_t STORAGE_SIZE>
 template <typename FUNCTOR>
 void Function<RET(ARGS...), STORAGE_SIZE>::initFunctor(
-    FUNCTOR&& functor, std::false_type) {
+    FUNCTOR&& functor, std::false_type /*unused*/) {
   static_assert(
       sizeof(FUNCTOR) <= STORAGE_SIZE,
       "functional object doesn't fit into internal storage");
 
   destructor_ = [](void* ptr) {
-    if (!ptr) return;
+    if (!ptr) {
+      return;
+    }
     reinterpret_cast<FUNCTOR*>(ptr)->~FUNCTOR();  // invoke destructor
   };
 

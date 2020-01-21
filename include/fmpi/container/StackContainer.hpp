@@ -1,5 +1,5 @@
-#ifndef FMPI__CONTAINER__STACK_CONTAINER_H
-#define FMPI__CONTAINER__STACK_CONTAINER_H
+#ifndef FMPI_CONTAINER_STACKCONTAINER_HPP
+#define FMPI_CONTAINER_STACKCONTAINER_HPP
 
 #include <tlx/stack_allocator.hpp>
 
@@ -46,7 +46,7 @@ class StackContainer {
   container_type& container() {
     return container_;
   }
-  const container_type& container() const {
+  [[nodiscard]] const container_type& container() const {
     return container_;
   }
 
