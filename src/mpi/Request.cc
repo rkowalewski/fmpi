@@ -2,10 +2,9 @@
 
 namespace mpi {
 
-auto waitall(MPI_Request* begin, MPI_Request* end, MPI_Status* statuses)
-    -> bool {
+int waitall(MPI_Request* begin, MPI_Request* end, MPI_Status* statuses) {
   auto n = std::distance(begin, end);
-  return MPI_Waitall(n, begin, statuses) == MPI_SUCCESS;
+  return MPI_Waitall(n, begin, statuses);
 }
 
 int waitsome(

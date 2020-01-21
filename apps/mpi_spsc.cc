@@ -90,6 +90,7 @@ int test() {
   FMPI_DBG_RANGE(std::begin(sbuf), std::end(sbuf));
 
   dispatcher.start_worker();
+  dispatcher.pinToCore(1);
 
   // sleep for one second
   std::this_thread::sleep_for(std::chrono::seconds(1));
@@ -105,13 +106,13 @@ int test() {
     auto rticket = dispatcher.postAsync(
         fmpi::request_type::IRECV,
         [rb, peer, &world](MPI_Request* req) -> int {
-          return static_cast<int>(mpi::irecv(
+          return mpi::irecv(
               rb.data(),
               rb.size(),
               static_cast<mpi::Rank>(peer),
               mpi_tag,
               world,
-              req));
+              req);
         },
         [rb, &ready_tasks](fmpi::Ticket /*unused*/, MPI_Status status) {
           FMPI_CHECK(status.MPI_ERROR == MPI_SUCCESS);
@@ -123,13 +124,13 @@ int test() {
     auto sticket = dispatcher.postAsync(
         fmpi::request_type::ISEND,
         [sb, peer, &world](MPI_Request* req) -> int {
-          return static_cast<int>(mpi::isend(
+          return mpi::isend(
               sb.data(),
               sb.size(),
               static_cast<mpi::Rank>(peer),
               mpi_tag,
               world,
-              req));
+              req);
         },
         [](fmpi::Ticket /*unused*/, MPI_Status /*unused*/) {
           std::cout << "callback fire for send\n";

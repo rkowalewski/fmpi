@@ -65,7 +65,7 @@ inline auto enqueueMpiOps(
 
     auto buf = bufAlloc(peer, idx);
 
-    FMPI_CHECK(commOp(buf, peer, idx));
+    FMPI_CHECK_MPI(commOp(buf, peer, idx));
 
     ++nreqs;
   }
@@ -104,7 +104,7 @@ inline void scatteredPairwise_lt3(
   auto other = static_cast<mpi::Rank>(1 - me);
 
   trace.tick(COMMUNICATION);
-  FMPI_CHECK(mpi::sendrecv(
+  FMPI_CHECK_MPI(mpi::sendrecv(
       begin + other * blocksize,
       blocksize,
       other,
@@ -637,7 +637,7 @@ inline void scatteredPairwiseWaitall(
 
       auto* recvBuf = std::next(reqWin.rbuf(), nrreqs * blocksize);
 
-      FMPI_CHECK(mpi::irecv(
+      FMPI_CHECK_MPI(mpi::irecv(
           recvBuf, blocksize, recvfrom, EXCH_TAG_RING, ctx, &reqs[nrreqs]));
 
       reqWin.pending_pieces().push_back(
@@ -656,7 +656,7 @@ inline void scatteredPairwiseWaitall(
 
       FMPI_DBG(sendto);
 
-      FMPI_CHECK(mpi::isend(
+      FMPI_CHECK_MPI(mpi::isend(
           std::next(sbuffer, sendto * blocksize),
           blocksize,
           sendto,
@@ -673,7 +673,7 @@ inline void scatteredPairwiseWaitall(
   std::tie(rphase, sphase) =
       moveReqWindow(std::make_pair(rphase, sphase), reqWin);
 
-  FMPI_CHECK(mpi::waitall(&(*std::begin(reqs)), &(*std::end(reqs))));
+  FMPI_CHECK_MPI(mpi::waitall(&(*std::begin(reqs)), &(*std::end(reqs))));
 
   reqWin.buffer_swap();
 
@@ -699,7 +699,7 @@ inline void scatteredPairwiseWaitall(
     trace.tock(MERGE);
 
     trace.tick(COMMUNICATION);
-    FMPI_CHECK(mpi::waitall(&(*std::begin(reqs)), &(*std::end(reqs))));
+    FMPI_CHECK_MPI(mpi::waitall(&(*std::begin(reqs)), &(*std::end(reqs))));
     reqWin.buffer_swap();
     trace.tock(COMMUNICATION);
 
@@ -765,7 +765,7 @@ inline void MpiAlltoAll(
 
   auto rbuf = std::unique_ptr<value_type[]>(new value_type[nr * blocksize]);
 
-  FMPI_CHECK(mpi::alltoall(
+  FMPI_CHECK_MPI(mpi::alltoall(
       std::addressof(*begin), blocksize, &rbuf[0], blocksize, ctx));
 
   trace.tock(COMMUNICATION);

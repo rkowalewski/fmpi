@@ -137,16 +137,20 @@ auto operator<<(std::ostream& os, std::pair<F, T> const& p) -> std::ostream& {
 #define FMPI_DBG_RANGE(f, l)
 #endif
 
-#define FMPI_CHECK(expr)   \
-  do {                     \
-    auto success = (expr); \
-    RTLX_ASSERT(success);  \
+#define FMPI_CHECK(expr)                                               \
+  do {                                                                 \
+    auto success = (expr);                                             \
+    static_assert(                                                     \
+        std::is_same<decltype(success), bool>::value, "invalid type"); \
+    RTLX_ASSERT(success);                                              \
   } while (0)
 
-#define FMPI_CHECK_MPI(expr)             \
-  do {                                   \
-    auto success = (expr);               \
-    RTLX_ASSERT(success == MPI_SUCCESS); \
+#define FMPI_CHECK_MPI(expr)                                          \
+  do {                                                                \
+    auto success = (expr);                                            \
+    static_assert(                                                    \
+        std::is_same<decltype(success), int>::value, "invalid type"); \
+    RTLX_ASSERT(success == MPI_SUCCESS);                              \
   } while (0)
 
 #if defined(NDEBUG)

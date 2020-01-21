@@ -6,13 +6,16 @@
 #include <cmath>
 #include <fmpi/Constants.hpp>
 #include <fmpi/Math.hpp>
+#include <fmpi/NumericRange.hpp>
 #include <fmpi/mpi/Algorithm.hpp>
 #include <fmpi/mpi/Environment.hpp>
+#include <fmpi/mpi/Request.hpp>
 #include <memory>
 #include <numeric>
 #include <rtlx/Assert.hpp>
 #include <rtlx/Trace.hpp>
 #include <tlx/math/integer_log2.hpp>
+#include <tlx/simple_vector.hpp>
 
 namespace fmpi {
 
@@ -24,8 +27,10 @@ constexpr
 #endif
     OutputIt
     reverse_copy_strided(
-        BidirIt first, BidirIt last, std::size_t blocksize, OutputIt d_first)
-{
+        BidirIt     first,
+        BidirIt     last,
+        std::size_t blocksize,
+        OutputIt    d_first) {
   auto const n = std::distance(first, last);
   RTLX_ASSERT(n % blocksize == 0);
 
@@ -59,8 +64,7 @@ inline void bruck(
     OutputIt            out,
     int                 blocksize,
     mpi::Context const& ctx,
-    Op&&                op)
-{
+    Op&&                op) {
   auto const me = ctx.rank();
   auto const nr = ctx.size();
 
@@ -141,7 +145,7 @@ inline void bruck(
 
     trace.tick(COMMUNICATION);
 
-    FMPI_CHECK(mpi::isend(
+    FMPI_CHECK_MPI(mpi::isend(
         sendbuf,
         blocksize * blocks.size(),
         sendto,
@@ -149,7 +153,7 @@ inline void bruck(
         ctx,
         &reqs[0]));
 
-    FMPI_CHECK(mpi::irecv(
+    FMPI_CHECK_MPI(mpi::irecv(
         recvbuf,
         blocksize * blocks.size(),
         recvfrom,
@@ -157,7 +161,7 @@ inline void bruck(
         ctx,
         &reqs[1]));
 
-    FMPI_CHECK(mpi::waitall(reqs.begin(), reqs.end()));
+    FMPI_CHECK_MPI(mpi::waitall(reqs.begin(), reqs.end()));
     trace.tock(COMMUNICATION);
 
     trace.tick(detail::UNPACK);
@@ -220,8 +224,7 @@ inline void bruck_indexed(
     OutputIt            out,
     int                 blocksize,
     mpi::Context const& ctx,
-    Op&&                op)
-{
+    Op&&                op) {
   auto const me = ctx.rank();
   auto const nr = ctx.size();
 
@@ -341,10 +344,10 @@ inline void bruck_indexed(
 
     trace.tick(COMMUNICATION);
 
-    FMPI_CHECK(mpi::irecv_type(
+    FMPI_CHECK_MPI(mpi::irecv_type(
         out, 1, packed, recvfrom, EXCH_TAG_BRUCK, ctx, &reqs[0]));
 
-    FMPI_CHECK(mpi::isend_type(
+    FMPI_CHECK_MPI(mpi::isend_type(
         tmpbuf.begin(),
         mysize,
         MPI_BYTE,
@@ -353,7 +356,7 @@ inline void bruck_indexed(
         ctx,
         &reqs[1]));
 
-    FMPI_CHECK(mpi::waitall(reqs.begin(), reqs.end()));
+    FMPI_CHECK_MPI(mpi::waitall(reqs.begin(), reqs.end()));
     FMPI_CHECK_MPI(MPI_Type_free(&packed));
     trace.tock(COMMUNICATION);
 
@@ -390,8 +393,7 @@ inline void bruck_interleave(
     OutputIt            out,
     int                 blocksize,
     mpi::Context const& ctx,
-    Op&&                op)
-{
+    Op&&                op) {
   auto const        me = ctx.rank();
   std::size_t const nr = ctx.size();
 
@@ -413,7 +415,7 @@ inline void bruck_interleave(
 
     auto other = static_cast<mpi::Rank>(1 - me);
 
-    FMPI_CHECK(mpi::sendrecv(
+    FMPI_CHECK_MPI(mpi::sendrecv(
         begin + other * blocksize,
         blocksize,
         other,
@@ -521,7 +523,7 @@ inline void bruck_interleave(
 
     trace.tick(COMMUNICATION);
 
-    FMPI_CHECK(mpi::irecv(
+    FMPI_CHECK_MPI(mpi::irecv(
         recvbuf,
         blocksize * blocks.size(),
         recvfrom,
@@ -529,7 +531,7 @@ inline void bruck_interleave(
         ctx,
         &reqs[1]));
 
-    FMPI_CHECK(mpi::isend(
+    FMPI_CHECK_MPI(mpi::isend(
         sendbuf,
         blocksize * blocks.size(),
         sendto,
@@ -555,7 +557,7 @@ inline void bruck_interleave(
     }
 
     trace.tick(COMMUNICATION);
-    FMPI_CHECK(mpi::waitall(reqs.begin(), reqs.end()));
+    FMPI_CHECK_MPI(mpi::waitall(reqs.begin(), reqs.end()));
 
     FMPI_DBG("recv_buffer");
     FMPI_DBG_RANGE(recvbuf, recvbuf + blocksize * blocks.size());
@@ -659,8 +661,7 @@ inline void bruck_mod(
     OutputIt            out,
     int                 blocksize,
     mpi::Context const& ctx,
-    Op&&                op)
-{
+    Op&&                op) {
   auto const me = ctx.rank();
   auto const nr = ctx.size();
 
@@ -769,7 +770,7 @@ inline void bruck_mod(
     trace.tick(COMMUNICATION);
 
     // b) exchange
-    FMPI_CHECK(mpi::sendrecv(
+    FMPI_CHECK_MPI(mpi::sendrecv(
         sendbuf,
         blocksize * blocks.size(),
         sendto,

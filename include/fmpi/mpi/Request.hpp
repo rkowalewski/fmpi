@@ -25,7 +25,7 @@ int waitsome(
     MPI_Status*  statuses,
     int*&        last);
 
-bool waitall(
+int waitall(
     MPI_Request* begin,
     MPI_Request* end,
     MPI_Status*  statuses = MPI_STATUSES_IGNORE);

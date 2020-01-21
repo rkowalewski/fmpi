@@ -7,13 +7,13 @@
 namespace mpi {
 
 template <class T>
-inline auto irecv(
+inline int irecv(
     T*             buf,
     std::size_t    count,
     Rank           source,
     int            tag,
     Context const& ctx,
-    MPI_Request*   req) -> bool
+    MPI_Request*   req)
 
 {
   auto type = mpi::type_mapper<T>::type();
@@ -21,23 +21,17 @@ inline auto irecv(
   RTLX_ASSERT(count < std::numeric_limits<int>::max());
 
   return MPI_Irecv(
-             buf,
-             static_cast<int>(count),
-             type,
-             source,
-             tag,
-             ctx.mpiComm(),
-             req) == MPI_SUCCESS;
+      buf, static_cast<int>(count), type, source, tag, ctx.mpiComm(), req);
 }
 
 template <class T>
-inline auto isend(
+inline int isend(
     T const*       buf,
     std::size_t    count,
     Rank           target,
     int            tag,
     Context const& ctx,
-    MPI_Request*   req) -> bool
+    MPI_Request*   req)
 
 {
   auto type = mpi::type_mapper<T>::type();
@@ -45,35 +39,29 @@ inline auto isend(
   RTLX_ASSERT(count < std::numeric_limits<int>::max());
 
   return MPI_Isend(
-             buf,
-             static_cast<int>(count),
-             type,
-             target,
-             tag,
-             ctx.mpiComm(),
-             req) == MPI_SUCCESS;
+      buf, static_cast<int>(count), type, target, tag, ctx.mpiComm(), req);
 }
 
-auto isend_type(
+int isend_type(
     void const*    buf,
     std::size_t    count,
     MPI_Datatype   type,
     Rank           target,
     int            tag,
     Context const& ctx,
-    MPI_Request*   req) -> bool;
+    MPI_Request*   req);
 
-auto irecv_type(
+int irecv_type(
     void*          buf,
     std::size_t    count,
     MPI_Datatype   type,
     Rank           source,
     int            tag,
     Context const& ctx,
-    MPI_Request*   req) -> bool;
+    MPI_Request*   req);
 
 template <class T, class U>
-inline auto sendrecv(
+inline int sendrecv(
     T const*       sendbuf,
     std::size_t    sendcount,
     Rank           dest,
@@ -82,8 +70,7 @@ inline auto sendrecv(
     std::size_t    recvcount,
     Rank           source,
     int            recvtag,
-    Context const& ctx) -> bool
-{
+    Context const& ctx) {
   RTLX_ASSERT(sendcount < std::numeric_limits<int>::max());
   RTLX_ASSERT(recvcount < std::numeric_limits<int>::max());
 
@@ -99,33 +86,31 @@ inline auto sendrecv(
              source,
              recvtag,
              ctx.mpiComm(),
-             MPI_STATUS_IGNORE) == MPI_SUCCESS;
+             MPI_STATUS_IGNORE);
 }
 
 template <class T, class U>
-inline auto alltoall(
+inline int alltoall(
     T const*       sendbuf,
     std::size_t    sendcount,
     U*             recvbuf,
     std::size_t    recvcount,
-    Context const& ctx) -> bool
-{
+    Context const& ctx) {
   RTLX_ASSERT(sendcount < std::numeric_limits<int>::max());
   RTLX_ASSERT(recvcount < std::numeric_limits<int>::max());
 
   return MPI_Alltoall(
-             sendbuf,
-             static_cast<int>(sendcount),
-             mpi::type_mapper<T>::type(),
-             recvbuf,
-             static_cast<int>(recvcount),
-             mpi::type_mapper<U>::type(),
-             ctx.mpiComm()) == MPI_SUCCESS;
+      sendbuf,
+      static_cast<int>(sendcount),
+      mpi::type_mapper<T>::type(),
+      recvbuf,
+      static_cast<int>(recvcount),
+      mpi::type_mapper<U>::type(),
+      ctx.mpiComm());
 }
 
 template <class T>
-inline auto allreduce_minmax(Context const& ctx, T value)
-{
+inline auto allreduce_minmax(Context const& ctx, T value) {
   auto mpi_type = mpi::type_mapper<T>::type();
 
   T min;

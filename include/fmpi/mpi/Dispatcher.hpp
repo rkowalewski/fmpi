@@ -209,7 +209,7 @@ inline Ticket CommDispatcher::postAsync(
     Function<int(MPI_Request*)>&&        task,
     Function<void(Ticket, MPI_Status)>&& callback) {
   return do_enqueue(qid, std::move(task), std::move(callback));
-}  // namespace fmpi
+}
 
 inline Ticket CommDispatcher::do_enqueue(
     request_type type, task_t&& task, callback_t&& callback) {
@@ -304,7 +304,7 @@ inline std::size_t CommDispatcher::process_requests() {
       mpi_statuses_.data(),
       last);
 
-  FMPI_CHECK(mpi_ret == MPI_SUCCESS);
+  FMPI_CHECK_MPI(mpi_ret);
 
   auto const nCompleted = std::distance(&*std::begin(indices_), last);
 
@@ -353,7 +353,12 @@ inline void CommDispatcher::pinToCore(int coreId) {
     cpu_set_t cpuSet;
     CPU_ZERO(&cpuSet);
     CPU_SET(coreId, &cpuSet);
-    pthread_setaffinity_np(thread_.native_handle(), cpuSetSize, &cpuSet);
+
+    FMPI_DBG(coreId);
+
+    FMPI_CHECK(
+        pthread_setaffinity_np(
+            thread_.native_handle(), cpuSetSize, &cpuSet) == 0);
   }
 }
 
