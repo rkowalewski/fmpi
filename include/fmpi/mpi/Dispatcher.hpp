@@ -73,7 +73,7 @@ class CommDispatcher {
   static_assert(n_types == 2, "only two request types supported for now");
 
   /// Workload Item keeping a task, done callback and a ticket
-  struct Task {
+  struct alignas(CACHE_ALIGNMENT) Task {
     task_t     task{};
     callback_t callback{};
     Ticket     ticket{};

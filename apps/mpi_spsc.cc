@@ -2,6 +2,8 @@
 #include <omp.h>
 #include <sched.h>
 
+#include <cstdlib>
+
 #include <boost/container/small_vector.hpp>
 #include <boost/lockfree/spsc_queue.hpp>
 #include <fmpi/NumericRange.hpp>
@@ -46,7 +48,23 @@ std::vector<int> gen_random_vec() {
   return expect;
 }
 
-int test();
+int run();
+
+constexpr std::size_t NCPU = 48;
+constexpr std::size_t NCOMM_CORES = 1;
+
+struct CorePinning {
+  int mpi_core;
+  int dispatcher_core;
+  int scheduler_core;
+  int comp_core;
+};
+
+CorePinning config_pinning(std::size_t domain_size);
+
+void (std::promise<void> promise, mpi::Context const& ctx, std::size_t message_size) {
+
+}
 
 int main(int argc, char* argv[]) {
   // MPI_Init(&argc, &argv);
@@ -59,16 +77,19 @@ int main(int argc, char* argv[]) {
     return 1;
   }
 
-  test();
+  run();
 
   return 0;
 }
 
-int test() {
+int run() {
+
+  auto const domain_size = static_cast<std::size_t>(std::atoll(std::getenv("FMPI_DOMAIN_SIZE")));
+
   mpi::Context const world{MPI_COMM_WORLD};
 
-  // int one = 1;
-  // int buf = 100;
+  auto const pinning = config_pinning(domain_size);
+  FMPI_DBG(pinning);
 
   constexpr std::size_t winsz = 4;
   fmpi::CommDispatcher  dispatcher{winsz};
@@ -94,7 +115,7 @@ int test() {
   FMPI_DBG_RANGE(std::begin(sbuf), std::end(sbuf));
 
   dispatcher.start_worker();
-  dispatcher.pinToCore(1);
+  //dispatcher.pinToCore(dispatcher_core);
 
   // sleep for one second
   std::this_thread::sleep_for(std::chrono::seconds(1));
@@ -167,6 +188,26 @@ int test() {
     FMPI_DBG(sticket.id);
   }
 
+  std::this_thread::sleep_for(std::chrono::seconds(2));
+
+  auto n = world.size();
+
+  while ((n--) != 0u) {
+    FMPI_DBG(buf_alloc.allocatedBlocks());
+    FMPI_DBG(buf_alloc.allocatedHeapBlocks());
+    FMPI_DBG(buf_alloc.isFull());
+    auto ready = ready_tasks.value_pop();
+
+    auto const [peer, s] = ready;
+
+    // copy data
+    std::copy(
+        s.begin(), s.end(), std::next(rbuf.begin(), peer * blocksize));
+    // release memory
+    buf_alloc.dispose(s.data());
+  }
+
+#if 0
   auto consumer = std::async(
       std::launch::async,
       [&ready_tasks, &rbuf, &buf_alloc, ntasks = world.size()]() {
@@ -179,12 +220,8 @@ int test() {
           FMPI_DBG(buf_alloc.isFull());
           auto ready = ready_tasks.value_pop();
 
-          throw std::runtime_error("test");
-
           auto const [peer, s] = ready;
 
-          FMPI_DBG(peer);
-          FMPI_DBG_RANGE(s.begin(), s.end());
           // copy data
           std::copy(
               s.begin(), s.end(), std::next(rbuf.begin(), peer * blocksize));
@@ -192,16 +229,19 @@ int test() {
           buf_alloc.dispose(s.data());
         }
       });
+#endif
 
   dispatcher.loop_until_done();
 
+#if 0
   try {
     consumer.get();
   } catch (...) {
     std::cout << "exception catch block\n";
   }
-
   std::cout << "consumer done...\n";
+#endif
+
 
   FMPI_DBG_RANGE(std::begin(rbuf), std::end(rbuf));
 
@@ -212,4 +252,47 @@ int test() {
   std::cout << "success...\n";
 
   return 0;
+}
+
+CorePinning config_pinning(std::size_t domain_size) {
+  {
+    int flag;
+    FMPI_CHECK_MPI(MPI_Is_thread_main(&flag));
+    FMPI_ASSERT(flag);
+  }
+
+  CorePinning pinning;
+
+  auto const my_core = sched_getcpu();
+  auto const n_comp_cores = domain_size - NCOMM_CORES;
+  auto const domain_id = (my_core % NCPU) / domain_size;
+  auto const is_rank_on_comm = (my_core % domain_size) == 0;
+
+
+  if (is_rank_on_comm) {
+    //MPI rank is on the communication core. So we dispatch on the other
+    //hyperthread
+    pinning.dispatcher_core = (my_core < NCPU) ? my_core + NCPU : my_core - NCPU;
+    pinning.scheduler_core = my_core;
+    pinning.comp_core = pinning.scheduler_core + 1;
+  } else {
+    //MPI rank is somewhere in the Computation Domain, so we just take the
+    //communication core.
+    pinning.dispatcher_core = domain_id * domain_size;
+    pinning.scheduler_core = pinning.dispatcher_core + NCPU;
+    pinning.comp_core = my_core;
+  }
+
+  pinning.mpi_core = my_core;
+
+  return pinning;
+}
+
+std::ostream& operator<<(std::ostream& os, const CorePinning& pinning) {
+  os << "{ rank: " << pinning.mpi_core;
+  os << ", scheduler: " << pinning.scheduler_core;
+  os << ", dispatcher: " << pinning.dispatcher_core;
+  os << ", comp: " << pinning.comp_core;
+  os << " }";
+  return os;
 }

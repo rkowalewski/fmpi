@@ -28,6 +28,15 @@
 module load slurm_setup
 module load hwloc
 
+export OMP_NUM_THREADS="$((<<NUM_PROCS>>-1))"
+export OMP_PROC_BIND="true"
+export OMP_PLACES="$(./scripts/genPlaces.sh <<NUM_PROCS>>)"
+
+export FMPI_DOMAIN_SIZE="$((48 / <<NUM_PROCS>>))"
+
+echo "places: $OMP_PLACES"
+
 mpiexec \
+    -env I_MPI_PIN_DOMAIN $((FMPI_DOMAIN_SIZE * 2)) \
     -n $SLURM_NTASKS  \
-    build.release/apps/mpiSpsc
+    build/apps/mpiSpsc

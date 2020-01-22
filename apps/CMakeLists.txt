@@ -20,6 +20,7 @@ target_link_libraries(mergebench PRIVATE
 add_executable(mpiSpsc mpi_spsc.cc)
 target_link_libraries(mpiSpsc PRIVATE
     fmpi
+    OpenMP::OpenMP_CXX
     Boost::boost
     tlx
     rtlx
