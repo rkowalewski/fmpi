@@ -31,7 +31,16 @@ namespace detail {
 constexpr std::size_t cache_alignment  = CACHE_ALIGNMENT;
 constexpr std::size_t cacheline_length = CACHELINE_LENGTH;
 
-enum class channel_op_status { success = 0, empty, full, closed, timeout };
+}  // namespace detail
+
+enum class channel_op_status
+{
+  success = 0,
+  empty,
+  full,
+  closed,
+  timeout
+};
 
 template <typename T>
 class buffered_channel {
@@ -42,7 +51,7 @@ class buffered_channel {
   typedef
       typename std::aligned_storage<sizeof(T), alignof(T)>::type storage_type;
 
-  struct alignas(cache_alignment) slot {
+  struct alignas(detail::cache_alignment) slot {
     std::atomic<std::size_t> cycle{0};
     storage_type             storage{};
 
@@ -50,22 +59,21 @@ class buffered_channel {
   };
 
   // procuder cacheline
-  alignas(cache_alignment) std::atomic<std::size_t> producer_idx_{0};
+  alignas(detail::cache_alignment) std::atomic<std::size_t> producer_idx_{0};
   // consumer cacheline
-  alignas(cache_alignment) std::atomic<std::size_t> consumer_idx_{0};
+  alignas(detail::cache_alignment) std::atomic<std::size_t> consumer_idx_{0};
   // shared write cacheline
-  alignas(cache_alignment) std::atomic_bool closed_{false};
+  alignas(detail::cache_alignment) std::atomic_bool closed_{false};
   mutable std::mutex      mtx_{};
   std::condition_variable not_full_cnd_{};
   std::condition_variable not_empty_cnd_{};
   // shared read cacheline
-  alignas(cache_alignment) slot* slots_{nullptr};
+  alignas(detail::cache_alignment) slot* slots_{nullptr};
   std::size_t capacity_;
-  char        pad_[cacheline_length];
+  char        pad_[detail::cacheline_length];
   std::size_t waiting_consumer_{0};
 
-  bool is_full_()
-  {
+  bool is_full_() {
     std::size_t idx{producer_idx_.load(std::memory_order_relaxed)};
     return 0 > static_cast<std::intptr_t>(
                    slots_[idx & (capacity_ - 1)].cycle.load(
@@ -73,8 +81,7 @@ class buffered_channel {
                    static_cast<std::intptr_t>(idx);
   }
 
-  bool is_empty_()
-  {
+  bool is_empty_() {
     std::size_t idx{consumer_idx_.load(std::memory_order_relaxed)};
     return 0 > static_cast<std::intptr_t>(
                    slots_[idx & (capacity_ - 1)].cycle.load(
@@ -83,8 +90,7 @@ class buffered_channel {
   }
 
   template <typename ValueType>
-  channel_op_status try_push_(ValueType&& value)
-  {
+  channel_op_status try_push_(ValueType&& value) {
     slot*       s{nullptr};
     std::size_t idx{producer_idx_.load(std::memory_order_relaxed)};
     for (;;) {
@@ -97,11 +103,9 @@ class buffered_channel {
                 idx, idx + 1, std::memory_order_relaxed)) {
           break;
         }
-      }
-      else if (0 > diff) {
+      } else if (0 > diff) {
         return channel_op_status::full;
-      }
-      else {
+      } else {
         idx = producer_idx_.load(std::memory_order_relaxed);
       }
     }
@@ -111,8 +115,7 @@ class buffered_channel {
     return channel_op_status::success;
   }
 
-  channel_op_status try_value_pop_(slot*& s, std::size_t& idx)
-  {
+  channel_op_status try_value_pop_(slot*& s, std::size_t& idx) {
     idx = consumer_idx_.load(std::memory_order_relaxed);
     for (;;) {
       s                   = &slots_[idx & (capacity_ - 1)];
@@ -124,11 +127,9 @@ class buffered_channel {
                 idx, idx + 1, std::memory_order_relaxed)) {
           break;
         }
-      }
-      else if (0 > diff) {
+      } else if (0 > diff) {
         return channel_op_status::empty;
-      }
-      else {
+      } else {
         idx = consumer_idx_.load(std::memory_order_relaxed);
       }
     }
@@ -138,8 +139,7 @@ class buffered_channel {
     return channel_op_status::success;
   }
 
-  channel_op_status try_pop_(value_type& value)
-  {
+  channel_op_status try_pop_(value_type& value) {
     slot*             s{nullptr};
     std::size_t       idx{0};
     channel_op_status status{try_value_pop_(s, idx)};
@@ -153,8 +153,7 @@ class buffered_channel {
 
  public:
   explicit buffered_channel(std::size_t capacity)
-    : capacity_{capacity}
-  {
+    : capacity_{capacity} {
     if (0 == capacity_ || 0 != (capacity_ & (capacity_ - 1))) {
       throw std::runtime_error{"boost fiber: buffer capacity is invalid"};
     }
@@ -164,8 +163,7 @@ class buffered_channel {
     }
   }
 
-  ~buffered_channel()
-  {
+  ~buffered_channel() {
     close();
     for (;;) {
       slot*       s{nullptr};
@@ -174,8 +172,7 @@ class buffered_channel {
         reinterpret_cast<value_type*>(std::addressof(s->storage))
             ->~value_type();
         s->cycle.store(idx + capacity_, std::memory_order_release);
-      }
-      else {
+      } else {
         break;
       }
     }
@@ -185,21 +182,18 @@ class buffered_channel {
   buffered_channel(buffered_channel const&) = delete;
   buffered_channel& operator=(buffered_channel const&) = delete;
 
-  bool is_closed() const noexcept
-  {
+  bool is_closed() const noexcept {
     return closed_.load(std::memory_order_acquire);
   }
 
-  void close() noexcept
-  {
+  void close() noexcept {
     std::unique_lock<std::mutex> lk{mtx_};
     closed_.store(true, std::memory_order_release);
     not_full_cnd_.notify_all();
     not_empty_cnd_.notify_all();
   }
 
-  channel_op_status push(value_type const& value)
-  {
+  channel_op_status push(value_type const& value) {
     for (;;) {
       if (is_closed()) {
         return channel_op_status::closed;
@@ -211,8 +205,7 @@ class buffered_channel {
           not_empty_cnd_.notify_one();
         }
         return status;
-      }
-      else if (channel_op_status::full == status) {
+      } else if (channel_op_status::full == status) {
         std::unique_lock<std::mutex> lk{mtx_};
         if (is_closed()) {
           return channel_op_status::closed;
@@ -221,16 +214,14 @@ class buffered_channel {
           continue;
         }
         not_full_cnd_.wait(lk, [this] { return is_closed() || !is_full_(); });
-      }
-      else {
+      } else {
         BOOST_ASSERT(channel_op_status::closed == status);
         return status;
       }
     }
   }
 
-  value_type value_pop()
-  {
+  value_type value_pop() {
     for (;;) {
       slot*             s{nullptr};
       std::size_t       idx{0};
@@ -241,8 +232,7 @@ class buffered_channel {
         s->cycle.store(idx + capacity_, std::memory_order_release);
         not_full_cnd_.notify_one();
         return std::move(value);
-      }
-      else if (channel_op_status::empty == status) {
+      } else if (channel_op_status::empty == status) {
         std::unique_lock<std::mutex> lk{mtx_};
         ++waiting_consumer_;
         if (is_closed()) {
@@ -254,15 +244,13 @@ class buffered_channel {
         not_empty_cnd_.wait(
             lk, [this]() { return is_closed() || !is_empty_(); });
         --waiting_consumer_;
-      }
-      else {
+      } else {
         BOOST_ASSERT(channel_op_status::closed == status);
         throw std::runtime_error{"boost fiber: channel is closed"};
       }
     }
   }
 };
-}  // namespace detail
 }  // namespace fmpi
 
 #endif  // BUFFERED_CHANNEL_H

@@ -17,6 +17,7 @@
 #include <fmpi/NumericRange.hpp>
 #include <fmpi/Span.hpp>
 #include <fmpi/Utils.hpp>
+#include <fmpi/allocator/HeapAllocator.hpp>
 #include <fmpi/container/BoundedBuffer.hpp>
 #include <fmpi/detail/Capture.hpp>
 #include <fmpi/mpi/Algorithm.hpp>
@@ -50,17 +51,18 @@ struct Ticket {
   uint32_t id{};
 };
 
-class CommDispatcher {
-  using result_t = int;
-  using buffer_t = fmpi::Span<byte>;
-  using rank_t   = mpi::Rank;
-  using tag_t    = int;
+constexpr bool operator==(Ticket const& l, Ticket const& r) noexcept {
+  return l.id == r.id;
+}
 
+template <mpi::reqsome_op testReqs = mpi::testsome>
+class CommDispatcher {
+  static constexpr uint16_t default_task_capacity = 1000;
   /// Task Signature
-  using task_t = Function<int(MPI_Request*)>;
+  using task_t = Function<int(MPI_Request*, Ticket)>;
 
   /// Callback Signature
-  using callback_t = Function<void(Ticket, MPI_Status)>;
+  using callback_t = Function<void(MPI_Status, Ticket)>;
 
   template <class _T>
   using simple_vector =
@@ -86,6 +88,10 @@ class CommDispatcher {
     }
   };
 
+  using queue_list_allocator = HeapAllocator<Task, false>;
+  using queue_list = std::list<Task, ContiguousPoolAllocator<Task, false>>;
+  //using queue_list = std::list<Task>;
+
   // Uniq Task ID
   uint32_t seqCounter_{};  // counter for uniq ticket ids
 
@@ -93,8 +99,10 @@ class CommDispatcher {
   // Thread Safe Work Sharing //
   //////////////////////////////
 
+  queue_list_allocator alloc_;
+
   // Task Lists: One for each type
-  std::array<std::list<Task>, n_types> queues_;
+  std::array<queue_list, n_types> queues_;
   // total over all tasks
   std::size_t ntasks_{};
   std::size_t busy_{};
@@ -135,9 +143,9 @@ class CommDispatcher {
   ~CommDispatcher();
 
   Ticket postAsync(
-      request_type                         qid,
-      Function<int(MPI_Request*)>&&        task,
-      Function<void(Ticket, MPI_Status)>&& callback);
+      request_type                          qid,
+      Function<int(MPI_Request*, Ticket)>&& task,
+      Function<void(MPI_Status, Ticket)>&&  callback);
 
   void loop_until_done() {
     std::unique_lock<std::mutex> lk{mutex_};
@@ -164,15 +172,20 @@ class CommDispatcher {
   void worker();
 };
 
-inline CommDispatcher::CommDispatcher(std::size_t winsz)
-  : winsz_(winsz)
+template <typename mpi::reqsome_op testReqs>
+inline CommDispatcher<testReqs>::CommDispatcher(std::size_t winsz)
+  : alloc_(queue_list_allocator{default_task_capacity})
+  , winsz_(winsz)
   , reqs_in_flight_(winsz_ / n_types)
   , pending_(winsz_)
   , mpi_reqs_(winsz_)
   , mpi_statuses_(winsz_)
   , indices_(winsz_)
   , running_(true) {
-  // initialize arrays to track relevant information...
+  for (auto&& i : range(queues_.size())) {
+    queues_[i] = std::move(queue_list{alloc_});
+  }
+
   std::uninitialized_fill(
       std::begin(mpi_reqs_), std::end(mpi_reqs_), MPI_REQUEST_NULL);
 
@@ -191,27 +204,32 @@ inline CommDispatcher::CommDispatcher(std::size_t winsz)
   FMPI_ASSERT((winsz % n_types) == 0);
 }
 
-inline CommDispatcher::~CommDispatcher() {
+template <typename mpi::reqsome_op testReqs>
+inline CommDispatcher<testReqs>::~CommDispatcher() {
   stop_worker();
   thread_.join();
 }
 
-inline void CommDispatcher::stop_worker() {
+template <typename mpi::reqsome_op testReqs>
+inline void CommDispatcher<testReqs>::stop_worker() {
   running_.store(false, std::memory_order_relaxed);
 }
 
-inline void CommDispatcher::start_worker() {
+template <typename mpi::reqsome_op testReqs>
+inline void CommDispatcher<testReqs>::start_worker() {
   thread_ = std::thread(&CommDispatcher::worker, this);
 }
 
-inline Ticket CommDispatcher::postAsync(
-    request_type                         qid,
-    Function<int(MPI_Request*)>&&        task,
-    Function<void(Ticket, MPI_Status)>&& callback) {
+template <typename mpi::reqsome_op testReqs>
+inline Ticket CommDispatcher<testReqs>::postAsync(
+    request_type                          qid,
+    Function<int(MPI_Request*, Ticket)>&& task,
+    Function<void(MPI_Status, Ticket)>&&  callback) {
   return do_enqueue(qid, std::move(task), std::move(callback));
 }
 
-inline Ticket CommDispatcher::do_enqueue(
+template <typename mpi::reqsome_op testReqs>
+inline Ticket CommDispatcher<testReqs>::do_enqueue(
     request_type type, task_t&& task, callback_t&& callback) {
   Ticket ticket;
   {
@@ -232,7 +250,8 @@ inline Ticket CommDispatcher::do_enqueue(
   return ticket;
 }
 
-inline void CommDispatcher::worker() {
+template <typename mpi::reqsome_op testReqs>
+inline void CommDispatcher<testReqs>::worker() {
   std::vector<int> new_reqs;
   new_reqs.reserve(winsz_);
 
@@ -285,7 +304,7 @@ inline void CommDispatcher::worker() {
     for (auto&& slot : new_reqs) {
       auto* mpi_req = &mpi_reqs_[slot];
       // initiate the task
-      pending_[slot].task(mpi_req);
+      pending_[slot].task(mpi_req, pending_[slot].ticket);
       auto prev = std::exchange(pending_[slot].state, status::running);
       FMPI_ASSERT(prev == status::pending);
     }
@@ -294,10 +313,11 @@ inline void CommDispatcher::worker() {
   }
 }
 
-inline std::size_t CommDispatcher::process_requests() {
+template <typename mpi::reqsome_op testReqs>
+inline std::size_t CommDispatcher<testReqs>::process_requests() {
   int* last;
 
-  auto mpi_ret = mpi::testsome(
+  auto mpi_ret = testReqs(
       &*std::begin(mpi_reqs_),
       &*std::end(mpi_reqs_),
       indices_.data(),
@@ -341,13 +361,14 @@ inline std::size_t CommDispatcher::process_requests() {
 
     // TODO(rkowalewski): error handling if some requests fail?
 
-    processed.callback(processed.ticket, mpi_statuses_[*it]);
+    processed.callback(mpi_statuses_[*it], processed.ticket);
   }
 
   return nCompleted;
 }
 
-inline void CommDispatcher::pinToCore(int coreId) {
+template <mpi::reqsome_op testReqs>
+inline void CommDispatcher<testReqs>::pinToCore(int coreId) {
   int cpuSetSize = sizeof(cpu_set_t);
   if (coreId >= 0 && (coreId <= cpuSetSize * 8)) {
     cpu_set_t cpuSet;

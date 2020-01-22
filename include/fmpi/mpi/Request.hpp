@@ -11,6 +11,13 @@
 
 namespace mpi {
 
+typedef int (*reqsome_op)(
+    MPI_Request* begin,
+    MPI_Request* end,
+    int*         indices,
+    MPI_Status*  statuses,
+    int*&        last);
+
 int testsome(
     MPI_Request* begin,
     MPI_Request* end,

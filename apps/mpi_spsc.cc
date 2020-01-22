@@ -2,10 +2,14 @@
 #include <omp.h>
 #include <sched.h>
 
+#include <boost/container/small_vector.hpp>
 #include <boost/lockfree/spsc_queue.hpp>
 #include <fmpi/NumericRange.hpp>
 #include <fmpi/Span.hpp>
+#include <fmpi/allocator/ContiguousPoolAllocator.hpp>
+#include <fmpi/allocator/HeapAllocator.hpp>
 #include <fmpi/container/BoundedBuffer.hpp>
+#include <fmpi/container/buffered_channel.hpp>
 #include <fmpi/detail/Capture.hpp>
 #include <fmpi/mpi/Algorithm.hpp>
 #include <fmpi/mpi/Dispatcher.hpp>
@@ -97,33 +101,56 @@ int test() {
 
   // FMPI_DBG(&buf);
 
-  auto ready_tasks = fmpi::ThreadsafeQueue<fmpi::Span<int>>{};
+  constexpr std::size_t n_pipelines = 2;
+  constexpr int         mpi_tag     = 0;
 
-  constexpr int mpi_tag = 0;
+  // Pipeline 2
+  using rank_data_pair = std::pair<mpi::Rank, fmpi::Span<int>>;
 
-  for (auto&& peer : fmpi::range(world.size())) {
-    auto rb      = fmpi::Span<int>(&rbuf[peer], blocksize);
-    auto rticket = dispatcher.postAsync(
+  auto ready_tasks = fmpi::buffered_channel<rank_data_pair>{world.size()};
+
+  uint16_t const size =
+      std::min<uint16_t>(winsz, world.size()) * blocksize * 2;
+
+  constexpr bool thread_safe = true;
+  auto           buf_alloc   = fmpi::HeapAllocator<int, thread_safe>{size};
+
+  using token_data_pair = std::pair<fmpi::Ticket, fmpi::Span<int>>;
+  boost::container::small_vector<token_data_pair, winsz * n_pipelines> blocks;
+
+  for (auto&& p : fmpi::range(world.size())) {
+    auto       rb      = fmpi::Span<int>(&rbuf[p], blocksize);
+    auto const peer    = static_cast<mpi::Rank>(p);
+    auto       rticket = dispatcher.postAsync(
         fmpi::request_type::IRECV,
-        [rb, peer, &world](MPI_Request* req) -> int {
-          return mpi::irecv(
-              rb.data(),
-              rb.size(),
-              static_cast<mpi::Rank>(peer),
-              mpi_tag,
-              world,
-              req);
+        [&blocks, &buf_alloc, peer, &world](
+            MPI_Request* req, fmpi::Ticket ticket) -> int {
+          // allocator some buffer
+          auto b = buf_alloc.allocate(blocksize);
+          blocks.push_back(
+              std::make_pair(ticket, fmpi::make_span(b, blocksize)));
+          return mpi::irecv(b, blocksize, peer, mpi_tag, world, req);
         },
-        [rb, &ready_tasks](fmpi::Ticket /*unused*/, MPI_Status status) {
+        [&blocks, &ready_tasks, peer](
+            MPI_Status status, fmpi::Ticket ticket) {
           FMPI_CHECK(status.MPI_ERROR == MPI_SUCCESS);
-          ready_tasks.push_front(rb);
+
+          auto it = std::find_if(
+              std::begin(blocks), std::end(blocks), [ticket](const auto& v) {
+                return v.first == ticket;
+              });
+
+          FMPI_DBG_RANGE(it->second.begin(), it->second.end());
+
+          ready_tasks.push(std::make_pair(peer, it->second));
+          blocks.erase(it);
         });
 
     auto sb = fmpi::Span<const int>(&sbuf[peer], blocksize);
 
     auto sticket = dispatcher.postAsync(
         fmpi::request_type::ISEND,
-        [sb, peer, &world](MPI_Request* req) -> int {
+        [sb, peer, &world](MPI_Request* req, fmpi::Ticket) -> int {
           return mpi::isend(
               sb.data(),
               sb.size(),
@@ -132,7 +159,7 @@ int test() {
               world,
               req);
         },
-        [](fmpi::Ticket /*unused*/, MPI_Status /*unused*/) {
+        [](MPI_Status /*unused*/, fmpi::Ticket) {
           std::cout << "callback fire for send\n";
         });
 
@@ -140,20 +167,39 @@ int test() {
     FMPI_DBG(sticket.id);
   }
 
-  auto consumer =
-      std::async(std::launch::async, [&ready_tasks, ntasks = world.size()]() {
+  auto consumer = std::async(
+      std::launch::async,
+      [&ready_tasks, &rbuf, &buf_alloc, ntasks = world.size()]() {
         std::this_thread::sleep_for(std::chrono::seconds(2));
 
         auto n = ntasks;
         while ((n--) != 0u) {
-          fmpi::Span<int> data;
-          ready_tasks.pop_back(data);
+          FMPI_DBG(buf_alloc.allocatedBlocks());
+          FMPI_DBG(buf_alloc.allocatedHeapBlocks());
+          FMPI_DBG(buf_alloc.isFull());
+          auto ready = ready_tasks.value_pop();
+
+          throw std::runtime_error("test");
+
+          auto const [peer, s] = ready;
+
+          FMPI_DBG(peer);
+          FMPI_DBG_RANGE(s.begin(), s.end());
+          // copy data
+          std::copy(
+              s.begin(), s.end(), std::next(rbuf.begin(), peer * blocksize));
+          // release memory
+          buf_alloc.dispose(s.data());
         }
       });
 
   dispatcher.loop_until_done();
-  std::cout << "dispatcher done...waiting for consumer\n";
-  consumer.wait();
+
+  try {
+    consumer.get();
+  } catch (...) {
+    std::cout << "exception catch block\n";
+  }
 
   std::cout << "consumer done...\n";
 
