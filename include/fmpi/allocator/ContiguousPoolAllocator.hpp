@@ -269,7 +269,6 @@ void ContiguousPoolAllocator<T, ThreadSafe>::deallocate(
     delete[](char*) p;
     detail::LockGuard<ThreadSafe> lock(_control->_mutex);
     --_control->_numHeapAllocatedBlocks;
-    assert(_control->_numHeapAllocatedBlocks >= 0);
   }
 }
 
