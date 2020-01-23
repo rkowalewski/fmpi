@@ -97,11 +97,10 @@ inline std::future<R> async_on_core(
 }
 
 template <
-    std::size_t winsz,
     class ContiguousIter,
     class Dispatcher,
     class BufAlloc,
-    class ReadyQueue>
+    class ReadyCallback>
 void schedule_comm(
     // source buffer
     ContiguousIter first,
@@ -112,10 +111,8 @@ void schedule_comm(
     std::size_t blocksize,
     Dispatcher& dispatcher,
     // Allocator for itermediate buffer
-    BufAlloc&   alloc,
-    ReadyQueue& ready_tasks) {
-  constexpr std::size_t n_pipelines = 2;
-
+    BufAlloc&&      bufAlloc,
+    ReadyCallback&& ready) {
   using value_type =
       typename std::iterator_traits<ContiguousIter>::value_type;
 
@@ -123,40 +120,23 @@ void schedule_comm(
 
   FMPI_CHECK(std::next(first, ctx.size() * blocksize) == last);
 
-  using token_data_pair = std::pair<fmpi::Ticket, fmpi::Span<value_type>>;
-  using container =
-      boost::container::small_vector<token_data_pair, winsz * n_pipelines>;
-
-  auto blocks = std::make_shared<container>();
-
   FMPI_DBG(ctx.size());
 
-  for (auto&& peer : fmpi::range(static_cast<mpi::Rank>(0), mpi::Rank(ctx.size()))) {
-    //auto const peer    = static_cast<mpi::Rank>(p);
-    FMPI_DBG_STREAM("exchanging data with peer: " << peer);
-    auto       rticket = dispatcher.postAsync(
+  for (auto&& peer :
+       fmpi::range(static_cast<mpi::Rank>(0), mpi::Rank(ctx.size()))) {
+    auto rticket = dispatcher.postAsync(
         fmpi::request_type::IRECV,
-        [blocks, &alloc, peer, blocksize, &ctx](
+        [cb = std::forward<BufAlloc>(bufAlloc), peer, &ctx](
             MPI_Request* req, fmpi::Ticket ticket) -> int {
-          // allocator some buffer
-          auto b = alloc.allocate(blocksize);
-          blocks->push_back(
-              std::make_pair(ticket, fmpi::make_span(b, blocksize)));
+          auto s = cb(ticket);
           FMPI_DBG_STREAM("mpi::irecv from rank " << peer);
-          return mpi::irecv(b, blocksize, peer, mpi_tag, ctx, req);
+
+          return mpi::irecv(s.data(), s.size(), peer, mpi_tag, ctx, req);
         },
-        [blocks, &ready_tasks, peer](MPI_Status status, fmpi::Ticket ticket) {
+        [cb = std::forward<ReadyCallback>(ready), peer](
+            MPI_Status status, fmpi::Ticket ticket) {
           FMPI_CHECK(status.MPI_ERROR == MPI_SUCCESS);
-
-          auto it = std::find_if(
-              std::begin(*blocks),
-              std::end(*blocks),
-              [ticket](const auto& v) { return v.first == ticket; });
-
-          FMPI_DBG_RANGE(it->second.begin(), it->second.end());
-
-          ready_tasks.push(std::make_pair(peer, it->second));
-          blocks->erase(it);
+          cb(ticket, peer);
         });
 
     auto sb = fmpi::Span<const value_type>(&first[peer], blocksize);
@@ -245,6 +225,31 @@ int run() {
   dispatcher.start_worker();
   dispatcher.pinToCore(pinning.dispatcher_core);
 
+  using token_data_pair = std::pair<fmpi::Ticket, fmpi::Span<value_type>>;
+  constexpr std::size_t n_pipelines = 2;
+  boost::container::small_vector<token_data_pair, winsz * n_pipelines> blocks;
+
+  auto enqueue = [&buf_alloc, &blocks](fmpi::Ticket ticket) {
+    // allocator some buffer
+    auto* b = buf_alloc.allocate(blocksize);
+    auto  s = fmpi::make_span(b, blocksize);
+    blocks.push_back(std::make_pair(ticket, s));
+    return s;
+  };
+
+  auto dequeue = [&blocks, &ready_tasks](
+                     fmpi::Ticket ticket, mpi::Rank peer) {
+    auto it = std::find_if(
+        std::begin(blocks), std::end(blocks), [ticket](const auto& v) {
+          return v.first == ticket;
+        });
+
+    FMPI_CHECK(it != std::end(blocks));
+
+    ready_tasks.push(std::make_pair(peer, it->second));
+    blocks.erase(it);
+  };
+
   auto f_comm = async_on_core<void>(
       pinning.mpi_core,
       pinning.scheduler_core,
@@ -252,16 +257,9 @@ int run() {
        last  = std::end(sbuf),
        world,
        &dispatcher,
-       &buf_alloc,
-       &ready_tasks]() {
-        schedule_comm<winsz>(
-            first,
-            last,
-            world,
-            blocksize,
-            dispatcher,
-            buf_alloc,
-            ready_tasks);
+       enq = std::move(enqueue),
+       deq = std::move(dequeue)]() {
+        schedule_comm(first, last, world, blocksize, dispatcher, enq, deq);
       });
 
   using return_type = typename container::iterator;
@@ -291,25 +289,24 @@ int run() {
   return_type ret;
   try {
     ret = f_comp.get();
+    f_comm.wait();
   } catch (...) {
     std::cout << "computation done...\n";
   }
 
   FMPI_ASSERT(ret == rbuf.end());
-  FMPI_ASSERT(f_comm.valid());
 
   auto const pending_tasks = dispatcher.pendingTasks();
   FMPI_ASSERT(pending_tasks.first == 0 && pending_tasks.second == 0);
   FMPI_ASSERT(pending_tasks.first == 0 && pending_tasks.second == 0);
-
-  // f_comm.wait();
-  dispatcher.loop_until_done();
 
   if (!std::equal(std::begin(rbuf), std::end(rbuf), std::begin(expect))) {
     throw std::runtime_error("invalid result");
   }
 
   std::cout << "success...\n";
+
+  dispatcher.loop_until_done();
 
   return 0;
 }
