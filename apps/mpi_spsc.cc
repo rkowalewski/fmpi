@@ -255,7 +255,7 @@ int run() {
       pinning.scheduler_core,
       [first = std::begin(sbuf),
        last  = std::end(sbuf),
-       world,
+       &world,
        &dispatcher,
        enq = std::move(enqueue),
        deq = std::move(dequeue)]() {

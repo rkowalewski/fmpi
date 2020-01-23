@@ -401,7 +401,7 @@ inline void scatteredPairwiseWaitsome(
     return std::make_pair(first, std::next(first, blocksize));
   };
 
-  auto sendOp = [&reqs, ctx](auto chunk, auto peer, auto reqIdx) {
+  auto sendOp = [&reqs, &ctx](auto chunk, auto peer, auto reqIdx) {
     FMPI_DBG_STREAM("sending to " << peer << " reqIdx " << reqIdx);
 
     auto const nels = std::distance(chunk.first, chunk.second);

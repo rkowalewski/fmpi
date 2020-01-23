@@ -51,6 +51,9 @@ class Context {
   explicit Context(MPI_Comm comm);
   ~Context();
 
+  Context(const Context&) = delete;
+  Context& operator=(const Context&) = delete;
+
   [[nodiscard]] auto rank() const noexcept -> Rank;
 
   [[nodiscard]] auto size() const noexcept -> size_type;
