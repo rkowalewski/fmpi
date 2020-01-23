@@ -5,6 +5,28 @@
 
 namespace fmpi {
 
+#if 0
+// Capture args and add them as additional arguments
+template <typename Lambda, typename... Args>
+auto capture_call(Lambda&& lambda, Args&&... args) {
+  return [lambda       = std::forward<Lambda>(lambda),
+          capture_args = std::make_tuple(std::forward<Args>(args)...)](
+             auto&&... original_args) mutable {
+    return std::apply(
+        [&lambda](auto&&... args) {
+          lambda(std::forward<decltype(args)>(args)...);
+        },
+        std::tuple_cat(
+            std::forward_as_tuple(original_args...),
+            std::apply(
+                [](auto&&... args) {
+                  return std::forward_as_tuple<Args...>(std::move(args)...);
+                },
+                std::move(capture_args))));
+  };
+}
+#endif
+
 //==============================================================================================
 //                                   class Capture
 //==============================================================================================

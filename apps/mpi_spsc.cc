@@ -48,22 +48,137 @@ std::vector<int> gen_random_vec() {
   return expect;
 }
 
-int run();
-
-constexpr std::size_t NCPU = 48;
-constexpr std::size_t NCOMM_CORES = 1;
-
 struct CorePinning {
-  int mpi_core;
-  int dispatcher_core;
-  int scheduler_core;
-  int comp_core;
+  int mpi_core        = -1;
+  int dispatcher_core = -1;
+  int scheduler_core  = -1;
+  int comp_core       = -1;
 };
 
-CorePinning config_pinning(std::size_t domain_size);
+CorePinning config_pinning();
 
-void (std::promise<void> promise, mpi::Context const& ctx, std::size_t message_size) {
+int run();
 
+template <typename RET, typename FUNC, typename... ARGS>
+constexpr void call_with_promise(
+    fmpi::Capture<RET, FUNC, ARGS...>& callable, std::promise<RET>& pr) {
+  pr.set_value(callable());
+}
+
+template <typename FUNC, typename... ARGS>
+constexpr void call_with_promise(
+    fmpi::Capture<void, FUNC, ARGS...>& callable, std::promise<void>& pr) {
+  callable();
+  pr.set_value();
+}
+
+template <typename R, typename F, typename... Ts>
+inline std::future<R> async_on_core(
+    int my_core, int their_core, F&& f, Ts&&... params) {
+  using promise = std::promise<R>;
+
+  auto lambda =
+      fmpi::makeCapture<R>(std::forward<F>(f), std::forward<Ts>(params)...);
+
+  auto pr = std::make_shared<promise>();
+
+  if (my_core != their_core) {
+    auto t = std::thread([fn = std::move(lambda), pr]() mutable {
+      call_with_promise(fn, *pr);
+    });
+
+    fmpi::pinThreadToCore(t, their_core);
+    t.detach();
+  } else {
+    call_with_promise(lambda, *pr);
+  }
+
+  return pr->get_future();
+}
+
+template <
+    std::size_t winsz,
+    class ContiguousIter,
+    class Dispatcher,
+    class BufAlloc,
+    class ReadyQueue>
+void schedule_comm(
+    // source buffer
+    ContiguousIter first,
+    ContiguousIter last,
+    // MPI Context
+    mpi::Context const& ctx,
+    // length of each message
+    std::size_t blocksize,
+    Dispatcher& dispatcher,
+    // Allocator for itermediate buffer
+    BufAlloc&   alloc,
+    ReadyQueue& ready_tasks) {
+  constexpr std::size_t n_pipelines = 2;
+
+  using value_type =
+      typename std::iterator_traits<ContiguousIter>::value_type;
+
+  constexpr int mpi_tag = 0;
+
+  FMPI_CHECK(std::next(first, ctx.size() * blocksize) == last);
+
+  using token_data_pair = std::pair<fmpi::Ticket, fmpi::Span<value_type>>;
+  using container =
+      boost::container::small_vector<token_data_pair, winsz * n_pipelines>;
+
+  auto blocks = std::make_shared<container>();
+
+  FMPI_DBG(ctx.size());
+
+  for (auto&& peer : fmpi::range(static_cast<mpi::Rank>(0), mpi::Rank(ctx.size()))) {
+    //auto const peer    = static_cast<mpi::Rank>(p);
+    FMPI_DBG_STREAM("exchanging data with peer: " << peer);
+    auto       rticket = dispatcher.postAsync(
+        fmpi::request_type::IRECV,
+        [blocks, &alloc, peer, blocksize, &ctx](
+            MPI_Request* req, fmpi::Ticket ticket) -> int {
+          // allocator some buffer
+          auto b = alloc.allocate(blocksize);
+          blocks->push_back(
+              std::make_pair(ticket, fmpi::make_span(b, blocksize)));
+          FMPI_DBG_STREAM("mpi::irecv from rank " << peer);
+          return mpi::irecv(b, blocksize, peer, mpi_tag, ctx, req);
+        },
+        [blocks, &ready_tasks, peer](MPI_Status status, fmpi::Ticket ticket) {
+          FMPI_CHECK(status.MPI_ERROR == MPI_SUCCESS);
+
+          auto it = std::find_if(
+              std::begin(*blocks),
+              std::end(*blocks),
+              [ticket](const auto& v) { return v.first == ticket; });
+
+          FMPI_DBG_RANGE(it->second.begin(), it->second.end());
+
+          ready_tasks.push(std::make_pair(peer, it->second));
+          blocks->erase(it);
+        });
+
+    auto sb = fmpi::Span<const value_type>(&first[peer], blocksize);
+
+    auto sticket = dispatcher.postAsync(
+        fmpi::request_type::ISEND,
+        [sb, peer, &ctx](MPI_Request* req, fmpi::Ticket) -> int {
+          return mpi::isend(
+              sb.data(),
+              sb.size(),
+              static_cast<mpi::Rank>(peer),
+              mpi_tag,
+              ctx,
+              req);
+        },
+        [](MPI_Status /*unused*/, fmpi::Ticket) {
+          std::cout << "callback fire for send\n";
+        });
+
+    FMPI_DBG(rticket.id);
+    FMPI_DBG(sticket.id);
+  }
 }
 
 int main(int argc, char* argv[]) {
@@ -74,7 +189,7 @@ int main(int argc, char* argv[]) {
 
   if (provided < MPI_THREAD_SERIALIZED) {
     std::cerr << "MPI_THREAD_SERIALIZED not supported\n";
-    return 1;
+    return 2;
   }
 
   run();
@@ -83,26 +198,26 @@ int main(int argc, char* argv[]) {
 }
 
 int run() {
-
-  auto const domain_size = static_cast<std::size_t>(std::atoll(std::getenv("FMPI_DOMAIN_SIZE")));
-
   mpi::Context const world{MPI_COMM_WORLD};
 
-  auto const pinning = config_pinning(domain_size);
+  auto const pinning = config_pinning();
+
   FMPI_DBG(pinning);
 
   constexpr std::size_t winsz = 4;
-  fmpi::CommDispatcher  dispatcher{winsz};
 
   constexpr std::size_t blocksize = 1;
 
-  std::vector<int> sbuf(world.size() * blocksize);
-  std::vector<int> rbuf(world.size() * blocksize);
+  using value_type = int;
+  using container  = std::vector<value_type>;
+
+  container sbuf(world.size() * blocksize);
+  container rbuf(world.size() * blocksize);
 
   int const first = world.rank() * world.size();
   std::iota(std::begin(sbuf), std::end(sbuf), first);
 
-  std::vector<int> expect(world.size() * blocksize);
+  container expect(world.size() * blocksize);
 
   int val = world.rank();
   std::generate(
@@ -114,105 +229,47 @@ int run() {
 
   FMPI_DBG_RANGE(std::begin(sbuf), std::end(sbuf));
 
-  dispatcher.start_worker();
-  //dispatcher.pinToCore(dispatcher_core);
-
-  // sleep for one second
-  std::this_thread::sleep_for(std::chrono::seconds(1));
-
-  // FMPI_DBG(&buf);
-
-  constexpr std::size_t n_pipelines = 2;
-  constexpr int         mpi_tag     = 0;
-
   // Pipeline 2
-  using rank_data_pair = std::pair<mpi::Rank, fmpi::Span<int>>;
+  using rank_data_pair = std::pair<mpi::Rank, fmpi::Span<value_type>>;
 
   auto ready_tasks = fmpi::buffered_channel<rank_data_pair>{world.size()};
 
   uint16_t const size =
       std::min<uint16_t>(winsz, world.size()) * blocksize * 2;
 
-  constexpr bool thread_safe = true;
-  auto           buf_alloc   = fmpi::HeapAllocator<int, thread_safe>{size};
+  auto buf_alloc =
+      fmpi::HeapAllocator<value_type, true /*thread_safe*/>{size};
 
-  using token_data_pair = std::pair<fmpi::Ticket, fmpi::Span<int>>;
-  boost::container::small_vector<token_data_pair, winsz * n_pipelines> blocks;
+  // Dispatcher Thread
+  fmpi::CommDispatcher dispatcher{winsz};
+  dispatcher.start_worker();
+  dispatcher.pinToCore(pinning.dispatcher_core);
 
-  for (auto&& p : fmpi::range(world.size())) {
-    auto       rb      = fmpi::Span<int>(&rbuf[p], blocksize);
-    auto const peer    = static_cast<mpi::Rank>(p);
-    auto       rticket = dispatcher.postAsync(
-        fmpi::request_type::IRECV,
-        [&blocks, &buf_alloc, peer, &world](
-            MPI_Request* req, fmpi::Ticket ticket) -> int {
-          // allocator some buffer
-          auto b = buf_alloc.allocate(blocksize);
-          blocks.push_back(
-              std::make_pair(ticket, fmpi::make_span(b, blocksize)));
-          return mpi::irecv(b, blocksize, peer, mpi_tag, world, req);
-        },
-        [&blocks, &ready_tasks, peer](
-            MPI_Status status, fmpi::Ticket ticket) {
-          FMPI_CHECK(status.MPI_ERROR == MPI_SUCCESS);
+  auto f_comm = async_on_core<void>(
+      pinning.mpi_core,
+      pinning.scheduler_core,
+      [first = std::begin(sbuf),
+       last  = std::end(sbuf),
+       world,
+       &dispatcher,
+       &buf_alloc,
+       &ready_tasks]() {
+        schedule_comm<winsz>(
+            first,
+            last,
+            world,
+            blocksize,
+            dispatcher,
+            buf_alloc,
+            ready_tasks);
+      });
 
-          auto it = std::find_if(
-              std::begin(blocks), std::end(blocks), [ticket](const auto& v) {
-                return v.first == ticket;
-              });
-
-          FMPI_DBG_RANGE(it->second.begin(), it->second.end());
-
-          ready_tasks.push(std::make_pair(peer, it->second));
-          blocks.erase(it);
-        });
-
-    auto sb = fmpi::Span<const int>(&sbuf[peer], blocksize);
-
-    auto sticket = dispatcher.postAsync(
-        fmpi::request_type::ISEND,
-        [sb, peer, &world](MPI_Request* req, fmpi::Ticket) -> int {
-          return mpi::isend(
-              sb.data(),
-              sb.size(),
-              static_cast<mpi::Rank>(peer),
-              mpi_tag,
-              world,
-              req);
-        },
-        [](MPI_Status /*unused*/, fmpi::Ticket) {
-          std::cout << "callback fire for send\n";
-        });
-
-    FMPI_DBG(rticket.id);
-    FMPI_DBG(sticket.id);
-  }
-
-  std::this_thread::sleep_for(std::chrono::seconds(2));
-
-  auto n = world.size();
-
-  while ((n--) != 0u) {
-    FMPI_DBG(buf_alloc.allocatedBlocks());
-    FMPI_DBG(buf_alloc.allocatedHeapBlocks());
-    FMPI_DBG(buf_alloc.isFull());
-    auto ready = ready_tasks.value_pop();
-
-    auto const [peer, s] = ready;
-
-    // copy data
-    std::copy(
-        s.begin(), s.end(), std::next(rbuf.begin(), peer * blocksize));
-    // release memory
-    buf_alloc.dispose(s.data());
-  }
-
-#if 0
-  auto consumer = std::async(
-      std::launch::async,
-      [&ready_tasks, &rbuf, &buf_alloc, ntasks = world.size()]() {
-        std::this_thread::sleep_for(std::chrono::seconds(2));
-
+  using return_type = typename container::iterator;
+  auto f_comp       = async_on_core<return_type>(
+      pinning.mpi_core,
+      pinning.comp_core,
+      [&ready_tasks, &rbuf, &buf_alloc, ntasks = world.size()]()
+          -> return_type {
         auto n = ntasks;
         while ((n--) != 0u) {
           FMPI_DBG(buf_alloc.allocatedBlocks());
@@ -228,22 +285,25 @@ int run() {
           // release memory
           buf_alloc.dispose(s.data());
         }
+        return rbuf.end();
       });
-#endif
 
-  dispatcher.loop_until_done();
-
-#if 0
+  return_type ret;
   try {
-    consumer.get();
+    ret = f_comp.get();
   } catch (...) {
-    std::cout << "exception catch block\n";
+    std::cout << "computation done...\n";
   }
-  std::cout << "consumer done...\n";
-#endif
 
+  FMPI_ASSERT(ret == rbuf.end());
+  FMPI_ASSERT(f_comm.valid());
 
-  FMPI_DBG_RANGE(std::begin(rbuf), std::end(rbuf));
+  auto const pending_tasks = dispatcher.pendingTasks();
+  FMPI_ASSERT(pending_tasks.first == 0 && pending_tasks.second == 0);
+  FMPI_ASSERT(pending_tasks.first == 0 && pending_tasks.second == 0);
+
+  // f_comm.wait();
+  dispatcher.loop_until_done();
 
   if (!std::equal(std::begin(rbuf), std::end(rbuf), std::begin(expect))) {
     throw std::runtime_error("invalid result");
@@ -254,33 +314,49 @@ int run() {
   return 0;
 }
 
-CorePinning config_pinning(std::size_t domain_size) {
+CorePinning config_pinning() {
   {
     int flag;
     FMPI_CHECK_MPI(MPI_Is_thread_main(&flag));
     FMPI_ASSERT(flag);
   }
 
+  std::size_t domain_size = 1;
+  {
+    auto const* env = std::getenv("FMPI_DOMAIN_SIZE");
+    if (env) {
+      std::istringstream{std::string(env)} >> domain_size;
+    }
+  }
+
   CorePinning pinning;
 
-  auto const my_core = sched_getcpu();
-  auto const n_comp_cores = domain_size - NCOMM_CORES;
-  auto const domain_id = (my_core % NCPU) / domain_size;
+  auto const nthreads = std::thread::hardware_concurrency();
+  FMPI_ASSERT(nthreads >= 4);
+
+  auto const ncores = nthreads / 2;
+
+  auto const my_core         = sched_getcpu();
+  auto const domain_id       = (my_core % ncores) / domain_size;
   auto const is_rank_on_comm = (my_core % domain_size) == 0;
 
-
-  if (is_rank_on_comm) {
-    //MPI rank is on the communication core. So we dispatch on the other
-    //hyperthread
-    pinning.dispatcher_core = (my_core < NCPU) ? my_core + NCPU : my_core - NCPU;
+  if (domain_size == 1) {
+    pinning.dispatcher_core = (my_core + 1) % nthreads;
+    pinning.scheduler_core  = (my_core + 2) % nthreads;
+    pinning.comp_core       = my_core;
+  } else if (is_rank_on_comm) {
+    // MPI rank is on the communication core. So we dispatch on the other
+    // hyperthread
+    pinning.dispatcher_core =
+        (std::size_t(my_core) < ncores) ? my_core + ncores : my_core - ncores;
     pinning.scheduler_core = my_core;
-    pinning.comp_core = pinning.scheduler_core + 1;
+    pinning.comp_core      = pinning.scheduler_core + 1;
   } else {
-    //MPI rank is somewhere in the Computation Domain, so we just take the
-    //communication core.
+    // MPI rank is somewhere in the Computation Domain, so we just take the
+    // communication core.
     pinning.dispatcher_core = domain_id * domain_size;
-    pinning.scheduler_core = pinning.dispatcher_core + NCPU;
-    pinning.comp_core = my_core;
+    pinning.scheduler_core  = pinning.dispatcher_core + ncores;
+    pinning.comp_core       = my_core;
   }
 
   pinning.mpi_core = my_core;

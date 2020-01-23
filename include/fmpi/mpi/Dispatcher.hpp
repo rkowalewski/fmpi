@@ -90,7 +90,7 @@ class CommDispatcher {
 
   using queue_list_allocator = HeapAllocator<Task, false>;
   using queue_list = std::list<Task, ContiguousPoolAllocator<Task, false>>;
-  //using queue_list = std::list<Task>;
+  // using queue_list = std::list<Task>;
 
   // Uniq Task ID
   uint32_t seqCounter_{};  // counter for uniq ticket ids
@@ -108,7 +108,7 @@ class CommDispatcher {
   std::size_t busy_{};
 
   // Mutex to protect work sharing variables
-  std::mutex mutex_;
+  mutable std::mutex mutex_;
   // Condition to signal empty tasks
   std::condition_variable cv_tasks_;
   // Condition to signal a finished task
@@ -149,11 +149,15 @@ class CommDispatcher {
 
   void loop_until_done() {
     std::unique_lock<std::mutex> lk{mutex_};
-    cv_finished_.wait(lk, [this]() { return ntasks_ == 0 && busy_ == 0; });
+    if (!(ntasks_ == 0 && busy_ == 0)) {
+      cv_finished_.wait(lk, [this]() { return ntasks_ == 0 && busy_ == 0; });
+    }
   }
 
   void start_worker();
   void stop_worker();
+
+  std::pair<std::size_t, std::size_t> pendingTasks() const;
 
   void pinToCore(int coreId);
 
@@ -369,18 +373,14 @@ inline std::size_t CommDispatcher<testReqs>::process_requests() {
 
 template <mpi::reqsome_op testReqs>
 inline void CommDispatcher<testReqs>::pinToCore(int coreId) {
-  int cpuSetSize = sizeof(cpu_set_t);
-  if (coreId >= 0 && (coreId <= cpuSetSize * 8)) {
-    cpu_set_t cpuSet;
-    CPU_ZERO(&cpuSet);
-    CPU_SET(coreId, &cpuSet);
+  FMPI_CHECK(pinThreadToCore(thread_, coreId));
+}
 
-    FMPI_DBG(coreId);
-
-    FMPI_CHECK(
-        pthread_setaffinity_np(
-            thread_.native_handle(), cpuSetSize, &cpuSet) == 0);
-  }
+template <mpi::reqsome_op testReqs>
+inline std::pair<std::size_t, std::size_t>
+CommDispatcher<testReqs>::pendingTasks() const {
+  std::lock_guard<std::mutex>(this->mutex_);
+  return std::make_pair(busy_, ntasks_);
 }
 
 }  // namespace fmpi
