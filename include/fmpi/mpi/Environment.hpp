@@ -75,6 +75,9 @@ class Context {
 #endif
 };
 
+
+bool is_thread_main();
+
 auto splitSharedComm(Context const& baseComm) -> Context;
 
 }  // namespace mpi

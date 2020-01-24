@@ -91,25 +91,20 @@ constexpr void call_with_promise(
 }
 
 template <typename R, typename F, typename... Ts>
-inline std::future<R> async_on_core(
-    int my_core, int their_core, F&& f, Ts&&... params) {
+inline std::future<R> async(int core, F&& f, Ts&&... params) {
   auto lambda =
       fmpi::makeCapture<R>(std::forward<F>(f), std::forward<Ts>(params)...);
 
   auto pr  = std::promise<R>{};
   auto fut = pr.get_future();
 
-  if (my_core != their_core) {
-    auto t =
-        std::thread([fn = std::move(lambda), p = std::move(pr)]() mutable {
-          call_with_promise(fn, p);
-        });
+  auto thread =
+      std::thread([fn = std::move(lambda), p = std::move(pr)]() mutable {
+        call_with_promise(fn, p);
+      });
 
-    fmpi::pinThreadToCore(t, their_core);
-    t.detach();
-  } else {
-    call_with_promise(lambda, pr);
-  }
+  fmpi::pinThreadToCore(thread, core);
+  thread.detach();
 
   return fut;
 }
@@ -204,8 +199,7 @@ int run() {
     blocks.erase(it);
   };
 
-  auto f_comm = async_on_core<void>(
-      pinning.mpi_core,
+  auto f_comm = async<void>(
       pinning.scheduler_core,
       [first = std::begin(sbuf),
        last  = std::end(sbuf),
@@ -216,8 +210,7 @@ int run() {
         schedule_comm(first, last, world, blocksize, dispatcher, enq, deq);
       });
 
-  auto f_comp = async_on_core<iterator>(
-      pinning.mpi_core,
+  auto f_comp = async<iterator>(
       pinning.comp_core,
       [&ready_tasks, &rbuf, &buf_alloc, ntasks = world.size()]() -> iterator {
         auto n = ntasks;

@@ -1,3 +1,4 @@
+#include <fmpi/Debug.hpp>
 #include <fmpi/mpi/Environment.hpp>
 #include <iosfwd>
 #include <rtlx/Assert.hpp>
@@ -118,6 +119,12 @@ auto splitSharedComm(Context const& baseComm) -> Context {
 auto operator<<(std::ostream& os, Rank const& p) -> std::ostream& {
   os << static_cast<mpi_rank>(p);
   return os;
+}
+
+bool is_thread_main() {
+  int flag;
+  FMPI_CHECK_MPI(MPI_Is_thread_main(&flag));
+  return flag == 1;
 }
 
 }  // namespace mpi

@@ -23,15 +23,9 @@
 #include <boost/config.hpp>
 #include <boost/fiber/detail/config.hpp>
 
-#include <fmpi/Constants.hpp>
+#include <fmpi/Config.hpp>
 
 namespace fmpi {
-namespace detail {
-
-constexpr std::size_t cache_alignment  = CACHE_ALIGNMENT;
-constexpr std::size_t cacheline_length = CACHELINE_LENGTH;
-
-}  // namespace detail
 
 enum class channel_op_status
 {
@@ -51,7 +45,7 @@ class buffered_channel {
   typedef
       typename std::aligned_storage<sizeof(T), alignof(T)>::type storage_type;
 
-  struct alignas(detail::cache_alignment) slot {
+  struct alignas(kCacheLineAlignment) slot {
     std::atomic<std::size_t> cycle{0};
     storage_type             storage{};
 
@@ -59,18 +53,18 @@ class buffered_channel {
   };
 
   // procuder cacheline
-  alignas(detail::cache_alignment) std::atomic<std::size_t> producer_idx_{0};
+  alignas(kCacheLineAlignment) std::atomic<std::size_t> producer_idx_{0};
   // consumer cacheline
-  alignas(detail::cache_alignment) std::atomic<std::size_t> consumer_idx_{0};
+  alignas(kCacheLineAlignment) std::atomic<std::size_t> consumer_idx_{0};
   // shared write cacheline
-  alignas(detail::cache_alignment) std::atomic_bool closed_{false};
+  alignas(kCacheLineAlignment) std::atomic_bool closed_{false};
   mutable std::mutex      mtx_{};
   std::condition_variable not_full_cnd_{};
   std::condition_variable not_empty_cnd_{};
   // shared read cacheline
-  alignas(detail::cache_alignment) slot* slots_{nullptr};
+  alignas(kCacheLineAlignment) slot* slots_{nullptr};
   std::size_t capacity_;
-  char        pad_[detail::cacheline_length];
+  char        pad_[kCacheLineSize];
   std::size_t waiting_consumer_{0};
 
   bool is_full_() {

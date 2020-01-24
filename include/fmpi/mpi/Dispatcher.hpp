@@ -12,12 +12,12 @@
 #include <tlx/container/ring_buffer.hpp>
 #include <tlx/container/simple_vector.hpp>
 
-#include <fmpi/Constants.hpp>
 #include <fmpi/Debug.hpp>
 #include <fmpi/NumericRange.hpp>
 #include <fmpi/Span.hpp>
 #include <fmpi/Utils.hpp>
 #include <fmpi/allocator/HeapAllocator.hpp>
+#include <fmpi/Config.hpp>
 #include <fmpi/container/BoundedBuffer.hpp>
 #include <fmpi/detail/Capture.hpp>
 #include <fmpi/mpi/Algorithm.hpp>
@@ -73,7 +73,7 @@ class CommDispatcher {
   static_assert(n_types == 2, "only two request types supported for now");
 
   /// Workload Item keeping a task, done callback and a ticket
-  struct alignas(CACHE_ALIGNMENT) Task {
+  struct alignas(kCacheLineAlignment) Task {
     task_t     task{};
     callback_t callback{};
     Ticket     ticket{};

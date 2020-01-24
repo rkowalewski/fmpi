@@ -3,7 +3,7 @@
 
 #include <algorithm>
 #include <cmath>
-#include <fmpi/Constants.hpp>
+#include <fmpi/Config.hpp>
 #include <fmpi/Debug.hpp>
 #include <fmpi/NumericRange.hpp>
 #include <fmpi/Schedule.hpp>

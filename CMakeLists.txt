@@ -62,11 +62,6 @@ include(${CMAKE_SOURCE_DIR}/cmake/FindOpenMP.cmake)
 include(${CMAKE_SOURCE_DIR}/cmake/ClangTidy.cmake)
 include(${CMAKE_SOURCE_DIR}/cmake/SetupBoost.cmake)
 
-if (WITH_HWLOC)
-    include(${CMAKE_SOURCE_DIR}/cmake/SetupHwloc.cmake)
-endif()
-
-
 set(BENCHMARK_ENABLE_GTEST_TESTS OFF CACHE BOOL "Disable")
 set(BENCHMARK_ENABLE_TESTING OFF CACHE BOOL "Disable")
 
