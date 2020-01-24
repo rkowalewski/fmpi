@@ -75,6 +75,24 @@ int main(int argc, char* argv[]) {
   MPI_Init_thread(&argc, &argv, MPI_THREAD_SERIALIZED, &provided);
   auto finalizer = rtlx::scope_exit([]() { MPI_Finalize(); });
 
+  mpi::Context const world{MPI_COMM_WORLD};
+
+  int nplaces = omp_get_num_places();
+  printf("omp_get_num_places: %d\n", nplaces);
+
+  std::vector<int> myprocs;
+  for(int i = 0; i < nplaces; ++i) {
+    int nprocs = omp_get_place_num_procs(i);
+    myprocs.resize(nprocs);
+    omp_get_place_proc_ids(i, myprocs.data());
+    std::ostringstream os;
+    os << "rank: " << world.rank() << ", place num: " << i << ", places: {";
+    std::copy(myprocs.begin(), myprocs.end(), std::ostream_iterator<int>(os, ", "));
+    os << "}\n";
+    std::cout << os.str();
+  }
+
+
   if (provided < MPI_THREAD_SERIALIZED) {
     std::cerr << "MPI_THREAD_SERIALIZED not supported\n";
     return 2;
@@ -123,7 +141,7 @@ int run() {
   auto ready_tasks = fmpi::buffered_channel<rank_data_pair>{world.size()};
 
   uint16_t const size =
-      std::min<uint16_t>(winsz, world.size()) * blocksize * 2;
+      std::min<uint16_t>(winsz, world.size()) * blocksize;
 
   auto buf_alloc =
       fmpi::HeapAllocator<value_type, true /*thread_safe*/>{size};
