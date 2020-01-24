@@ -3,6 +3,7 @@ add_library(fmpi
     mpi/Algorithm.cc
     mpi/Request.cc
     Schedule.cc
+    Config.cc
     )
 
 target_include_directories(fmpi PUBLIC ../include)

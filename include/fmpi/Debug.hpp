@@ -1,6 +1,8 @@
 #ifndef FMPI_DEBUG_HPP
 #define FMPI_DEBUG_HPP
 
+#include <rtlx/Assert.hpp>
+
 #ifndef NDEBUG
 #include <dbg.h>
 #include <mpi.h>

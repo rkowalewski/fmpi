@@ -48,15 +48,6 @@ std::vector<int> gen_random_vec() {
   return expect;
 }
 
-struct CorePinning {
-  int mpi_core        = -1;
-  int dispatcher_core = -1;
-  int scheduler_core  = -1;
-  int comp_core       = -1;
-};
-
-CorePinning config_pinning();
-
 int run();
 
 template <
@@ -128,12 +119,11 @@ int main(int argc, char* argv[]) {
 int run() {
   mpi::Context const world{MPI_COMM_WORLD};
 
-  auto const pinning = config_pinning();
+  auto const& pinning = fmpi::Config::instance();
 
   FMPI_DBG(pinning);
 
-  constexpr std::size_t winsz = 4;
-
+  constexpr std::size_t winsz     = 4;
   constexpr std::size_t blocksize = 1;
 
   using value_type = int;
@@ -254,65 +244,6 @@ int run() {
   dispatcher.loop_until_done();
 
   return 0;
-}
-
-CorePinning config_pinning() {
-  {
-    int flag;
-    FMPI_CHECK_MPI(MPI_Is_thread_main(&flag));
-    FMPI_ASSERT(flag);
-  }
-
-  std::size_t domain_size = 1;
-  {
-    auto const* env = std::getenv("FMPI_DOMAIN_SIZE");
-    if (env) {
-      std::istringstream{std::string(env)} >> domain_size;
-    }
-  }
-
-  CorePinning pinning;
-
-  auto const nthreads = std::thread::hardware_concurrency();
-  FMPI_ASSERT(nthreads >= 4);
-
-  auto const ncores = nthreads / 2;
-
-  auto const my_core         = sched_getcpu();
-  auto const domain_id       = (my_core % ncores) / domain_size;
-  auto const is_rank_on_comm = (my_core % domain_size) == 0;
-
-  if (domain_size == 1) {
-    pinning.dispatcher_core = (my_core + 1) % nthreads;
-    pinning.scheduler_core  = (my_core + 2) % nthreads;
-    pinning.comp_core       = my_core;
-  } else if (is_rank_on_comm) {
-    // MPI rank is on the communication core. So we dispatch on the other
-    // hyperthread
-    pinning.dispatcher_core =
-        (std::size_t(my_core) < ncores) ? my_core + ncores : my_core - ncores;
-    pinning.scheduler_core = my_core;
-    pinning.comp_core      = pinning.scheduler_core + 1;
-  } else {
-    // MPI rank is somewhere in the Computation Domain, so we just take the
-    // communication core.
-    pinning.dispatcher_core = domain_id * domain_size;
-    pinning.scheduler_core  = pinning.dispatcher_core + ncores;
-    pinning.comp_core       = my_core;
-  }
-
-  pinning.mpi_core = my_core;
-
-  return pinning;
-}
-
-std::ostream& operator<<(std::ostream& os, const CorePinning& pinning) {
-  os << "{ rank: " << pinning.mpi_core;
-  os << ", scheduler: " << pinning.scheduler_core;
-  os << ", dispatcher: " << pinning.dispatcher_core;
-  os << ", comp: " << pinning.comp_core;
-  os << " }";
-  return os;
 }
 
 template <
