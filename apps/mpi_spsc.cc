@@ -59,43 +59,6 @@ CorePinning config_pinning();
 
 int run();
 
-template <typename RET, typename FUNC, typename... ARGS>
-constexpr void call_with_promise(
-    fmpi::Capture<RET, FUNC, ARGS...>& callable, std::promise<RET>& pr) {
-  pr.set_value(callable());
-}
-
-template <typename FUNC, typename... ARGS>
-constexpr void call_with_promise(
-    fmpi::Capture<void, FUNC, ARGS...>& callable, std::promise<void>& pr) {
-  callable();
-  pr.set_value();
-}
-
-template <typename R, typename F, typename... Ts>
-inline std::future<R> async_on_core(
-    int my_core, int their_core, F&& f, Ts&&... params) {
-  using promise = std::promise<R>;
-
-  auto lambda =
-      fmpi::makeCapture<R>(std::forward<F>(f), std::forward<Ts>(params)...);
-
-  auto pr = std::make_shared<promise>();
-
-  if (my_core != their_core) {
-    auto t = std::thread([fn = std::move(lambda), pr]() mutable {
-      call_with_promise(fn, *pr);
-    });
-
-    fmpi::pinThreadToCore(t, their_core);
-    t.detach();
-  } else {
-    call_with_promise(lambda, *pr);
-  }
-
-  return pr->get_future();
-}
-
 template <
     class ContiguousIter,
     class Dispatcher,
@@ -112,53 +75,43 @@ void schedule_comm(
     Dispatcher& dispatcher,
     // Allocator for itermediate buffer
     BufAlloc&&      bufAlloc,
-    ReadyCallback&& ready) {
-  using value_type =
-      typename std::iterator_traits<ContiguousIter>::value_type;
+    ReadyCallback&& ready);
 
-  constexpr int mpi_tag = 0;
+template <typename RET, typename FUNC, typename... ARGS>
+constexpr void call_with_promise(
+    fmpi::Capture<RET, FUNC, ARGS...>& callable, std::promise<RET>& pr) {
+  pr.set_value(callable());
+}
 
-  FMPI_CHECK(std::next(first, ctx.size() * blocksize) == last);
+template <typename FUNC, typename... ARGS>
+constexpr void call_with_promise(
+    fmpi::Capture<void, FUNC, ARGS...>& callable, std::promise<void>& pr) {
+  callable();
+  pr.set_value();
+}
 
-  FMPI_DBG(ctx.size());
+template <typename R, typename F, typename... Ts>
+inline std::future<R> async_on_core(
+    int my_core, int their_core, F&& f, Ts&&... params) {
+  auto lambda =
+      fmpi::makeCapture<R>(std::forward<F>(f), std::forward<Ts>(params)...);
 
-  for (auto&& peer :
-       fmpi::range(static_cast<mpi::Rank>(0), mpi::Rank(ctx.size()))) {
-    auto rticket = dispatcher.postAsync(
-        fmpi::request_type::IRECV,
-        [cb = std::forward<BufAlloc>(bufAlloc), peer, &ctx](
-            MPI_Request* req, fmpi::Ticket ticket) -> int {
-          auto s = cb(ticket);
-          FMPI_DBG_STREAM("mpi::irecv from rank " << peer);
+  auto pr  = std::promise<R>{};
+  auto fut = pr.get_future();
 
-          return mpi::irecv(s.data(), s.size(), peer, mpi_tag, ctx, req);
-        },
-        [cb = std::forward<ReadyCallback>(ready), peer](
-            MPI_Status status, fmpi::Ticket ticket) {
-          FMPI_CHECK(status.MPI_ERROR == MPI_SUCCESS);
-          cb(ticket, peer);
+  if (my_core != their_core) {
+    auto t =
+        std::thread([fn = std::move(lambda), p = std::move(pr)]() mutable {
+          call_with_promise(fn, p);
         });
 
-    auto sb = fmpi::Span<const value_type>(&first[peer], blocksize);
-
-    auto sticket = dispatcher.postAsync(
-        fmpi::request_type::ISEND,
-        [sb, peer, &ctx](MPI_Request* req, fmpi::Ticket) -> int {
-          return mpi::isend(
-              sb.data(),
-              sb.size(),
-              static_cast<mpi::Rank>(peer),
-              mpi_tag,
-              ctx,
-              req);
-        },
-        [](MPI_Status /*unused*/, fmpi::Ticket) {
-          std::cout << "callback fire for send\n";
-        });
-
-    FMPI_DBG(rticket.id);
-    FMPI_DBG(sticket.id);
+    fmpi::pinThreadToCore(t, their_core);
+    t.detach();
+  } else {
+    call_with_promise(lambda, pr);
   }
+
+  return fut;
 }
 
 int main(int argc, char* argv[]) {
@@ -190,6 +143,7 @@ int run() {
 
   using value_type = int;
   using container  = std::vector<value_type>;
+  using iterator   = typename container::iterator;
 
   container sbuf(world.size() * blocksize);
   container rbuf(world.size() * blocksize);
@@ -262,12 +216,10 @@ int run() {
         schedule_comm(first, last, world, blocksize, dispatcher, enq, deq);
       });
 
-  using return_type = typename container::iterator;
-  auto f_comp       = async_on_core<return_type>(
+  auto f_comp = async_on_core<iterator>(
       pinning.mpi_core,
       pinning.comp_core,
-      [&ready_tasks, &rbuf, &buf_alloc, ntasks = world.size()]()
-          -> return_type {
+      [&ready_tasks, &rbuf, &buf_alloc, ntasks = world.size()]() -> iterator {
         auto n = ntasks;
         while ((n--) != 0u) {
           FMPI_DBG(buf_alloc.allocatedBlocks());
@@ -286,7 +238,7 @@ int run() {
         return rbuf.end();
       });
 
-  return_type ret;
+  iterator ret;
   try {
     ret = f_comp.get();
     f_comm.wait();
@@ -368,4 +320,69 @@ std::ostream& operator<<(std::ostream& os, const CorePinning& pinning) {
   os << ", comp: " << pinning.comp_core;
   os << " }";
   return os;
+}
+
+template <
+    class ContiguousIter,
+    class Dispatcher,
+    class BufAlloc,
+    class ReadyCallback>
+void schedule_comm(
+    // source buffer
+    ContiguousIter first,
+    ContiguousIter last,
+    // MPI Context
+    mpi::Context const& ctx,
+    // length of each message
+    std::size_t blocksize,
+    Dispatcher& dispatcher,
+    // Allocator for itermediate buffer
+    BufAlloc&&      bufAlloc,
+    ReadyCallback&& ready) {
+  using value_type =
+      typename std::iterator_traits<ContiguousIter>::value_type;
+
+  constexpr int mpi_tag = 0;
+
+  FMPI_CHECK(std::next(first, ctx.size() * blocksize) == last);
+
+  FMPI_DBG(ctx.size());
+
+  for (auto&& peer :
+       fmpi::range(static_cast<mpi::Rank>(0), mpi::Rank(ctx.size()))) {
+    auto rticket = dispatcher.postAsync(
+        fmpi::request_type::IRECV,
+        [cb = std::forward<BufAlloc>(bufAlloc), peer, &ctx](
+            MPI_Request* req, fmpi::Ticket ticket) -> int {
+          auto s = cb(ticket);
+          FMPI_DBG_STREAM("mpi::irecv from rank " << peer);
+
+          return mpi::irecv(s.data(), s.size(), peer, mpi_tag, ctx, req);
+        },
+        [cb = std::forward<ReadyCallback>(ready), peer](
+            MPI_Status status, fmpi::Ticket ticket) {
+          FMPI_CHECK(status.MPI_ERROR == MPI_SUCCESS);
+          cb(ticket, peer);
+        });
+
+    auto sb = fmpi::Span<const value_type>(&first[peer], blocksize);
+
+    auto sticket = dispatcher.postAsync(
+        fmpi::request_type::ISEND,
+        [sb, peer, &ctx](MPI_Request* req, fmpi::Ticket) -> int {
+          return mpi::isend(
+              sb.data(),
+              sb.size(),
+              static_cast<mpi::Rank>(peer),
+              mpi_tag,
+              ctx,
+              req);
+        },
+        [](MPI_Status /*unused*/, fmpi::Ticket) {
+          std::cout << "callback fire for send\n";
+        });
+
+    FMPI_DBG(rticket.id);
+    FMPI_DBG(sticket.id);
+  }
 }
