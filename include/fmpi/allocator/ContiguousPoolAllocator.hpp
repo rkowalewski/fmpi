@@ -58,7 +58,7 @@ struct ContiguousPoolAllocator {
 
   template <typename U>
   struct rebind {
-    typedef ContiguousPoolAllocator<U> other;
+    typedef ContiguousPoolAllocator<U, ThreadSafe> other;
   };
   // Rebound types
   template <typename U>
@@ -248,7 +248,7 @@ ContiguousPoolAllocator<T, ThreadSafe>::allocate(size_type n, const_pointer) {
     // Use heap allocation
     ++_control->_numHeapAllocatedBlocks;
   }
-  return (pointer) new char[sizeof(value_type)];
+  return (pointer) new char[sizeof(value_type) * n];
 }
 
 template <typename T, bool ThreadSafe>
