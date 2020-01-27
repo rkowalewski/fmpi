@@ -134,18 +134,13 @@ auto operator<<(std::ostream& os, std::pair<F, T> const& p) -> std::ostream& {
 
 #else
 
-#define FMPI_DBG(...)
+#define FMPI_DBG(...)               \
+  do {                              \
+    static_cast<void>(__VA_ARGS__); \
+  } while (0)
 #define FMPI_DBG_STREAM(expr)
 #define FMPI_DBG_RANGE(f, l)
 #endif
-
-#define FMPI_CHECK(expr)                                               \
-  do {                                                                 \
-    auto success = (expr);                                             \
-    static_assert(                                                     \
-        std::is_same<decltype(success), bool>::value, "invalid type"); \
-    RTLX_ASSERT(success);                                              \
-  } while (0)
 
 #define FMPI_CHECK_MPI(expr)                                          \
   do {                                                                \
@@ -168,7 +163,6 @@ auto operator<<(std::ostream& os, std::pair<F, T> const& p) -> std::ostream& {
     os << "[rank " << me << "] " << #expr;                 \
     throw std::runtime_error{os.str()};                    \
   }())  // NOLINT
-#define RTLX_ASSERT_RETURNS(expr, ret) RTLX_ASSERT(((expr) == (ret)))
 #endif
 
 #endif

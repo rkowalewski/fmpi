@@ -12,12 +12,12 @@
 #include <tlx/container/ring_buffer.hpp>
 #include <tlx/container/simple_vector.hpp>
 
+#include <fmpi/Config.hpp>
 #include <fmpi/Debug.hpp>
 #include <fmpi/NumericRange.hpp>
 #include <fmpi/Span.hpp>
 #include <fmpi/Utils.hpp>
 #include <fmpi/allocator/HeapAllocator.hpp>
-#include <fmpi/Config.hpp>
 #include <fmpi/container/BoundedBuffer.hpp>
 #include <fmpi/detail/Capture.hpp>
 #include <fmpi/mpi/Algorithm.hpp>
@@ -51,6 +51,10 @@ struct Ticket {
   uint32_t id{};
 };
 
+std::ostream& operator<<(std::ostream& os, Ticket const& ticket) {
+  os << "{ id : " << ticket.id << " }";
+  return os;
+}
 constexpr bool operator==(Ticket const& l, Ticket const& r) noexcept {
   return l.id == r.id;
 }
@@ -373,7 +377,8 @@ inline std::size_t CommDispatcher<testReqs>::process_requests() {
 
 template <mpi::reqsome_op testReqs>
 inline void CommDispatcher<testReqs>::pinToCore(int coreId) {
-  FMPI_CHECK(pinThreadToCore(thread_, coreId));
+  auto const pin_success = pinThreadToCore(thread_, coreId);
+  RTLX_ASSERT(pin_success);
 }
 
 template <mpi::reqsome_op testReqs>

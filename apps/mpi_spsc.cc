@@ -12,6 +12,7 @@
 #include <fmpi/allocator/HeapAllocator.hpp>
 #include <fmpi/container/BoundedBuffer.hpp>
 #include <fmpi/container/buffered_channel.hpp>
+#include <fmpi/detail/Async.hpp>
 #include <fmpi/detail/Capture.hpp>
 #include <fmpi/mpi/Algorithm.hpp>
 #include <fmpi/mpi/Dispatcher.hpp>
@@ -67,38 +68,6 @@ void schedule_comm(
     // Allocator for itermediate buffer
     BufAlloc&&      bufAlloc,
     ReadyCallback&& ready);
-
-template <typename RET, typename FUNC, typename... ARGS>
-constexpr void call_with_promise(
-    fmpi::Capture<RET, FUNC, ARGS...>& callable, std::promise<RET>& pr) {
-  pr.set_value(callable());
-}
-
-template <typename FUNC, typename... ARGS>
-constexpr void call_with_promise(
-    fmpi::Capture<void, FUNC, ARGS...>& callable, std::promise<void>& pr) {
-  callable();
-  pr.set_value();
-}
-
-template <typename R, typename F, typename... Ts>
-inline std::future<R> async(int core, F&& f, Ts&&... params) {
-  auto lambda =
-      fmpi::makeCapture<R>(std::forward<F>(f), std::forward<Ts>(params)...);
-
-  auto pr  = std::promise<R>{};
-  auto fut = pr.get_future();
-
-  auto thread =
-      std::thread([fn = std::move(lambda), p = std::move(pr)]() mutable {
-        call_with_promise(fn, p);
-      });
-
-  fmpi::pinThreadToCore(thread, core);
-  thread.detach();
-
-  return fut;
-}
 
 int main(int argc, char* argv[]) {
   // MPI_Init(&argc, &argv);
@@ -183,13 +152,13 @@ int run() {
           return v.first == ticket;
         });
 
-    FMPI_CHECK(it != std::end(blocks));
+    RTLX_ASSERT(it != std::end(blocks));
 
     ready_tasks.push(std::make_pair(peer, it->second));
     blocks.erase(it);
   };
 
-  auto f_comm = async<void>(
+  auto f_comm = fmpi::async<void>(
       pinning.scheduler_core,
       [first = std::begin(sbuf),
        last  = std::end(sbuf),
@@ -200,7 +169,7 @@ int run() {
         schedule_comm(first, last, world, blocksize, dispatcher, enq, deq);
       });
 
-  auto f_comp = async<iterator>(
+  auto f_comp = fmpi::async<iterator>(
       pinning.comp_core,
       [&ready_tasks, &rbuf, &buf_alloc, ntasks = world.size()]() -> iterator {
         auto n = ntasks;
@@ -268,12 +237,11 @@ void schedule_comm(
 
   constexpr int mpi_tag = 0;
 
-  FMPI_CHECK(std::next(first, ctx.size() * blocksize) == last);
+  RTLX_ASSERT(std::next(first, ctx.size() * blocksize) == last);
 
   FMPI_DBG(ctx.size());
 
-  for (auto&& peer :
-       fmpi::range(static_cast<mpi::Rank>(0), mpi::Rank(ctx.size()))) {
+  for (auto&& peer : fmpi::range(mpi::Rank(0), mpi::Rank(ctx.size()))) {
     auto rticket = dispatcher.postAsync(
         fmpi::request_type::IRECV,
         [cb = std::forward<BufAlloc>(bufAlloc), peer, &ctx](
@@ -285,7 +253,7 @@ void schedule_comm(
         },
         [cb = std::forward<ReadyCallback>(ready), peer](
             MPI_Status status, fmpi::Ticket ticket) {
-          FMPI_CHECK(status.MPI_ERROR == MPI_SUCCESS);
+          RTLX_ASSERT(status.MPI_ERROR == MPI_SUCCESS);
           cb(ticket, peer);
         });
 

@@ -23,6 +23,8 @@
 #include <boost/config.hpp>
 #include <boost/fiber/detail/config.hpp>
 
+#include <tlx/math.hpp>
+
 #include <fmpi/Config.hpp>
 
 namespace fmpi {
@@ -147,10 +149,7 @@ class buffered_channel {
 
  public:
   explicit buffered_channel(std::size_t capacity)
-    : capacity_{capacity} {
-    if (0 == capacity_ || 0 != (capacity_ & (capacity_ - 1))) {
-      throw std::runtime_error{"boost fiber: buffer capacity is invalid"};
-    }
+    : capacity_(tlx::round_up_to_power_of_two(capacity + 1)) {
     slots_ = new slot[capacity_]();
     for (std::size_t i = 0; i < capacity_; ++i) {
       slots_[i].cycle.store(i, std::memory_order_relaxed);

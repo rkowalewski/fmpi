@@ -134,6 +134,14 @@ static std::vector<std::pair<
                           iterator_t,
                           merger_t<iterator_t, iterator_t>,
                           16>),
+                  std::make_pair(
+                      "RingWaitsomeOverlap4",
+                      fmpi::scatteredPairwiseWaitsomeOverlap<
+                          fmpi::FlatHandshake,
+                          iterator_t,
+                          iterator_t,
+                          merger_t<iterator_t, iterator_t>,
+                          4>),
                   // Bruck Algorithms, first the original one, then a modified
                   // version which omits the last local rotation step
                   std::make_pair(
