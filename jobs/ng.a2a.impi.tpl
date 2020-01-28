@@ -28,17 +28,17 @@
 module load slurm_setup
 module load hwloc
 
-export OMP_NUM_THREADS=<<NUM_THREADS>>
+unset KMP_AFFINITY
 
-#if [[ "$OMP_NUM_THREADS" -gt 1 ]]
-#then
-#    export OMP_NUM_THREADS=<<NUM_THREADS>>
-#    export OMP_PROC_BIND=close
-#    export OMP_PLACES=cores
-#    echo "multithreaded..."
-#fi
+#export OMP_NUM_THREADS=<<NUM_THREADS>>
+
+export FMPI_DOMAIN_SIZE="$((48 / <<NUM_PROCS>>))"
+export OMP_NUM_THREADS="$((FMPI_DOMAIN_SIZE - 1))"
+export OMP_PROC_BIND="true"
+export OMP_PLACES="$(./scripts/genPlaces.sh <<NUM_PROCS>>)"
 
 mpiexec \
+    -env I_MPI_PIN_DOMAIN $((FMPI_DOMAIN_SIZE * 2)) \
     -n $SLURM_NTASKS  \
     build.release/benchmark/twoSidedAlgorithms \
     $SLURM_JOB_NUM_NODES <<ARGS>>
