@@ -571,7 +571,7 @@ inline void scatteredPairwiseWaitsomeOverlap(
   // auto const me = ctx.rank();
 
   std::ostringstream os;
-  os << Schedule::NAME << "Waitsome" << NReqs;
+  os << Schedule::NAME << "WaitsomeOverlap" << NReqs;
 
   auto trace = rtlx::TimeTrace{os.str()};
 
@@ -585,16 +585,6 @@ inline void scatteredPairwiseWaitsomeOverlap(
   }
 
   trace.tick(COMMUNICATION);
-
-  trace.tock(COMMUNICATION);
-
-  int wait = 0;
-  while (wait)
-    ;
-
-  Schedule commAlgo{};
-
-  MPI_Barrier(ctx.mpiComm());
 
   // Number of Pipeline Stages
   constexpr std::size_t n_pipelines        = 2;
@@ -645,7 +635,7 @@ inline void scatteredPairwiseWaitsomeOverlap(
             return v.first == ticket;
           });
 
-      RTLX_ASSERT(it != std::end(blocks));
+      FMPI_ASSERT(it != std::end(blocks));
 
       ready_tasks.push(std::make_pair(peer, it->second));
       blocks.erase(it);
@@ -670,7 +660,7 @@ inline void scatteredPairwiseWaitsomeOverlap(
             },
             [cb = std::move(dequeue), rpeer](
                 MPI_Status status, Ticket ticket) {
-              RTLX_ASSERT(status.MPI_ERROR == MPI_SUCCESS);
+              FMPI_ASSERT(status.MPI_ERROR == MPI_SUCCESS);
               cb(ticket, rpeer);
             });
 
@@ -731,17 +721,7 @@ inline void scatteredPairwiseWaitsomeOverlap(
 
       auto const [peer, s] = ready;
 
-      RTLX_ASSERT(s.size() == std::size_t(blocksize));
-
-      {
-        std::ostringstream os;
-        os << "received values: ";
-        std::copy(
-            s.cbegin(),
-            s.cend(),
-            std::ostream_iterator<value_type>(os, ", "));
-        FMPI_DBG(os.str());
-      }
+      FMPI_ASSERT(s.size() == std::size_t(blocksize));
 
       chunks_to_merge.emplace_back(s.data(), s.data() + s.size());
 
@@ -800,10 +780,14 @@ inline void scatteredPairwiseWaitsomeOverlap(
     return std::move(mergeBuffer.begin(), mergeBuffer.end(), out);
   });
 
+
   iterator ret;
   try {
-    ret = f_comp.get();
     fut_comm.wait();
+    trace.tock(COMMUNICATION);
+    trace.tick(MERGE);
+    ret = f_comp.get();
+    trace.tock(MERGE);
   } catch (...) {
     throw std::runtime_error("asynchronous Alltoall failed");
   }
@@ -811,72 +795,6 @@ inline void scatteredPairwiseWaitsomeOverlap(
   dispatcher.loop_until_done();
 
   FMPI_ASSERT(ret == out + ctx.size() * blocksize);
-
-#if 0
-
-  while (n_arrivals < n_remote_tasks) {
-    auto const n_old = chunks_to_merge.size();
-    auto const n_new = q_tasks.pop(std::back_inserter(chunks_to_merge));
-    FMPI_DBG(n_new);
-    auto const n_merges = n_old + n_new;
-
-    n_arrivals += n_new;
-    FMPI_DBG(n_arrivals);
-
-    // minimum number of chunks to merge: ideally we have a full level2
-    // cache
-    bool const enough_work = n_merges >= op_threshold;
-
-    FMPI_DBG(n_merges);
-
-    if (enough_work) {
-      // 2) merge all chunks
-      auto last = op(chunks_to_merge, first);
-
-      // 4) release completed buffers for future receives
-      auto fbuf = std::begin(chunks_to_merge);
-
-      if (first == output) {
-        std::advance(fbuf, 1);
-      }
-      auto const nready = std::distance(fbuf, std::end(chunks_to_merge));
-
-      FMPI_DBG_STREAM("pushing " << nready << " on done queue...");
-      detail::push_fifo(fbuf, std::end(chunks_to_merge), q_done);
-
-      chunks_to_merge.clear();
-
-      // 3) increase out iterator
-      processed.emplace_back(std::make_pair(first, last));
-      std::swap(first, last);
-    } else {
-      // we can eventually replace this with a wait method
-      // std::this_thread::yield();
-    }
-  }
-
-  auto const nels = static_cast<std::size_t>(n_producers) * blocksize;
-
-  using merge_buffer_t =
-      tlx::SimpleVector<value_type, tlx::SimpleVectorMode::NoInitNoDestroy>;
-
-  auto mergeBuffer = merge_buffer_t{nels};
-  // generate pairs of chunks to merge
-  std::copy(
-      std::begin(processed),
-      std::end(processed),
-      std::back_inserter(chunks_to_merge));
-
-  FMPI_DBG(chunks_to_merge.size());
-  // merge
-  auto const last = op(chunks_to_merge, mergeBuffer.begin());
-
-  FMPI_ASSERT(last == mergeBuffer.end());
-
-  FMPI_DBG(processed);
-
-  return std::move(mergeBuffer.begin(), mergeBuffer.end(), output);
-#endif
 }
 
 template <
