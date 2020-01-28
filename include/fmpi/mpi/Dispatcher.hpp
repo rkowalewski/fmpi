@@ -356,6 +356,8 @@ inline std::size_t CommDispatcher<testReqs>::process_requests() {
   for (auto it = &*std::begin(indices_); it < fstSent; ++it) {
     auto& processed = pending_[*it];
 
+    if (!processed.callback) continue;
+
     // we explcitly set the error field to propagate succeeded MPI calls.
     // MPI does not do that, unfortunately.
     mpi_statuses_[*it].MPI_ERROR =

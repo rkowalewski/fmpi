@@ -586,6 +586,8 @@ inline void scatteredPairwiseWaitsomeOverlap(
 
   trace.tick(COMMUNICATION);
 
+  Schedule const commAlgo{};
+
   // Number of Pipeline Stages
   constexpr std::size_t n_pipelines        = 2;
   constexpr std::size_t messages_per_round = 2;
@@ -681,9 +683,7 @@ inline void scatteredPairwiseWaitsomeOverlap(
                   ctx,
                   req);
             },
-            [](MPI_Status, Ticket) {
-              std::cout << "callback fire for send\n";
-            });
+            Function<void(MPI_Status, Ticket)>{});
         FMPI_DBG(sticket.id);
       }
     }
@@ -779,7 +779,6 @@ inline void scatteredPairwiseWaitsomeOverlap(
 
     return std::move(mergeBuffer.begin(), mergeBuffer.end(), out);
   });
-
 
   iterator ret;
   try {
