@@ -606,179 +606,198 @@ inline void scatteredPairwiseWaitsomeOverlap(
 
   // queue for ready tasks
   using chunk      = std::pair<mpi::Rank, Span<value_type>>;
-  auto ready_tasks = buffered_channel<chunk>{n_rounds};
+  auto ready_tasks = boost::lockfree::spsc_queue<chunk>{n_rounds};
 
   std::vector<std::pair<Ticket, Span<value_type>>> blocks{};
-  blocks.reserve(reqsInFlight);
+  blocks.reserve(reqsInFlight * n_pipelines);
 
   // Dispatcher Thread
   fmpi::CommDispatcher dispatcher{winsz};
   dispatcher.start_worker();
   dispatcher.pinToCore(config.dispatcher_core);
 
-  auto fut_comm = fmpi::async<void>(config.scheduler_core, [&]() {
-    auto enqueue_alloc =
-        [&buf_alloc, &blocks, blocksize](fmpi::Ticket ticket) {
-          // allocator some buffer
-          auto* b = buf_alloc.allocate(blocksize);
-          FMPI_DBG_STREAM("allocate p " << b);
-          auto s = fmpi::make_span(b, blocksize);
-          auto r = std::make_pair(ticket, s);
-          FMPI_DBG(r);
-          blocks.push_back(std::move(r));
-          return s;
+  auto fut_comm = fmpi::async<void>(
+      config.scheduler_core,
+      [&buf_alloc,
+       &dispatcher,
+       &blocks,
+       &ready_tasks,
+       &ctx,       // const ref
+       blocksize,  // const
+       commAlgo,   // const
+       begin,      // const
+       n_rounds    // const
+  ]() {
+        auto enqueue_alloc =
+            [&buf_alloc, &blocks, blocksize](fmpi::Ticket ticket) {
+              // allocator some buffer
+              auto* b = buf_alloc.allocate(blocksize);
+              FMPI_DBG_STREAM("allocate p " << b);
+              auto s = fmpi::make_span(b, blocksize);
+              auto r = std::make_pair(ticket, s);
+              FMPI_DBG(r);
+              blocks.push_back(std::move(r));
+              return s;
+            };
+
+        auto dequeue = [&blocks, &ready_tasks](
+                           fmpi::Ticket ticket, mpi::Rank peer) {
+          FMPI_DBG(ticket);
+          auto it = std::find_if(
+              std::begin(blocks), std::end(blocks), [ticket](const auto& v) {
+                return v.first == ticket;
+              });
+
+          FMPI_ASSERT(it != std::end(blocks));
+
+          ready_tasks.push(std::make_pair(peer, it->second));
+          blocks.erase(it);
         };
 
-    auto dequeue = [&blocks, &ready_tasks](
-                       fmpi::Ticket ticket, mpi::Rank peer) {
-      FMPI_DBG(ticket);
-      auto it = std::find_if(
-          std::begin(blocks), std::end(blocks), [ticket](const auto& v) {
-            return v.first == ticket;
-          });
+        for (auto&& r : fmpi::range(n_rounds)) {
+          auto const rpeer = commAlgo.recvRank(ctx, r);
+          auto const speer = commAlgo.sendRank(ctx, r);
 
-      FMPI_ASSERT(it != std::end(blocks));
+          if (rpeer != ctx.rank()) {
+            auto const rticket = dispatcher.postAsync(
+                request_type::IRECV,
+                [cb = std::move(enqueue_alloc), rpeer, &ctx](
+                    MPI_Request* req, fmpi::Ticket ticket) -> int {
+                  auto s = cb(ticket);
 
-      ready_tasks.push(std::make_pair(peer, it->second));
-      blocks.erase(it);
-    };
+                  FMPI_DBG_STREAM(
+                      "mpi::irecv from rank " << rpeer << ", span: " << s);
 
-    for (auto&& r : fmpi::range(n_rounds)) {
-      auto const rpeer = commAlgo.recvRank(ctx, r);
-      auto const speer = commAlgo.sendRank(ctx, r);
+                  return mpi::irecv(
+                      s.data(), s.size(), rpeer, EXCH_TAG_RING, ctx, req);
+                },
+                [cb = std::move(dequeue), rpeer](
+                    MPI_Status status, Ticket ticket) {
+                  FMPI_ASSERT(status.MPI_ERROR == MPI_SUCCESS);
+                  cb(ticket, rpeer);
+                });
 
-      if (rpeer != ctx.rank()) {
-        auto const rticket = dispatcher.postAsync(
-            request_type::IRECV,
-            [cb = std::move(enqueue_alloc), rpeer, &ctx](
-                MPI_Request* req, fmpi::Ticket ticket) -> int {
-              auto s = cb(ticket);
+            FMPI_DBG(rticket.id);
+          }
 
-              FMPI_DBG_STREAM(
-                  "mpi::irecv from rank " << rpeer << ", span: " << s);
-
-              return mpi::irecv(
-                  s.data(), s.size(), rpeer, EXCH_TAG_RING, ctx, req);
-            },
-            [cb = std::move(dequeue), rpeer](
-                MPI_Status status, Ticket ticket) {
-              FMPI_ASSERT(status.MPI_ERROR == MPI_SUCCESS);
-              cb(ticket, rpeer);
-            });
-
-        FMPI_DBG(rticket.id);
-      }
-
-      if (speer != ctx.rank()) {
-        auto sb = Span<const value_type>(
-            std::next(begin, speer * blocksize), blocksize);
-        auto const sticket = dispatcher.postAsync(
-            request_type::ISEND,
-            [&ctx, speer, sb](MPI_Request* req, Ticket) -> int {
-              return mpi::isend(
-                  sb.data(),
-                  sb.size(),
-                  static_cast<mpi::Rank>(speer),
-                  EXCH_TAG_RING,
-                  ctx,
-                  req);
-            },
-            Function<void(MPI_Status, Ticket)>{});
-        FMPI_DBG(sticket.id);
-      }
-    }
-  });
+          if (speer != ctx.rank()) {
+            auto sb = Span<const value_type>(
+                std::next(begin, speer * blocksize), blocksize);
+            auto const sticket = dispatcher.postAsync(
+                request_type::ISEND,
+                [&ctx, speer, sb](MPI_Request* req, Ticket) -> int {
+                  return mpi::isend(
+                      sb.data(),
+                      sb.size(),
+                      static_cast<mpi::Rank>(speer),
+                      EXCH_TAG_RING,
+                      ctx,
+                      req);
+                },
+                Function<void(MPI_Status, Ticket)>{});
+            FMPI_DBG(sticket.id);
+          }
+        }
+      });
 
   using iterator = OutputIt;
 
-  auto f_comp = fmpi::async<iterator>(config.comp_core, [&]() -> iterator {
-    // chunks to merge
-    std::vector<std::pair<OutputIt, OutputIt>> chunks_to_merge;
-    chunks_to_merge.reserve(ctx.size());
-    // local task
-    chunks_to_merge.push_back(std::make_pair(
-        std::next(begin, ctx.rank() * blocksize),
-        std::next(begin, (ctx.rank() + 1) * blocksize)));
+  auto f_comp = fmpi::async<iterator>(
+      config.comp_core,
+      [&ready_tasks,
+       &buf_alloc,
+       &ctx,
+       blocksize,
+       begin,
+       out,
+       comp = std::forward<Op>(op)]() -> iterator {
+        // chunks to merge
+        std::vector<std::pair<OutputIt, OutputIt>> chunks_to_merge;
+        chunks_to_merge.reserve(ctx.size());
+        // local task
+        chunks_to_merge.push_back(std::make_pair(
+            std::next(begin, ctx.rank() * blocksize),
+            std::next(begin, (ctx.rank() + 1) * blocksize)));
 
-    // prefix sum over all processed chunks
-    auto n = ctx.size() - 1;
+        // prefix sum over all processed chunks
+        auto ntasks = ctx.size() - 1;
 
-    std::vector<std::pair<OutputIt, OutputIt>> processed;
-    processed.reserve(n);
+        std::vector<std::pair<OutputIt, OutputIt>> processed;
+        processed.reserve(ntasks);
 
-    // minimum number of chunks to merge: ideally we have a full level2
-    // cache
+        // minimum number of chunks to merge: ideally we have a full level2
+        // cache
 
-    constexpr auto op_threshold = (NReqs / 2);
+        constexpr auto op_threshold = (NReqs / 2);
 
-    auto dst = out;
+        auto dst = out;
 
-    while ((n--) != 0u) {
-      FMPI_DBG(buf_alloc.allocatedBlocks());
-      FMPI_DBG(buf_alloc.allocatedHeapBlocks());
-      FMPI_DBG(buf_alloc.isFull());
-      auto ready = ready_tasks.value_pop();
+        while (ntasks != 0u) {
+          FMPI_DBG(buf_alloc.allocatedBlocks());
+          FMPI_DBG(buf_alloc.allocatedHeapBlocks());
+          FMPI_DBG(buf_alloc.isFull());
 
-      auto const [peer, s] = ready;
+          auto const n =
+              ready_tasks.consume_all([&chunks_to_merge](auto const& v) {
+                auto const [peer, s] = v;
+                chunks_to_merge.emplace_back(s.data(), s.data() + s.size());
+              });
+          ntasks -= n;
 
-      FMPI_ASSERT(s.size() == std::size_t(blocksize));
+          bool const enough_work = chunks_to_merge.size() >= op_threshold;
 
-      chunks_to_merge.emplace_back(s.data(), s.data() + s.size());
+          if (enough_work) {
+            // merge all chunks
+            auto last = comp(chunks_to_merge, dst);
 
-      bool const enough_work = chunks_to_merge.size() >= op_threshold;
+            auto f_buf = chunks_to_merge.begin();
+            if (processed.size() == 0) {
+              std::advance(f_buf, 1);
+            }
 
-      if (enough_work) {
-        // merge all chunks
-        auto last = op(chunks_to_merge, dst);
+            for (; f_buf != chunks_to_merge.end(); ++f_buf) {
+              FMPI_DBG_STREAM("release p " << f_buf->first);
+              buf_alloc.dispose(f_buf->first);
+            }
 
-        auto f_buf = chunks_to_merge.begin();
-        if (processed.size() == 0) {
-          std::advance(f_buf, 1);
+            chunks_to_merge.clear();
+
+            // 3) increase out iterator
+            processed.emplace_back(std::make_pair(dst, last));
+            std::swap(dst, last);
+          }
         }
 
-        for (; f_buf != chunks_to_merge.end(); ++f_buf) {
-          FMPI_DBG_STREAM("release p " << f_buf->first);
-          buf_alloc.dispose(f_buf->first);
+        auto const nels = static_cast<std::size_t>(ctx.size()) * blocksize;
+
+        using merge_buffer_t = tlx::
+            SimpleVector<value_type, tlx::SimpleVectorMode::NoInitNoDestroy>;
+
+        auto mergeBuffer = merge_buffer_t{nels};
+
+        // generate pairs of chunks to merge
+        std::copy(
+            std::begin(processed),
+            std::end(processed),
+            std::back_inserter(chunks_to_merge));
+
+        FMPI_DBG(chunks_to_merge.size());
+        // merge
+        auto const last = comp(chunks_to_merge, mergeBuffer.begin());
+
+        for (auto f = std::begin(chunks_to_merge);
+             f != std::prev(std::end(chunks_to_merge), processed.size());
+             ++f) {
+          FMPI_DBG_STREAM("release p " << f->first);
+          buf_alloc.dispose(f->first);
         }
 
-        chunks_to_merge.clear();
+        FMPI_ASSERT(last == mergeBuffer.end());
 
-        // 3) increase out iterator
-        processed.emplace_back(std::make_pair(dst, last));
-        std::swap(dst, last);
-      }
-    }
+        FMPI_DBG(processed);
 
-    auto const nels = static_cast<std::size_t>(ctx.size()) * blocksize;
-
-    using merge_buffer_t =
-        tlx::SimpleVector<value_type, tlx::SimpleVectorMode::NoInitNoDestroy>;
-
-    auto mergeBuffer = merge_buffer_t{nels};
-
-    // generate pairs of chunks to merge
-    std::copy(
-        std::begin(processed),
-        std::end(processed),
-        std::back_inserter(chunks_to_merge));
-
-    FMPI_DBG(chunks_to_merge.size());
-    // merge
-    auto const last = op(chunks_to_merge, mergeBuffer.begin());
-
-    for (auto f = std::begin(chunks_to_merge);
-         f != std::prev(std::end(chunks_to_merge), processed.size());
-         ++f) {
-      FMPI_DBG_STREAM("release p " << f->first);
-      buf_alloc.dispose(f->first);
-    }
-
-    FMPI_ASSERT(last == mergeBuffer.end());
-
-    FMPI_DBG(processed);
-
-    return std::move(mergeBuffer.begin(), mergeBuffer.end(), out);
-  });
+        return std::move(mergeBuffer.begin(), mergeBuffer.end(), out);
+      });
 
   iterator ret;
   try {
