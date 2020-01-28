@@ -5,6 +5,7 @@
 
 #include <fmpi/Utils.hpp>
 #include <fmpi/detail/Capture.hpp>
+#include <fmpi/mpi/Environment.hpp>
 
 namespace fmpi {
 
@@ -29,16 +30,24 @@ inline std::future<R> async(int core, F&& f, Ts&&... params) {
   auto pr  = std::promise<R>{};
   auto fut = pr.get_future();
 
-  auto thread =
-      std::thread([fn = std::move(lambda), p = std::move(pr)]() mutable {
-        call_with_promise(fn, p);
-      });
+  FMPI_ASSERT(mpi::is_thread_main());
+  auto const& config = Config::instance();
 
-  fmpi::pinThreadToCore(thread, core);
-  thread.detach();
+  if (config.main_core != core) {
+    auto thread =
+        std::thread([fn = std::move(lambda), p = std::move(pr)]() mutable {
+          call_with_promise(fn, p);
+        });
 
-  return fut;
-}
+    fmpi::pinThreadToCore(thread, core);
+    thread.detach();
+  }
+  else {
+    call_with_promise(lambda, pr);
+  }
+
+    return fut;
+  }
 }  // namespace fmpi
 
 #endif

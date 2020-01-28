@@ -1,6 +1,7 @@
 add_library(fmpi
     mpi/Environment.cc
     mpi/Algorithm.cc
+    mpi/Rank.cc
     mpi/Request.cc
     Schedule.cc
     Config.cc

@@ -1,8 +1,11 @@
 #ifndef FMPI_MPI_ALGORITHM_HPP
 #define FMPI_MPI_ALGORITHM_HPP
 
-#include <fmpi/mpi/Environment.hpp>
 #include <rtlx/Assert.hpp>
+
+#include <fmpi/mpi/Environment.hpp>
+#include <fmpi/mpi/TypeMapper.hpp>
+
 
 namespace mpi {
 
@@ -75,18 +78,18 @@ inline int sendrecv(
   RTLX_ASSERT(recvcount < std::numeric_limits<int>::max());
 
   return MPI_Sendrecv(
-             sendbuf,
-             static_cast<int>(sendcount),
-             mpi::type_mapper<T>::type(),
-             dest,
-             sendtag,
-             recvbuf,
-             static_cast<int>(recvcount),
-             mpi::type_mapper<U>::type(),
-             source,
-             recvtag,
-             ctx.mpiComm(),
-             MPI_STATUS_IGNORE);
+      sendbuf,
+      static_cast<int>(sendcount),
+      mpi::type_mapper<T>::type(),
+      dest,
+      sendtag,
+      recvbuf,
+      static_cast<int>(recvcount),
+      mpi::type_mapper<U>::type(),
+      source,
+      recvtag,
+      ctx.mpiComm(),
+      MPI_STATUS_IGNORE);
 }
 
 template <class T, class U>

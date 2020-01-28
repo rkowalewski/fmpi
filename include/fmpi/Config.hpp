@@ -2,6 +2,7 @@
 #define FMPI_CONFIG_HPP
 
 #include <mpi.h>
+
 #include <cstddef>
 
 namespace fmpi {
@@ -43,6 +44,8 @@ struct Config {
 };
 
 std::ostream& operator<<(std::ostream&, const Config&);
+
+void print_config(std::ostream& os);
 
 }  // namespace fmpi
 #endif

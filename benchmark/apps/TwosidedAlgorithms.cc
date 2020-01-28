@@ -180,6 +180,7 @@ int main(int argc, char* argv[])
   RTLX_ASSERT_RETURNS(
       MPI_Init_thread(&argc, &argv, required, &provided), MPI_SUCCESS);
 
+
   auto finalizer = rtlx::scope_exit(
       []() { RTLX_ASSERT_RETURNS(MPI_Finalize(), MPI_SUCCESS); });
 
@@ -229,6 +230,7 @@ int main(int argc, char* argv[])
 
   if (me == 0) {
     fmpi::benchmark::printBenchmarkPreamble(std::cout, "++ ", "\n");
+    fmpi::print_config(std::cout);
     printMeasurementHeader(std::cout);
   }
 

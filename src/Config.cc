@@ -1,3 +1,5 @@
+#include <omp.h>
+
 #include <thread>
 
 #include <fmpi/Config.hpp>
@@ -72,4 +74,51 @@ std::ostream& fmpi::operator<<(std::ostream& os, const Config& pinning) {
   os << ", comp: " << pinning.comp_core;
   os << " }";
   return os;
+}
+
+void fmpi::print_config(std::ostream& os) {
+  auto const& config = Config::instance();
+
+  constexpr int width = 20;
+
+  os << "Configuration:\n";
+
+  os << "  " << std::setw(width) << std::left
+     << "Main Core: " << config.main_core << "\n";
+  os << "  " << std::setw(width) << std::left
+     << "Dispatcher Core: " << config.dispatcher_core << "\n";
+  os << "  " << std::setw(width) << std::left
+     << "Scheduler Core: " << config.scheduler_core << "\n";
+  os << "  " << std::setw(width) << std::left
+     << "Computation Core: " << config.comp_core << "\n";
+
+  auto const nthreads = omp_get_max_threads();
+  auto const nplaces  = omp_get_num_places();
+
+  std::ostringstream os_;
+  os_ << "OMP Places [" << nthreads << ", " << nplaces << "]";
+
+  os << "  " << std::setw(width) << std::left << os_.str();
+
+  if (nplaces > 0) {
+    os << ": {";
+
+    std::vector<int> thread_ids(omp_get_max_threads());
+
+    std::vector<int> myprocs;
+    for (int i = 0; i < nplaces; ++i) {
+      int nprocs = omp_get_place_num_procs(i);
+      myprocs.resize(nprocs);
+      omp_get_place_proc_ids(i, myprocs.data());
+      std::copy(
+          myprocs.begin(),
+          std::prev(myprocs.end()),
+          std::ostream_iterator<int>(os, ", "));
+      os << *std::prev(myprocs.end());
+    }
+
+    os << "}\n";
+  }
+
+  os << std::endl;
 }

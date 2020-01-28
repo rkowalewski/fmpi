@@ -625,8 +625,6 @@ inline void scatteredPairwiseWaitsomeOverlap(
   dispatcher.pinToCore(config.dispatcher_core);
 
   auto fut_comm = fmpi::async<void>(config.scheduler_core, [&]() {
-    // StackVector<std::pair<Ticket, Span<value_type>>, NReqs> blocks{};
-
     auto enqueue_alloc =
         [&buf_alloc, &blocks, blocksize](fmpi::Ticket ticket) {
           // allocator some buffer
