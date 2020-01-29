@@ -7,6 +7,8 @@
 #include <fmpi/detail/Capture.hpp>
 #include <fmpi/mpi/Environment.hpp>
 
+#include <rtlx/Timer.hpp>
+
 namespace fmpi {
 
 template <typename RET, typename FUNC, typename... ARGS>

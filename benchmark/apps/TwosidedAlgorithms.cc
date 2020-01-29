@@ -229,8 +229,25 @@ int main(int argc, char* argv[])
   RTLX_ASSERT((nr % params.nhosts) == 0);
 
   if (me == 0) {
+    std::cout << "Node Topology:\n";
+  }
+
+  MPI_Barrier(worldCtx.mpiComm());
+
+  auto const ppn = nr / params.nhosts;
+
+  if (me < ppn) {
+    std::ostringstream os;
+    os << "  MPI Rank " << me << "\n";
+    fmpi::print_config(os);
+    std::cout << os.str();
+  }
+
+  MPI_Barrier(worldCtx.mpiComm());
+
+  if (me == 0) {
+    std::cout << "\n";
     fmpi::benchmark::printBenchmarkPreamble(std::cout, "++ ", "\n");
-    fmpi::print_config(std::cout);
     printMeasurementHeader(std::cout);
   }
 

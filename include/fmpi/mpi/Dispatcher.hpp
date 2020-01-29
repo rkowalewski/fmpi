@@ -28,6 +28,9 @@
 #include <fmpi/container/BoundedBuffer.hpp>
 #include <unordered_map>
 
+
+#include <Benchmark.hpp>
+
 namespace fmpi {
 
 enum class status
@@ -263,8 +266,14 @@ inline void CommDispatcher<testReqs>::worker() {
   std::vector<int> new_reqs;
   new_reqs.reserve(winsz_);
 
+  bm::Mark dispatch_time;
+
+  bm::Bench::Probe p{dispatch_time};
+  std::size_t niters = 0;
+
   // loop until termination
   while (running_.load(std::memory_order_relaxed)) {
+    niters++;
     // 1) we first process pending requests...
     auto const nCompleted = has_pending_requests() ? process_requests() : 0;
 
@@ -280,7 +289,7 @@ inline void CommDispatcher<testReqs>::worker() {
       if (ntasks_ == 0u) {
         // wait for new tasks for a maximum of 10ms
         // If a timeout occurs, unlock and
-        constexpr auto ten_ms = std::chrono::milliseconds(10);
+        constexpr auto ten_ms = std::chrono::milliseconds(1);
         if (!cv_tasks_.wait_for(
                 lk, ten_ms, [this]() { return ntasks_ > 0; })) {
           // lock is again released...
@@ -319,6 +328,11 @@ inline void CommDispatcher<testReqs>::worker() {
 
     new_reqs.clear();
   }
+  p.done();
+  std::ostringstream os;
+  os << "Dispatch Time: " << dispatch_time.microsecs() << "\n";
+  os << "niters dispatch: " << niters << "\n";
+  std::cout << os.str();
 }
 
 template <typename mpi::reqsome_op testReqs>

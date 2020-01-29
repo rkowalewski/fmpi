@@ -1,6 +1,7 @@
 #ifndef FMPI_ALLTOALL_HPP
 #define FMPI_ALLTOALL_HPP
 
+
 #include <algorithm>
 #include <cmath>
 #include <fmpi/Config.hpp>
@@ -25,6 +26,8 @@
 #include <tlx/simple_vector.hpp>
 #include <tlx/stack_allocator.hpp>
 #include <utility>
+
+#include <Benchmark.hpp>
 
 // Other AllToAll Algorithms
 
@@ -606,12 +609,15 @@ inline void scatteredPairwiseWaitsomeOverlap(
 
   // queue for ready tasks
   using chunk      = std::pair<mpi::Rank, Span<value_type>>;
-  auto ready_tasks = boost::lockfree::spsc_queue<chunk>{n_rounds};
+  //auto ready_tasks = boost::lockfree::spsc_queue<chunk>{n_rounds};
+  auto ready_tasks = buffered_channel<chunk>{n_rounds};
+
 
   std::vector<std::pair<Ticket, Span<value_type>>> blocks{};
   blocks.reserve(reqsInFlight * n_pipelines);
 
   // Dispatcher Thread
+
   fmpi::CommDispatcher dispatcher{winsz};
   dispatcher.start_worker();
   dispatcher.pinToCore(config.dispatcher_core);
@@ -628,6 +634,8 @@ inline void scatteredPairwiseWaitsomeOverlap(
        begin,      // const
        n_rounds    // const
   ]() {
+        bm::Mark schedule;
+        bm::Bench::Probe p{schedule};
         auto enqueue_alloc =
             [&buf_alloc, &blocks, blocksize](fmpi::Ticket ticket) {
               // allocator some buffer
@@ -698,6 +706,11 @@ inline void scatteredPairwiseWaitsomeOverlap(
             FMPI_DBG(sticket.id);
           }
         }
+        p.done();
+
+    std::ostringstream os1;
+    os1 << "Rank " << ctx.rank() << " -- scheduling took " << schedule.microsecs() << "\n";
+    std::cout << os1.str();
       });
 
   using iterator = OutputIt;
@@ -711,6 +724,7 @@ inline void scatteredPairwiseWaitsomeOverlap(
        begin,
        out,
        comp = std::forward<Op>(op)]() -> iterator {
+       auto t1 = rtlx::ChronoClockNow();
         // chunks to merge
         std::vector<std::pair<OutputIt, OutputIt>> chunks_to_merge;
         chunks_to_merge.reserve(ctx.size());
@@ -732,41 +746,89 @@ inline void scatteredPairwiseWaitsomeOverlap(
 
         auto dst = out;
 
+        //double op_t = 0;
+        //double queue_t = 0;
+        //double work = 0;
+        //double real_w = 0;
+        //double loop_t = 0;
+
+        bm::Mark queue, loop, work, real_work;
+
+        //bm::Mark loop2;
+
+        using probe_t = bm::Thread::Probe;
+
+        probe_t p_loop{loop};
+        //bm::Thread::Probe p_loop2{loop2};
+        std::size_t niters = 0;
         while (ntasks != 0u) {
           FMPI_DBG(buf_alloc.allocatedBlocks());
           FMPI_DBG(buf_alloc.allocatedHeapBlocks());
           FMPI_DBG(buf_alloc.isFull());
 
-          auto const n =
-              ready_tasks.consume_all([&chunks_to_merge](auto const& v) {
-                auto const [peer, s] = v;
-                chunks_to_merge.emplace_back(s.data(), s.data() + s.size());
-              });
-          ntasks -= n;
+          niters++;
+
+          {
+            probe_t p{queue};
+
+#if 0
+            auto const n =
+                ready_tasks.consume_all([&chunks_to_merge](auto const& v) {
+                  auto const [peer, s] = v;
+                  chunks_to_merge.emplace_back(s.data(), s.data() + s.size());
+                });
+
+            ntasks -= n;
+#else
+            auto c = ready_tasks.value_pop();
+            chunks_to_merge.emplace_back(c.second.data(), c.second.data() + c.second.size());
+            ntasks--;
+#endif
+          }
 
           bool const enough_work = chunks_to_merge.size() >= op_threshold;
 
+          {
+          probe_t p{work};
           if (enough_work) {
+            {
+            probe_t p1{real_work};
             // merge all chunks
+            //auto i_ws  = rtlx::ChronoClockNow();
+            //auto s = rtlx::ChronoClockNow();
             auto last = comp(chunks_to_merge, dst);
+            //op_t += rtlx::ChronoClockNow() - s;
 
             auto f_buf = chunks_to_merge.begin();
             if (processed.size() == 0) {
               std::advance(f_buf, 1);
             }
 
+           //auto a_t = rtlx::ChronoClockNow();
             for (; f_buf != chunks_to_merge.end(); ++f_buf) {
               FMPI_DBG_STREAM("release p " << f_buf->first);
               buf_alloc.dispose(f_buf->first);
             }
+            //alloc_t += rtlx::ChronoClockNow() - a_t;
 
             chunks_to_merge.clear();
 
             // 3) increase out iterator
             processed.emplace_back(std::make_pair(dst, last));
             std::swap(dst, last);
+            }
           }
+          }
+          //work += rtlx::ChronoClockNow() - w_s;
         }
+        p_loop.done();
+        //p_loop2.done();
+
+        iterator ret;
+
+        {
+
+          probe_t p{real_work};
 
         auto const nels = static_cast<std::size_t>(ctx.size()) * blocksize;
 
@@ -796,7 +858,30 @@ inline void scatteredPairwiseWaitsomeOverlap(
 
         FMPI_DBG(processed);
 
-        return std::move(mergeBuffer.begin(), mergeBuffer.end(), out);
+
+
+         ret = std::move(mergeBuffer.begin(), mergeBuffer.end(), out);
+        }
+
+        auto t2 = rtlx::ChronoClockNow();
+
+    std::ostringstream os1;
+    os1 << "Rank: " << ctx.rank() << "\n";
+    os1 << "computation took " << t2-t1 << "s\n";
+    //os1 << "loop time: " << loop_t << "s\n";
+    ////os1 << "op_t took: " << op_t << "s\n";
+    //os1 << "queue_t took: " << queue_t << "s\n";
+    ////os1 << "alloc release took: " << alloc_t << "s\n";
+    //os1 << "work took: " << work << "s\n";
+    //os1 << "real work took: " << real_w << "s\n";
+    os1 << "loop took: " << loop.microsecs() << "\n";
+    os1 << "queue took: " << queue.microsecs() << "\n";
+    os1 << "work took: " << work.microsecs() << "\n";
+    os1 << "real work took: " << real_work.microsecs() << "\n";
+    os1 << "iterations: " << niters << "\n";
+    os1 << "------------------------------\n";
+    std::cout << os1.str();
+    return ret;
       });
 
   iterator ret;
