@@ -30,8 +30,7 @@ class TraceStore {
   auto traces(context_t const &ctx)
       -> std::unordered_map<key_t, value_t> const &;
   // void clear();
-  static constexpr auto enabled() noexcept -> bool
-  {
+  static constexpr auto enabled() noexcept -> bool {
 #ifdef RTLX_ENABLE_TRACE
     return true;
 #else
@@ -64,6 +63,8 @@ class TimeTrace {
   void tock(const key_t &key);
 
   void put(key_t const & /*key*/, int v) const;
+
+  void put(key_t const & /*key*/, double v) const;
 
   auto measurements() const -> std::unordered_map<key_t, value_t> const &;
 

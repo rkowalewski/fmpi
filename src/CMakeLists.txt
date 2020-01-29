@@ -9,7 +9,7 @@ add_library(fmpi
 
 target_include_directories(fmpi PUBLIC ../include)
 
-target_link_libraries(fmpi PUBLIC MPI::MPI_CXX Boost::boost dbg_macro BenchmarkTime)
+target_link_libraries(fmpi PUBLIC MPI::MPI_CXX Boost::boost dbg_macro)
 target_link_libraries(fmpi PRIVATE rtlx tlx)
 
 if(HWLOC_FOUND)

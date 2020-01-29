@@ -95,7 +95,6 @@ void fmpi::print_config(std::ostream& os)
 {
   auto const& config = Config::instance();
 
-  constexpr int left_indent = 2;
   constexpr int width = 20;
 
   os << "  " << std::setw(width) << std::left

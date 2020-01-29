@@ -10,6 +10,3 @@
 [submodule "external/google/benchmark"]
 	path = external/google/benchmark
 	url = git@github.com:google/benchmark.git
-[submodule "external/Benchmark"]
-	path = external/Benchmark
-	url = git@github.com:dtrugman/Benchmark.git

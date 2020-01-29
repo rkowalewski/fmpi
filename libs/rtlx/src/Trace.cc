@@ -49,6 +49,15 @@ void TimeTrace::put(TraceStore::key_t const &key, int v) const
   }
 }
 
+void TimeTrace::put(TraceStore::key_t const &key, double v) const
+{
+  if constexpr (TraceStore::enabled()) {
+    auto &store = TraceStore::GetInstance();
+
+    store.m_traces[m_context][key] = v;
+  }
+}
+
 auto TraceStore::traces(context_t const &ctx)
     -> std::unordered_map<TraceStore::key_t, TraceStore::value_t> const &
 {

@@ -43,13 +43,12 @@ inline std::future<R> async(int core, F&& f, Ts&&... params) {
 
     fmpi::pinThreadToCore(thread, core);
     thread.detach();
-  }
-  else {
+  } else {
     call_with_promise(lambda, pr);
   }
 
-    return fut;
-  }
+  return fut;
+}
 }  // namespace fmpi
 
 #endif

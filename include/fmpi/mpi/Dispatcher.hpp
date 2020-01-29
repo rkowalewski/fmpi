@@ -9,6 +9,8 @@
 #include <numeric>
 #include <thread>
 
+#include <rtlx/Timer.hpp>
+
 #include <tlx/container/ring_buffer.hpp>
 #include <tlx/container/simple_vector.hpp>
 
@@ -27,9 +29,6 @@
 
 #include <fmpi/container/BoundedBuffer.hpp>
 #include <unordered_map>
-
-
-#include <Benchmark.hpp>
 
 namespace fmpi {
 
@@ -64,6 +63,13 @@ constexpr bool operator==(Ticket const& l, Ticket const& r) noexcept {
 
 template <mpi::reqsome_op testReqs = mpi::testsome>
 class CommDispatcher {
+ public:
+  struct Statistics {
+    std::size_t         iterations{};
+    std::atomic<double> dispatch_time{};
+  };
+
+ private:
   static constexpr uint16_t default_task_capacity = 1000;
   /// Task Signature
   using task_t = Function<int(MPI_Request*, Ticket)>;
@@ -144,6 +150,9 @@ class CommDispatcher {
   std::thread      thread_;
   std::atomic_bool running_;
 
+  Statistics stats_{};
+  double     t_start_{};
+
  public:
   explicit CommDispatcher(std::size_t winsz);
 
@@ -159,6 +168,7 @@ class CommDispatcher {
     if (!(ntasks_ == 0 && busy_ == 0)) {
       cv_finished_.wait(lk, [this]() { return ntasks_ == 0 && busy_ == 0; });
     }
+    stats_.dispatch_time = rtlx::ChronoClockNow() - t_start_;
   }
 
   void start_worker();
@@ -167,6 +177,8 @@ class CommDispatcher {
   std::pair<std::size_t, std::size_t> pendingTasks() const;
 
   void pinToCore(int coreId);
+
+  Statistics const& stats() const noexcept;
 
  private:
   Ticket do_enqueue(request_type type, task_t&& task, callback_t&& callback);
@@ -228,7 +240,8 @@ inline void CommDispatcher<testReqs>::stop_worker() {
 
 template <typename mpi::reqsome_op testReqs>
 inline void CommDispatcher<testReqs>::start_worker() {
-  thread_ = std::thread(&CommDispatcher::worker, this);
+  t_start_ = rtlx::ChronoClockNow();
+  thread_  = std::thread(&CommDispatcher::worker, this);
 }
 
 template <typename mpi::reqsome_op testReqs>
@@ -266,14 +279,9 @@ inline void CommDispatcher<testReqs>::worker() {
   std::vector<int> new_reqs;
   new_reqs.reserve(winsz_);
 
-  bm::Mark dispatch_time;
-
-  bm::Bench::Probe p{dispatch_time};
-  std::size_t niters = 0;
-
   // loop until termination
   while (running_.load(std::memory_order_relaxed)) {
-    niters++;
+    stats_.iterations++;
     // 1) we first process pending requests...
     auto const nCompleted = has_pending_requests() ? process_requests() : 0;
 
@@ -328,11 +336,13 @@ inline void CommDispatcher<testReqs>::worker() {
 
     new_reqs.clear();
   }
-  p.done();
+
+#if 0
   std::ostringstream os;
-  os << "Dispatch Time: " << dispatch_time.microsecs() << "\n";
-  os << "niters dispatch: " << niters << "\n";
+  os << "this: " << this << ", Dispatch time: " << stats_.dispatch_time
+     << "\n";
   std::cout << os.str();
+#endif
 }
 
 template <typename mpi::reqsome_op testReqs>
@@ -402,6 +412,12 @@ inline std::pair<std::size_t, std::size_t>
 CommDispatcher<testReqs>::pendingTasks() const {
   std::lock_guard<std::mutex>(this->mutex_);
   return std::make_pair(busy_, ntasks_);
+}
+
+template <mpi::reqsome_op testReqs>
+typename CommDispatcher<testReqs>::Statistics const&
+CommDispatcher<testReqs>::stats() const noexcept {
+  return stats_;
 }
 
 }  // namespace fmpi

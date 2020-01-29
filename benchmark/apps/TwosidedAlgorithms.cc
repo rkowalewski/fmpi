@@ -234,7 +234,7 @@ int main(int argc, char* argv[])
 
   MPI_Barrier(worldCtx.mpiComm());
 
-  auto const ppn = nr / params.nhosts;
+  int32_t const ppn = nr / params.nhosts;
 
   if (me < ppn) {
     std::ostringstream os;
