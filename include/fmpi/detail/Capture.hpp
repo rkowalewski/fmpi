@@ -148,6 +148,7 @@ Function<RET(ARGS...), STORAGE_SIZE>::Function(RET (*ptr)(ARGS...))
 template <typename RET, typename... ARGS, std::size_t STORAGE_SIZE>
 template <typename FUNCTOR>
 Function<RET(ARGS...), STORAGE_SIZE>::Function(FUNCTOR&& functor) {
+  static_assert(!std::is_lvalue_reference<FUNCTOR>::value, "");
   initFunctor(
       std::forward<FUNCTOR>(functor), std::is_lvalue_reference<FUNCTOR>());
 }
