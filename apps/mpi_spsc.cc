@@ -218,9 +218,9 @@ int run() {
 
   FMPI_ASSERT(ret == rbuf.end());
 
-  auto const pending_tasks = dispatcher.pendingTasks();
-  FMPI_ASSERT(pending_tasks.first == 0 && pending_tasks.second == 0);
-  FMPI_ASSERT(pending_tasks.first == 0 && pending_tasks.second == 0);
+  //auto const pending_tasks = dispatcher.pendingTasks();
+  //FMPI_ASSERT(pending_tasks.first == 0 && pending_tasks.second == 0);
+  //FMPI_ASSERT(pending_tasks.first == 0 && pending_tasks.second == 0);
 
   if (!std::equal(std::begin(rbuf), std::end(rbuf), std::begin(expect))) {
     throw std::runtime_error("invalid result");

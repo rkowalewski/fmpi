@@ -20,13 +20,46 @@ struct ChooseClockType {
   using type = ChooseSteadyClock<>::type;
 };
 
-inline auto ChronoClockNow() -> double
-{
+inline auto ChronoClockNow() -> double {
   using ClockType = ChooseClockType::type;
-  using duration_t =
+  using duration =
       std::chrono::duration<double, std::chrono::seconds::period>;
-  return duration_t(ClockType::now().time_since_epoch()).count();
+  return duration(ClockType::now().time_since_epoch()).count();
 }
+
+template <class Clock = ChooseClockType::type>
+class Timer {
+  using timepoint = typename Clock::time_point;
+  using rep       = double;
+  using duration  = std::chrono::duration<rep, std::chrono::seconds::period>;
+
+ public:
+  Timer(rep& marker)
+    : _done(false)
+    , _mark(marker)
+    , _start(Clock::now()) {
+  }
+
+  ~Timer() {
+    done();
+  }
+
+  void done() {
+    if (_done) return;
+
+    _stop = Clock::now();
+
+    auto const d = std::chrono::duration_cast<duration>(_stop - _start);
+    _mark += d.count();
+    _done = true;
+  }
+
+ private:
+  bool      _done;
+  rep&      _mark;
+  timepoint _start;
+  timepoint _stop;
+};
 }  // namespace rtlx
 
 #endif

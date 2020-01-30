@@ -65,8 +65,11 @@ template <mpi::reqsome_op testReqs = mpi::testsome>
 class CommDispatcher {
  public:
   struct Statistics {
-    std::size_t         iterations{};
-    std::atomic<double> dispatch_time{};
+    std::size_t ntasks{};
+    std::size_t busy{};
+    std::size_t completed{};
+    std::size_t iterations{};
+    double      dispatch_time{};
   };
 
  private:
@@ -117,8 +120,8 @@ class CommDispatcher {
   // Task Lists: One for each type
   std::array<queue_list, n_types> queues_;
   // total over all tasks
-  std::size_t ntasks_{};
-  std::size_t busy_{};
+  // std::size_t ntasks_{};
+  // std::size_t busy_{};
 
   // Mutex to protect work sharing variables
   mutable std::mutex mutex_;
@@ -163,22 +166,14 @@ class CommDispatcher {
       Function<int(MPI_Request*, Ticket)>&& task,
       Function<void(MPI_Status, Ticket)>&&  callback);
 
-  void loop_until_done() {
-    std::unique_lock<std::mutex> lk{mutex_};
-    if (!(ntasks_ == 0 && busy_ == 0)) {
-      cv_finished_.wait(lk, [this]() { return ntasks_ == 0 && busy_ == 0; });
-    }
-    stats_.dispatch_time = rtlx::ChronoClockNow() - t_start_;
-  }
+  void loop_until_done();
 
   void start_worker();
   void stop_worker();
 
-  std::pair<std::size_t, std::size_t> pendingTasks() const;
-
   void pinToCore(int coreId);
 
-  Statistics const& stats() const noexcept;
+  Statistics stats() const;
 
  private:
   Ticket do_enqueue(request_type type, task_t&& task, callback_t&& callback);
@@ -229,6 +224,7 @@ inline CommDispatcher<testReqs>::CommDispatcher(std::size_t winsz)
 
 template <typename mpi::reqsome_op testReqs>
 inline CommDispatcher<testReqs>::~CommDispatcher() {
+  loop_until_done();
   stop_worker();
   thread_.join();
 }
@@ -263,7 +259,7 @@ inline Ticket CommDispatcher<testReqs>::do_enqueue(
     // 2) Push task
     ticket = Ticket{seqCounter_++};
 
-    ++ntasks_;
+    ++stats_.ntasks;
 
     queues_[to_underlying(type)].push_front(
         Task{std::move(task), std::move(callback), ticket});
@@ -279,27 +275,38 @@ inline void CommDispatcher<testReqs>::worker() {
   std::vector<int> new_reqs;
   new_reqs.reserve(winsz_);
 
+  double dispatch_time{};
+
   // loop until termination
   while (running_.load(std::memory_order_relaxed)) {
-    stats_.iterations++;
-    // 1) we first process pending requests...
-    auto const nCompleted = has_pending_requests() ? process_requests() : 0;
+    std::size_t nCompleted;
 
-    cv_finished_.notify_one();
+    {
+      rtlx::Timer t_reqs{dispatch_time};
+      // 1) we first process pending requests...
+      nCompleted = has_pending_requests() ? process_requests() : 0;
+
+      cv_finished_.notify_one();
+    }
 
     // 2) Schedule new requests or at least wait for new requests...
     {
+      rtlx::Timer t_tasks{dispatch_time};
+
       // acquire the lock
       std::unique_lock<std::mutex> lk(mutex_);
+      stats_.iterations++;
+      auto const d = dispatch_time - stats_.dispatch_time;
+      stats_.dispatch_time += d;
 
-      busy_ -= nCompleted;
+      stats_.busy -= nCompleted;
 
-      if (ntasks_ == 0u) {
+      if (stats_.ntasks == 0u) {
         // wait for new tasks for a maximum of 10ms
         // If a timeout occurs, unlock and
         constexpr auto ten_ms = std::chrono::milliseconds(1);
         if (!cv_tasks_.wait_for(
-                lk, ten_ms, [this]() { return ntasks_ > 0; })) {
+                lk, ten_ms, [this]() { return stats_.ntasks > 0; })) {
           // lock is again released...
           continue;
         };
@@ -321,28 +328,24 @@ inline void CommDispatcher<testReqs>::worker() {
           new_reqs.push_back(slot);
         }
       }
-      ntasks_ -= new_reqs.size();
-      busy_ += new_reqs.size();
+      stats_.ntasks -= new_reqs.size();
+      stats_.busy += new_reqs.size();
     }  // release the lock
 
-    // 3) execute new requests. Do this after releasing the lock.
-    for (auto&& slot : new_reqs) {
-      auto* mpi_req = &mpi_reqs_[slot];
-      // initiate the task
-      pending_[slot].task(mpi_req, pending_[slot].ticket);
-      auto prev = std::exchange(pending_[slot].state, status::running);
-      FMPI_ASSERT(prev == status::pending);
+    {
+      rtlx::Timer t_dispatch{dispatch_time};
+      // 3) execute new requests. Do this after releasing the lock.
+      for (auto&& slot : new_reqs) {
+        auto* mpi_req = &mpi_reqs_[slot];
+        // initiate the task
+        pending_[slot].task(mpi_req, pending_[slot].ticket);
+        auto prev = std::exchange(pending_[slot].state, status::running);
+        FMPI_ASSERT(prev == status::pending);
+      }
+
+      new_reqs.clear();
     }
-
-    new_reqs.clear();
   }
-
-#if 0
-  std::ostringstream os;
-  os << "this: " << this << ", Dispatch time: " << stats_.dispatch_time
-     << "\n";
-  std::cout << os.str();
-#endif
 }
 
 template <typename mpi::reqsome_op testReqs>
@@ -408,16 +411,19 @@ inline void CommDispatcher<testReqs>::pinToCore(int coreId) {
 }
 
 template <mpi::reqsome_op testReqs>
-inline std::pair<std::size_t, std::size_t>
-CommDispatcher<testReqs>::pendingTasks() const {
+typename CommDispatcher<testReqs>::Statistics
+CommDispatcher<testReqs>::stats() const {
   std::lock_guard<std::mutex>(this->mutex_);
-  return std::make_pair(busy_, ntasks_);
+  return stats_;
 }
 
 template <mpi::reqsome_op testReqs>
-typename CommDispatcher<testReqs>::Statistics const&
-CommDispatcher<testReqs>::stats() const noexcept {
-  return stats_;
+inline void CommDispatcher<testReqs>::loop_until_done() {
+  std::unique_lock<std::mutex> lk{mutex_};
+  if (!(stats_.ntasks == 0 && stats_.busy == 0)) {
+    cv_finished_.wait(
+        lk, [this]() { return stats_.ntasks == 0 && stats_.busy == 0; });
+  }
 }
 
 }  // namespace fmpi

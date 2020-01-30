@@ -856,11 +856,16 @@ inline void scatteredPairwiseWaitsomeOverlap(
     throw std::runtime_error("asynchronous Alltoall failed");
   }
 
-  dispatcher.loop_until_done();
+  auto const stats = dispatcher.stats();
+
+  // dispatcher.loop_until_done();
+  FMPI_ASSERT(stats.ntasks == 0);
 
   trace.put("ComputeThread", t_comp);
   trace.put("ScheduleThread", t_schedule);
-  trace.put("DispatcherThread", dispatcher.stats().dispatch_time);
+  trace.put("DispatcherThread.time", stats.dispatch_time);
+  trace.put(
+      "DispatcherThread.iterations", static_cast<int>(stats.iterations));
 
   FMPI_ASSERT(ret == out + ctx.size() * blocksize);
 }
