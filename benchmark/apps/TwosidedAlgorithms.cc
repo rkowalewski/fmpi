@@ -171,15 +171,13 @@ static std::vector<std::pair<
 
 };
 
-int main(int argc, char* argv[])
-{
+int main(int argc, char* argv[]) {
   constexpr auto required = MPI_THREAD_SERIALIZED;
 
   int provided;
 
   RTLX_ASSERT_RETURNS(
       MPI_Init_thread(&argc, &argv, required, &provided), MPI_SUCCESS);
-
 
   auto finalizer = rtlx::scope_exit(
       []() { RTLX_ASSERT_RETURNS(MPI_Finalize(), MPI_SUCCESS); });
@@ -408,6 +406,11 @@ int main(int argc, char* argv[])
 
         auto& traceStore = rtlx::TraceStore::GetInstance();
 
+        // int wait = algo.first == "AlltoAll";
+        int wait = 0;
+        while (wait)
+          ;
+
         if (it >= nwarmup) {
           m.algorithm = algo.first;
           m.iter      = it - nwarmup + 1;
@@ -432,25 +435,31 @@ int main(int argc, char* argv[])
   return 0;
 }
 
-void printMeasurementHeader(std::ostream& os)
-{
+template <class Rep, class Period>
+std::ostream& operator<<(
+    std::ostream& os, const std::chrono::duration<Rep, Period>& d) {
+  os << rtlx::to_seconds(d);
+  return os;
+}
+
+void printMeasurementHeader(std::ostream& os) {
   os << "Nodes, Procs, Threads, Round, NBytes, Blocksize, Algo, Rank, "
         "Iteration, "
         "Measurement, "
         "Value\n";
 }
 
-std::ostream& operator<<(std::ostream& os, std::variant<double, int> const& v)
-{
+std::ostream& operator<<(
+    std::ostream& os, typename rtlx::TraceStore::value_t const& v) {
   std::visit([&os](auto const& val) { os << val; }, v);
   return os;
 }
 
 void printMeasurementCsvLine(
-    std::ostream&                                                     os,
-    Measurement const&                                                params,
-    std::unordered_map<std::string, std::variant<double, int>> const& traces)
-{
+    std::ostream&      os,
+    Measurement const& params,
+    std::unordered_map<std::string, typename rtlx::TraceStore::value_t> const&
+        traces) {
   for (auto&& trace : traces) {
     std::ostringstream myos;
     myos << params.nhosts << ", ";

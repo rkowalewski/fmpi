@@ -4,9 +4,9 @@
 #include <mpi.h>
 
 #include <cmath>
+#include <fmpi/Config.hpp>
 #include <fmpi/Math.hpp>
 #include <fmpi/NumericRange.hpp>
-#include <fmpi/Config.hpp>
 #include <fmpi/mpi/Algorithm.hpp>
 #include <fmpi/mpi/Environment.hpp>
 #include <fmpi/mpi/Request.hpp>
@@ -70,38 +70,43 @@ inline void bruck(
 
   using value_t = typename std::iterator_traits<InputIt>::value_type;
 
-  auto trace = rtlx::TimeTrace{"Bruck"};
+  auto trace = rtlx::Trace{"Bruck"};
 
   // Phase 1: Process i rotates local elements by i blocks to the left in a
   // cyclic manner.
 
-  trace.tick(detail::ROTATE);
+  auto const nels = size_t(nr) * blocksize;
 
-  // O(p * blocksize)
-  std::rotate_copy(
-      begin,
-      // n_first
-      begin + me * blocksize,
-      // last
-      begin + blocksize * nr,
-      // out
-      out);
+  std::vector<std::size_t>                     blocks;
+  detail::buffer_t<value_t>                    tmpbuf{};
+  typename detail::buffer_t<value_t>::iterator sendbuf{};
+  typename detail::buffer_t<value_t>::iterator recvbuf{};
 
-  // Phase 2: Communication Rounds
+  {
+    rtlx::TimeTrace tt{trace, detail::ROTATE};
 
-  // Reverse a buffer for send-recv exchanges
-  // We never exchange more than (N/2) elements per round, so this buffer
-  // suffices
-  auto const                nels = size_t(nr) * blocksize;
-  detail::buffer_t<value_t> tmpbuf{nels};
+    // O(p * blocksize)
+    std::rotate_copy(
+        begin,
+        // n_first
+        begin + me * blocksize,
+        // last
+        begin + blocksize * nr,
+        // out
+        out);
 
-  auto* sendbuf = &tmpbuf[0];
-  auto* recvbuf = &tmpbuf[nels / 2];
+    // Phase 2: Communication Rounds
 
-  std::vector<std::size_t> blocks;
-  blocks.reserve(nr / 2);
+    // Reverse a buffer for send-recv exchanges
+    // We never exchange more than (N/2) elements per round, so this buffer
+    // suffices
+    tmpbuf = detail::buffer_t<value_t>{nels};
 
-  trace.tock(detail::ROTATE);
+    sendbuf = &tmpbuf[0];
+    recvbuf = &tmpbuf[nels / 2];
+
+    blocks.reserve(nr / 2);
+  }
 
   for (auto&& r : range(tlx::integer_log2_ceil(nr))) {
     auto      j = static_cast<mpi::Rank>(1 << r);
@@ -116,69 +121,70 @@ inline void bruck(
         mod(me - j, static_cast<mpi::Rank>(nr)),
         mod(me + j, static_cast<mpi::Rank>(nr)));
 
-    trace.tick(detail::PACK);
+    {
+      rtlx::TimeTrace tt{trace, detail::PACK};
 
-    // We exchange all blocks where the j-th bit is set
-    auto rng = range<std::size_t>(1, nr);
+      // We exchange all blocks where the j-th bit is set
+      auto rng = range<std::size_t>(1, nr);
 
-    std::copy_if(
-        std::begin(rng),
-        std::end(rng),
-        std::back_inserter(blocks),
-        [j](auto idx) { return idx & j; });
+      std::copy_if(
+          std::begin(rng),
+          std::end(rng),
+          std::back_inserter(blocks),
+          [j](auto idx) { return idx & j; });
 
-    // a) pack blocks into a contigous send buffer
+      // a) pack blocks into a contigous send buffer
 
 #pragma omp parallel for
-    for (std::size_t b = 0; b < blocks.size(); ++b) {
-      auto const block = blocks[b];
-      std::copy(
-          // begin
-          out + block * blocksize,
-          // end
-          out + block * blocksize + blocksize,
-          // tmp buf
-          sendbuf + b * blocksize);
+      for (std::size_t b = 0; b < blocks.size(); ++b) {
+        auto const block = blocks[b];
+        std::copy(
+            // begin
+            out + block * blocksize,
+            // end
+            out + block * blocksize + blocksize,
+            // tmp buf
+            sendbuf + b * blocksize);
+      }
     }
 
-    trace.tock(detail::PACK);
+    {
+      rtlx::TimeTrace tt{trace, COMMUNICATION};
 
-    trace.tick(COMMUNICATION);
+      FMPI_CHECK_MPI(mpi::isend(
+          sendbuf,
+          blocksize * blocks.size(),
+          sendto,
+          EXCH_TAG_BRUCK,
+          ctx,
+          &reqs[0]));
 
-    FMPI_CHECK_MPI(mpi::isend(
-        sendbuf,
-        blocksize * blocks.size(),
-        sendto,
-        EXCH_TAG_BRUCK,
-        ctx,
-        &reqs[0]));
+      FMPI_CHECK_MPI(mpi::irecv(
+          recvbuf,
+          blocksize * blocks.size(),
+          recvfrom,
+          EXCH_TAG_BRUCK,
+          ctx,
+          &reqs[1]));
 
-    FMPI_CHECK_MPI(mpi::irecv(
-        recvbuf,
-        blocksize * blocks.size(),
-        recvfrom,
-        EXCH_TAG_BRUCK,
-        ctx,
-        &reqs[1]));
+      FMPI_CHECK_MPI(mpi::waitall(reqs.begin(), reqs.end()));
+    }
 
-    FMPI_CHECK_MPI(mpi::waitall(reqs.begin(), reqs.end()));
-    trace.tock(COMMUNICATION);
+    {
+      rtlx::TimeTrace tt{trace, detail::UNPACK};
 
-    trace.tick(detail::UNPACK);
-
-    // c) unpack blocks into recv buffer
+      // c) unpack blocks into recv buffer
 #pragma omp parallel for
-    for (std::size_t b = 0; b < blocks.size(); ++b) {
-      auto const block = blocks[b];
-      std::copy(
-          recvbuf + b * blocksize,
-          recvbuf + b * blocksize + blocksize,
-          out + block * blocksize);
+      for (std::size_t b = 0; b < blocks.size(); ++b) {
+        auto const block = blocks[b];
+        std::copy(
+            recvbuf + b * blocksize,
+            recvbuf + b * blocksize + blocksize,
+            out + block * blocksize);
+      }
+
+      blocks.clear();
     }
-
-    blocks.clear();
-
-    trace.tock(detail::UNPACK);
   }
 
 #if 0
@@ -194,28 +200,28 @@ inline void bruck(
       sendbuf);
 #endif
 
-  trace.tick(MERGE);
+  {
+    rtlx::TimeTrace tt{trace, MERGE};
 
-  std::vector<std::pair<InputIt, InputIt>> chunks;
-  chunks.reserve(nr);
+    std::vector<std::pair<InputIt, InputIt>> chunks;
+    chunks.reserve(nr);
 
-  auto range = fmpi::range<uint32_t>(0, nr * blocksize, blocksize);
+    auto range = fmpi::range<uint32_t>(0, nr * blocksize, blocksize);
 
-  std::transform(
-      std::begin(range),
-      std::end(range),
-      std::back_inserter(chunks),
-      [buf = out, blocksize](auto offset) {
-        auto f = std::next(buf, offset);
-        auto l = std::next(f, blocksize);
-        return std::make_pair(f, l);
-      });
+    std::transform(
+        std::begin(range),
+        std::end(range),
+        std::back_inserter(chunks),
+        [buf = out, blocksize](auto offset) {
+          auto f = std::next(buf, offset);
+          auto l = std::next(f, blocksize);
+          return std::make_pair(f, l);
+        });
 
-  op(chunks, &tmpbuf[0]);
+    op(chunks, &tmpbuf[0]);
 
-  std::move(&tmpbuf[0], &tmpbuf[nels], out);
-
-  trace.tock(MERGE);
+    std::move(&tmpbuf[0], &tmpbuf[nels], out);
+  }
 }
 
 template <class InputIt, class OutputIt, class Op>
@@ -230,38 +236,40 @@ inline void bruck_indexed(
 
   using value_t = typename std::iterator_traits<InputIt>::value_type;
 
-  auto trace = rtlx::TimeTrace{"Bruck_indexed"};
+  auto trace = rtlx::Trace{"Bruck_indexed"};
 
   // Phase 1: Process i rotates local elements by i blocks to the left in a
   // cyclic manner.
 
-  trace.tick(detail::ROTATE);
+  auto const nels = size_t(nr) * blocksize;
 
-  // O(p * blocksize)
-  std::rotate_copy(
-      begin,
-      // n_first
-      begin + me * blocksize,
-      // last
-      begin + blocksize * nr,
-      // out
-      out);
-
-  // Phase 2: Communication Rounds
-
-  // Reverse a buffer for send-recv exchanges
+  // Reverse buffers for send-recv exchanges
   // We never exchange more than (N/2) elements per round, so this buffer
   // suffices
-  auto const                nels = size_t(nr) * blocksize;
-  detail::buffer_t<value_t> tmpbuf{nels};
-
-  std::vector<int> displs(nr / 2);
-
   std::vector<std::size_t> blocks;
   blocks.reserve(nr / 2);
 
-  trace.tock(detail::ROTATE);
+  std::vector<int>          displs(nr / 2);
+  detail::buffer_t<value_t> tmpbuf{nels};
 
+  MPI_Datatype packed{};
+  MPI_Count    mysize{};
+
+  {
+    rtlx::TimeTrace tt{trace, detail::ROTATE};
+
+    // O(p * blocksize)
+    std::rotate_copy(
+        begin,
+        // n_first
+        begin + me * blocksize,
+        // last
+        begin + blocksize * nr,
+        // out
+        out);
+  }
+
+  // Phase 2: Communication Rounds
   for (auto&& r : range(tlx::integer_log2_ceil(nr))) {
     auto      j = static_cast<mpi::Rank>(1 << r);
     mpi::Rank recvfrom;
@@ -276,34 +284,35 @@ inline void bruck_indexed(
         mod(me - j, static_cast<mpi::Rank>(nr)),
         mod(me + j, static_cast<mpi::Rank>(nr)));
 
-    trace.tick(detail::PACK);
+    {
+      rtlx::TimeTrace tt{trace, detail::PACK};
 
-    // We exchange all blocks where the j-th bit is set
-    auto rng = range<std::size_t>(1, nr);
+      // We exchange all blocks where the j-th bit is set
+      auto rng = range<std::size_t>(1, nr);
 
-    std::copy_if(
-        std::begin(rng),
-        std::end(rng),
-        std::back_inserter(blocks),
-        [j](auto idx) { return idx & j; });
+      std::copy_if(
+          std::begin(rng),
+          std::end(rng),
+          std::back_inserter(blocks),
+          [j](auto idx) { return idx & j; });
 
-    // a) pack blocks into a contigous send buffer
-    FMPI_DBG(blocks.size());
+      // a) pack blocks into a contigous send buffer
+      FMPI_DBG(blocks.size());
 
 #pragma omp parallel for
-    for (std::size_t b = 0; b < blocks.size(); ++b) {
-      auto const block = blocks[b];
-      displs[b]        = block * blocksize;
+      for (std::size_t b = 0; b < blocks.size(); ++b) {
+        auto const block = blocks[b];
+        displs[b]        = block * blocksize;
 
-      // We can also use MPI, see below but it seems to be quite slow
-      std::copy(
-          // begin
-          out + block * blocksize,
-          // end
-          out + block * blocksize + blocksize,
-          // tmp buf
-          tmpbuf.begin() + b * blocksize);
-    }
+        // We can also use MPI, see below but it seems to be quite slow
+        std::copy(
+            // begin
+            out + block * blocksize,
+            // end
+            out + block * blocksize + blocksize,
+            // tmp buf
+            tmpbuf.begin() + b * blocksize);
+      }
 #if 0
 
     RTLX_ASSERT_RETURNS(
@@ -323,68 +332,66 @@ inline void bruck_indexed(
         MPI_SUCCESS);
 #endif
 
-    MPI_Datatype packed;
-    FMPI_CHECK_MPI(MPI_Type_create_indexed_block(
-        blocks.size(),
-        blocksize,
-        displs.data(),
-        mpi::type_mapper<value_t>::type(),
-        &packed));
+      FMPI_CHECK_MPI(MPI_Type_create_indexed_block(
+          blocks.size(),
+          blocksize,
+          displs.data(),
+          mpi::type_mapper<value_t>::type(),
+          &packed));
 
-    FMPI_CHECK_MPI(MPI_Type_commit(&packed));
+      FMPI_CHECK_MPI(MPI_Type_commit(&packed));
 
-    MPI_Count mysize;
-    FMPI_CHECK_MPI(MPI_Type_size_x(packed, &mysize));
+      FMPI_CHECK_MPI(MPI_Type_size_x(packed, &mysize));
 
-    RTLX_ASSERT(
-        static_cast<size_t>(mysize) ==
-        blocks.size() * blocksize * sizeof(value_t));
+      RTLX_ASSERT(
+          static_cast<size_t>(mysize) ==
+          blocks.size() * blocksize * sizeof(value_t));
+    }
 
-    trace.tock(detail::PACK);
+    {
+      rtlx::TimeTrace tt{trace, COMMUNICATION};
 
-    trace.tick(COMMUNICATION);
+      FMPI_CHECK_MPI(mpi::irecv_type(
+          out, 1, packed, recvfrom, EXCH_TAG_BRUCK, ctx, &reqs[0]));
 
-    FMPI_CHECK_MPI(mpi::irecv_type(
-        out, 1, packed, recvfrom, EXCH_TAG_BRUCK, ctx, &reqs[0]));
+      FMPI_CHECK_MPI(mpi::isend_type(
+          tmpbuf.begin(),
+          mysize,
+          MPI_BYTE,
+          sendto,
+          EXCH_TAG_BRUCK,
+          ctx,
+          &reqs[1]));
 
-    FMPI_CHECK_MPI(mpi::isend_type(
-        tmpbuf.begin(),
-        mysize,
-        MPI_BYTE,
-        sendto,
-        EXCH_TAG_BRUCK,
-        ctx,
-        &reqs[1]));
-
-    FMPI_CHECK_MPI(mpi::waitall(reqs.begin(), reqs.end()));
-    FMPI_CHECK_MPI(MPI_Type_free(&packed));
-    trace.tock(COMMUNICATION);
+      FMPI_CHECK_MPI(mpi::waitall(reqs.begin(), reqs.end()));
+      FMPI_CHECK_MPI(MPI_Type_free(&packed));
+    }
 
     blocks.clear();
   }
 
-  trace.tick(MERGE);
+  {
+    rtlx::TimeTrace tt{trace, MERGE};
 
-  std::vector<std::pair<InputIt, InputIt>> chunks;
-  chunks.reserve(nr);
+    std::vector<std::pair<InputIt, InputIt>> chunks;
+    chunks.reserve(nr);
 
-  auto range = fmpi::range<uint32_t>(0, nr * blocksize, blocksize);
+    auto range = fmpi::range<uint32_t>(0, nr * blocksize, blocksize);
 
-  std::transform(
-      std::begin(range),
-      std::end(range),
-      std::back_inserter(chunks),
-      [buf = out, blocksize](auto offset) {
-        auto f = std::next(buf, offset);
-        auto l = std::next(f, blocksize);
-        return std::make_pair(f, l);
-      });
+    std::transform(
+        std::begin(range),
+        std::end(range),
+        std::back_inserter(chunks),
+        [buf = out, blocksize](auto offset) {
+          auto f = std::next(buf, offset);
+          auto l = std::next(f, blocksize);
+          return std::make_pair(f, l);
+        });
 
-  op(chunks, &tmpbuf[0]);
+    op(chunks, &tmpbuf[0]);
 
-  std::move(&tmpbuf[0], &tmpbuf[nels], out);
-
-  trace.tock(MERGE);
+    std::move(&tmpbuf[0], &tmpbuf[nels], out);
+  }
 }
 
 template <class InputIt, class OutputIt, class Op>
@@ -434,24 +441,24 @@ inline void bruck_interleave(
     return;
   }
 
-  auto trace = rtlx::TimeTrace{"Bruck_interleave"};
+  auto trace = rtlx::Trace{"Bruck_interleave"};
 
   // Phase 1: Process i rotates local elements by i blocks to the left in a
   // cyclic manner.
 
-  trace.tick(detail::ROTATE);
+  {
+    rtlx::TimeTrace tt{trace, detail::ROTATE};
 
-  // O(p * blocksize)
-  std::rotate_copy(
-      begin,
-      // n_first
-      begin + me * blocksize,
-      // last
-      begin + blocksize * nr,
-      // out
-      out);
-
-  trace.tock(detail::ROTATE);
+    // O(p * blocksize)
+    std::rotate_copy(
+        begin,
+        // n_first
+        begin + me * blocksize,
+        // last
+        begin + blocksize * nr,
+        // out
+        out);
+  }
 
   // Phase 2: Communication Rounds
 
@@ -493,126 +500,130 @@ inline void bruck_interleave(
         mod(me + j, static_cast<mpi::Rank>(nr)));
 
     // a) pack blocks into a contigous send buffer
-    trace.tick(detail::PACK);
+    {
+      rtlx::TimeTrace tt{trace, detail::PACK};
 
-    auto rng = range<std::size_t>(one, nr);
+      auto rng = range<std::size_t>(one, nr);
 
-    // We exchange all blocks where the j-th bit is set
-    std::copy_if(
-        std::begin(rng),
-        std::end(rng),
-        std::back_inserter(blocks),
-        [j](auto idx) { return idx & j; });
+      // We exchange all blocks where the j-th bit is set
+      std::copy_if(
+          std::begin(rng),
+          std::end(rng),
+          std::back_inserter(blocks),
+          [j](auto idx) { return idx & j; });
 
 #pragma omp parallel for
-    for (std::size_t b = 0; b < blocks.size(); ++b) {
-      auto const block = blocks[b];
-      std::copy(
-          // begin
-          out + block * blocksize,
-          // end
-          out + block * blocksize + blocksize,
-          // tmp buf
-          sendbuf + b * blocksize);
+      for (std::size_t b = 0; b < blocks.size(); ++b) {
+        auto const block = blocks[b];
+        std::copy(
+            // begin
+            out + block * blocksize,
+            // end
+            out + block * blocksize + blocksize,
+            // tmp buf
+            sendbuf + b * blocksize);
+      }
     }
-
-    trace.tock(detail::PACK);
 
     FMPI_DBG("send_buffer");
     FMPI_DBG_RANGE(sendbuf, sendbuf + blocksize * blocks.size());
 
-    trace.tick(COMMUNICATION);
+    {
+      rtlx::TimeTrace tt{trace, COMMUNICATION};
 
-    FMPI_CHECK_MPI(mpi::irecv(
-        recvbuf,
-        blocksize * blocks.size(),
-        recvfrom,
-        EXCH_TAG_BRUCK,
-        ctx,
-        &reqs[1]));
+      FMPI_CHECK_MPI(mpi::irecv(
+          recvbuf,
+          blocksize * blocks.size(),
+          recvfrom,
+          EXCH_TAG_BRUCK,
+          ctx,
+          &reqs[1]));
 
-    FMPI_CHECK_MPI(mpi::isend(
-        sendbuf,
-        blocksize * blocks.size(),
-        sendto,
-        EXCH_TAG_BRUCK,
-        ctx,
-        &reqs[0]));
-
-    trace.tock(COMMUNICATION);
+      FMPI_CHECK_MPI(mpi::isend(
+          sendbuf,
+          blocksize * blocks.size(),
+          sendto,
+          EXCH_TAG_BRUCK,
+          ctx,
+          &reqs[0]));
+    }
 
     if (r > 0) {
-      trace.tick(MERGE);
-      // merge chunks of last iteration...
-      // auto const op_first = (r == 1) ? 0 : (one << (r - 1)) * blocksize;
-      auto const op_first = merged.back();
-      FMPI_DBG(op_first);
-      FMPI_DBG(chunks.size());
-      op(chunks, std::next(buffer.begin(), op_first));
-      merged.push_back(merged.back() + chunks.size() * blocksize);
-      chunks.clear();
-      FMPI_DBG("merge_buffer");
-      FMPI_DBG_RANGE(buffer.begin(), buffer.end());
-      trace.tock(MERGE);
+      {
+        rtlx::TimeTrace tt{trace, MERGE};
+        // merge chunks of last iteration...
+        // auto const op_first = (r == 1) ? 0 : (one << (r - 1)) * blocksize;
+        auto const op_first = merged.back();
+        FMPI_DBG(op_first);
+        FMPI_DBG(chunks.size());
+        op(chunks, std::next(buffer.begin(), op_first));
+        merged.push_back(merged.back() + chunks.size() * blocksize);
+        chunks.clear();
+        FMPI_DBG("merge_buffer");
+        FMPI_DBG_RANGE(buffer.begin(), buffer.end());
+      }
     }
-
-    trace.tick(COMMUNICATION);
-    FMPI_CHECK_MPI(mpi::waitall(reqs.begin(), reqs.end()));
-
-    FMPI_DBG("recv_buffer");
-    FMPI_DBG_RANGE(recvbuf, recvbuf + blocksize * blocks.size());
 
     {
-      auto rng     = range<std::size_t>(r);
-      auto sumPow2 = std::accumulate(
-          std::begin(rng),
-          std::end(rng),
-          1,  // init with 1
-          [](auto const cur, auto const v) { return cur + (1 << v); });
+      rtlx::TimeTrace tt{trace, COMMUNICATION};
+      FMPI_CHECK_MPI(mpi::waitall(reqs.begin(), reqs.end()));
 
-      auto const nmerges = std::min(nr - sumPow2, (one << r));
-      FMPI_DBG(nmerges);
+      FMPI_DBG("recv_buffer");
+      FMPI_DBG_RANGE(recvbuf, recvbuf + blocksize * blocks.size());
 
-      for (auto&& b : range<std::size_t>(nmerges)) {
-        auto f = b * blocksize;
-        auto l = (b + 1) * blocksize;
-        chunks.emplace_back(std::make_pair(recvbuf + f, recvbuf + l));
+      {
+        auto rng     = range<std::size_t>(r);
+        auto sumPow2 = std::accumulate(
+            std::begin(rng),
+            std::end(rng),
+            1,  // init with 1
+            [](auto const cur, auto const v) { return cur + (1 << v); });
+
+        auto const nmerges = std::min(nr - sumPow2, (one << r));
+        FMPI_DBG(nmerges);
+
+        for (auto&& b : range<std::size_t>(nmerges)) {
+          auto f = b * blocksize;
+          auto l = (b + 1) * blocksize;
+          chunks.emplace_back(std::make_pair(recvbuf + f, recvbuf + l));
+        }
+
+        FMPI_DBG(chunks);
       }
-
-      FMPI_DBG(chunks);
     }
-    trace.tock(COMMUNICATION);
 
     {
       // c) unpack blocks which will be forwarded to other processors
-      trace.tick(detail::UNPACK);
+      {
+        rtlx::TimeTrace tt{trace, detail::UNPACK};
 
 #pragma omp parallel for
-      for (std::size_t block = one << r;
-           block < std::max(one << r, blocks.size());
-           ++block) {
-        FMPI_DBG(block);
-        std::copy(
-            recvbuf + block * blocksize,
-            recvbuf + block * blocksize + blocksize,
-            out + blocks[block] * blocksize);
+        for (std::size_t block = one << r;
+             block < std::max(one << r, blocks.size());
+             ++block) {
+          FMPI_DBG(block);
+          std::copy(
+              recvbuf + block * blocksize,
+              recvbuf + block * blocksize + blocksize,
+              out + blocks[block] * blocksize);
+        }
+
+        FMPI_DBG("out_buffer");
+        FMPI_DBG_RANGE(out, out + nels);
+
+        blocks.clear();
       }
-
-      FMPI_DBG("out_buffer");
-      FMPI_DBG_RANGE(out, out + nels);
-
-      blocks.clear();
-      trace.tock(detail::UNPACK);
     }
 
     std::swap(recvbuf, mergebuf);
   }
 
-  trace.tick(MERGE);
+  {
+    rtlx::TimeTrace tt{trace, MERGE};
 
-  auto const nchunks = niter;
+    auto const nchunks = niter;
 
-  if (nchunks > 1) {
+    if (nchunks > 1) {
 #if 0
     auto mid = buffer.begin() + 2 * blocksize;
 
@@ -625,16 +636,16 @@ inline void bruck_interleave(
       chunks.emplace_back(std::make_pair(mid, last));
     }
 #endif
-    FMPI_DBG(merged);
-    std::transform(
-        std::begin(merged),
-        std::prev(std::end(merged)),
-        std::next(std::begin(merged)),
-        std::back_inserter(chunks),
-        [rbuf = buffer.begin()](auto first, auto next) {
-          return std::make_pair(
-              std::next(rbuf, first), std::next(rbuf, next));
-        });
+      FMPI_DBG(merged);
+      std::transform(
+          std::begin(merged),
+          std::prev(std::end(merged)),
+          std::next(std::begin(merged)),
+          std::back_inserter(chunks),
+          [rbuf = buffer.begin()](auto first, auto next) {
+            return std::make_pair(
+                std::next(rbuf, first), std::next(rbuf, next));
+          });
 
 #if 0
     auto last_chunk = std::max(2, std::int32_t(nchunks) - 1);
@@ -649,10 +660,9 @@ inline void bruck_interleave(
     }
 #endif
 
-    op(chunks, out);
+      op(chunks, out);
+    }
   }
-
-  trace.tock(MERGE);
 }
 
 template <class InputIt, class OutputIt, class Op>
@@ -667,17 +677,17 @@ inline void bruck_mod(
 
   using value_t = typename std::iterator_traits<InputIt>::value_type;
 
-  auto trace = rtlx::TimeTrace{"Bruck_Mod"};
-
-  trace.tick(detail::ROTATE);
+  auto trace = rtlx::Trace{"Bruck_Mod"};
 
   auto const nels = size_t(nr) * blocksize;
 
   {
+    rtlx::TimeTrace tt{trace, detail::ROTATE};
+
     // TODO(rkowalewski): this can be more efficient
     if (isPow2(nr)) {
-      // Phase 1: Local Rotate, out[(me + block) % nr] = begin[(me - block) %
-      // nr] This procedure can be achieved efficiently in two substeps
+      // Phase 1: Local Rotate, out[(me + block) % nr] = begin[(me - block)
+      // % nr] This procedure can be achieved efficiently in two substeps
 
       // a) reverse_copy all blocks
       detail::reverse_copy_strided(
@@ -703,10 +713,8 @@ inline void bruck_mod(
   }
 
   detail::buffer_t<value_t> tmpbuf{nels};
-  trace.tock(detail::ROTATE);
-
-  auto sendbuf = &tmpbuf[0];
-  auto recvbuf = &tmpbuf[nels / 2];
+  auto*                     sendbuf = &tmpbuf[0];
+  auto*                     recvbuf = &tmpbuf[nels / 2];
 
   constexpr std::size_t one = 1;
 
@@ -732,17 +740,7 @@ inline void bruck_mod(
     // a) pack blocks into a contigous send buffer
 
     {
-      trace.tick(detail::PACK);
-#if 0
-      for (std::size_t block = me; block < me + nr; ++block) {
-        //
-        auto myblock = block - me;
-        auto myidx   = block % nr;
-        if (myblock & j) {
-          //do stuff
-        }
-      }
-#endif
+      rtlx::TimeTrace tt{trace, detail::PACK};
 
       // We exchange all blocks where the j-th bit is set
       for (auto&& idx : range<std::size_t>(me + (me == 0), me + nr)) {
@@ -764,29 +762,29 @@ inline void bruck_mod(
             // tmp buf
             sendbuf + i * blocksize);
       }
-      trace.tock(detail::PACK);
     }
 
-    trace.tick(COMMUNICATION);
+    {
+      rtlx::TimeTrace tt{trace, COMMUNICATION};
 
-    // b) exchange
-    FMPI_CHECK_MPI(mpi::sendrecv(
-        sendbuf,
-        blocksize * blocks.size(),
-        sendto,
-        EXCH_TAG_BRUCK,
-        recvbuf,
-        blocksize * blocks.size(),
-        recvfrom,
-        EXCH_TAG_BRUCK,
-        ctx));
-    trace.tock(COMMUNICATION);
+      // b) exchange
+      FMPI_CHECK_MPI(mpi::sendrecv(
+          sendbuf,
+          blocksize * blocks.size(),
+          sendto,
+          EXCH_TAG_BRUCK,
+          recvbuf,
+          blocksize * blocks.size(),
+          recvfrom,
+          EXCH_TAG_BRUCK,
+          ctx));
+    }
 
     // c) unpack blocks into recv buffer
 
     {
-      trace.tick(detail::UNPACK);
-      auto rng = range<std::size_t>(1, nr);
+      rtlx::TimeTrace tt{trace, detail::UNPACK};
+      auto            rng = range<std::size_t>(1, nr);
       // We exchange all blocks where the j-th bit is set
       std::copy_if(
           std::begin(rng), std::end(rng), std::begin(blocks), [j](auto idx) {
@@ -805,33 +803,32 @@ inline void bruck_mod(
             out + myblock * blocksize);
       }
       blocks.clear();
-      trace.tock(detail::UNPACK);
     }
   }
 
-  trace.tick(MERGE);
+  {
+    rtlx::TimeTrace tt{trace, MERGE};
 
-  std::vector<std::pair<InputIt, InputIt>> chunks;
-  chunks.reserve(nr);
+    std::vector<std::pair<InputIt, InputIt>> chunks;
+    chunks.reserve(nr);
 
-  auto nb = range<uint32_t>(0, nr * blocksize, blocksize);
+    auto nb = range<uint32_t>(0, nr * blocksize, blocksize);
 
-  std::transform(
-      std::begin(nb),
-      std::end(nb),
-      std::back_inserter(chunks),
-      [buf = out, blocksize](auto offset) {
-        auto f = std::next(buf, offset);
-        auto l = std::next(f, blocksize);
-        return std::make_pair(f, l);
-      });
+    std::transform(
+        std::begin(nb),
+        std::end(nb),
+        std::back_inserter(chunks),
+        [buf = out, blocksize](auto offset) {
+          auto f = std::next(buf, offset);
+          auto l = std::next(f, blocksize);
+          return std::make_pair(f, l);
+        });
 
-  op(chunks, tmpbuf.begin());
+    op(chunks, tmpbuf.begin());
 
-  // switch buffer back to output iterator
-  std::move(tmpbuf.begin(), tmpbuf.begin() + nels, out);
-
-  trace.tock(MERGE);
+    // switch buffer back to output iterator
+    std::move(tmpbuf.begin(), tmpbuf.begin() + nels, out);
+  }
 }
 }  // namespace fmpi
 

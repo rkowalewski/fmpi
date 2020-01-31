@@ -36,10 +36,21 @@ inline std::future<R> async(int core, F&& f, Ts&&... params) {
   auto const& config = Config::instance();
 
   if (config.main_core != core) {
+#if defined(NDEBUG)
     auto thread =
         std::thread([fn = std::move(lambda), p = std::move(pr)]() mutable {
           call_with_promise(fn, p);
         });
+#else
+    auto thread = std::thread(
+        [fn = std::move(lambda), p = std::move(pr), core]() mutable {
+          auto const cpu = sched_getcpu();
+          FMPI_DBG(std::make_pair(cpu, core));
+        //  FMPI_ASSERT(cpu == core);
+
+          call_with_promise(fn, p);
+        });
+#endif
 
     fmpi::pinThreadToCore(thread, core);
     thread.detach();

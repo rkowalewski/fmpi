@@ -1,9 +1,11 @@
-#ifndef TWOSIDEDALGORITHMS_HPP //NOLINT
-#define TWOSIDEDALGORITHMS_HPP //NOLINT
+#ifndef TWOSIDEDALGORITHMS_HPP  // NOLINT
+#define TWOSIDEDALGORITHMS_HPP  // NOLINT
 
 #include <functional>
 #include <rtlx/Timer.hpp>
 #include <rtlx/Trace.hpp>
+
+#include <fmpi/mpi/Environment.hpp>
 
 struct Measurement {
   size_t nhosts;
@@ -22,9 +24,10 @@ struct Measurement {
 void printMeasurementHeader(std::ostream& os);
 
 void printMeasurementCsvLine(
-    std::ostream&                                                     os,
-    Measurement const&                                                params,
-    std::unordered_map<std::string, std::variant<double, int>> const& traces);
+    std::ostream&      os,
+    Measurement const& params,
+    std::unordered_map<std::string, typename rtlx::TraceStore::value_t> const&
+        traces);
 
 template <
     class InputIt,
@@ -37,11 +40,18 @@ auto run_algorithm(
     OutputIt            out,
     int                 blocksize,
     mpi::Context const& comm,
-    Computation&&       op)
-{
-  auto start = rtlx::ChronoClockNow();
-  f(begin, out, blocksize, comm, std::forward<Computation>(op));
-  return rtlx::ChronoClockNow() - start;
+    Computation&&       op) {
+  using timer    = rtlx::Timer<>;
+  using duration = typename timer::duration;
+
+  duration d{};
+
+  {
+    timer t{d};
+    f(begin, out, blocksize, comm, std::forward<Computation>(op));
+  }
+
+  return d;
 }
 
 template <class Iterator, class Callback>

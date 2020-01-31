@@ -83,7 +83,7 @@ inline void scatteredPairwise_lt3(
     int                 blocksize,
     mpi::Context const& ctx,
     Op&&                op,
-    rtlx::TimeTrace&    trace) {
+    rtlx::Trace&        trace) {
   using value_type = typename std::iterator_traits<OutputIt>::value_type;
 
   using merge_buffer_t =
@@ -98,30 +98,30 @@ inline void scatteredPairwise_lt3(
       std::make_pair(begin + me * blocksize, begin + (me + 1) * blocksize));
 
   if (ctx.size() == 1) {
-    trace.tick(MERGE);
+    rtlx::TimeTrace tt(trace, MERGE);
     op(chunks, out);
-    trace.tock(MERGE);
     return;
   }
 
   auto other = static_cast<mpi::Rank>(1 - me);
 
-  trace.tick(COMMUNICATION);
-  FMPI_CHECK_MPI(mpi::sendrecv(
-      begin + other * blocksize,
-      blocksize,
-      other,
-      EXCH_TAG_BRUCK,
-      out + other * blocksize,
-      blocksize,
-      other,
-      EXCH_TAG_BRUCK,
-      ctx));
-  trace.tock(COMMUNICATION);
-
-  trace.tick(MERGE);
+  {
+    rtlx::TimeTrace tt(trace, COMMUNICATION);
+    FMPI_CHECK_MPI(mpi::sendrecv(
+        begin + other * blocksize,
+        blocksize,
+        other,
+        EXCH_TAG_BRUCK,
+        out + other * blocksize,
+        blocksize,
+        other,
+        EXCH_TAG_BRUCK,
+        ctx));
+  }
 
   {
+    rtlx::TimeTrace tt(trace, MERGE);
+
     chunks.emplace_back(std::make_pair(
         out + other * blocksize, out + (other + 1) * blocksize));
     merge_buffer_t buffer{ctx.size() * blocksize};
@@ -129,8 +129,6 @@ inline void scatteredPairwise_lt3(
 
     std::move(buffer.begin(), buffer.end(), out);
   }
-
-  trace.tock(MERGE);
 
   trace.put(detail::N_COMM_ROUNDS, 1);
 }
@@ -289,7 +287,7 @@ inline void scatteredPairwiseWaitsome(
   std::ostringstream os;
   os << Schedule::NAME << "Waitsome" << NReqs;
 
-  auto trace = rtlx::TimeTrace{os.str()};
+  auto trace = rtlx::Trace{os.str()};
 
   FMPI_DBG_STREAM(
       "running algorithm " << os.str() << ", blocksize: " << blocksize);
@@ -300,7 +298,7 @@ inline void scatteredPairwiseWaitsome(
     return;
   }
 
-  trace.tick(COMMUNICATION);
+  rtlx::TimeTrace t_comm{trace, COMMUNICATION};
 
   constexpr auto winreqs = 2 * NReqs;
 
@@ -519,7 +517,8 @@ inline void scatteredPairwiseWaitsome(
     {
       FMPI_DBG_STREAM("pushing " << nrecv << " on comp queue...");
 
-      // ensure that we never try to push more than we have available capacity
+      // ensure that we never try to push more than we have available
+      // capacity
       FMPI_ASSERT(nrecv <= arrived_chunks->size());
 
       auto last = std::transform(
@@ -538,17 +537,16 @@ inline void scatteredPairwiseWaitsome(
 
   } while (nc_reqs < total_reqs);
 
-  trace.tock(COMMUNICATION);
+  t_comm.finish();
+
+  {
+    rtlx::TimeTrace tt{trace, MERGE};
+    FMPI_DBG("waiting for compute");
+    auto const last = async_compute.get();
+    FMPI_ASSERT(last == out + (std::size_t(nr) * blocksize));
+  }
 
   trace.put(detail::N_COMM_ROUNDS, n_comm_rounds);
-
-  FMPI_DBG("waiting for compute");
-
-  trace.tick(MERGE);
-  auto const last = async_compute.get();
-  trace.tock(MERGE);
-
-  FMPI_ASSERT(last == out + (std::size_t(nr) * blocksize));
 }  // namespace fmpi
 
 template <
@@ -573,7 +571,7 @@ inline void scatteredPairwiseWaitsomeOverlap(
   std::ostringstream os;
   os << Schedule::NAME << "WaitsomeOverlap" << NReqs;
 
-  auto trace = rtlx::TimeTrace{os.str()};
+  auto trace = rtlx::Trace{os.str()};
 
   FMPI_DBG_STREAM(
       "running algorithm " << os.str() << ", blocksize: " << blocksize);
@@ -584,7 +582,7 @@ inline void scatteredPairwiseWaitsomeOverlap(
     return;
   }
 
-  trace.tick(COMMUNICATION);
+  rtlx::TimeTrace t_comm{trace, COMMUNICATION};
 
   Schedule const commAlgo{};
 
@@ -618,7 +616,10 @@ inline void scatteredPairwiseWaitsomeOverlap(
   dispatcher.start_worker();
   dispatcher.pinToCore(config.dispatcher_core);
 
-  double t_comp{}, t_schedule{};
+  using timer    = rtlx::Timer<>;
+  using duration = typename timer::duration;
+
+  duration t_comp{}, t_schedule{};
 
   auto fut_comm = fmpi::async<void>(
       config.scheduler_core,
@@ -633,8 +634,8 @@ inline void scatteredPairwiseWaitsomeOverlap(
        begin,      // const
        n_rounds    // const
   ]() {
-        auto const t_start = rtlx::ChronoClockNow();
-        auto       enqueue_alloc =
+        timer t{t_schedule};
+        auto  enqueue_alloc =
             [&buf_alloc, &blocks, blocksize](fmpi::Ticket ticket) {
               // allocator some buffer
               auto* b = buf_alloc.allocate(blocksize);
@@ -704,7 +705,6 @@ inline void scatteredPairwiseWaitsomeOverlap(
             FMPI_DBG(sticket.id);
           }
         }
-        t_schedule = rtlx::ChronoClockNow() - t_start;
       });
 
   using iterator = OutputIt;
@@ -719,7 +719,7 @@ inline void scatteredPairwiseWaitsomeOverlap(
        begin,
        out,
        comp = std::forward<Op>(op)]() -> iterator {
-        auto const t_start = rtlx::ChronoClockNow();
+        timer t{t_comp};
         // chunks to merge
         std::vector<std::pair<OutputIt, OutputIt>> chunks_to_merge;
         chunks_to_merge.reserve(ctx.size());
@@ -765,22 +765,17 @@ inline void scatteredPairwiseWaitsomeOverlap(
 
           if (enough_work) {
             // merge all chunks
-            // auto i_ws  = rtlx::ChronoClockNow();
-            // auto s = rtlx::ChronoClockNow();
             auto last = comp(chunks_to_merge, dst);
-            // op_t += rtlx::ChronoClockNow() - s;
 
             auto f_buf = chunks_to_merge.begin();
             if (processed.size() == 0) {
               std::advance(f_buf, 1);
             }
 
-            // auto a_t = rtlx::ChronoClockNow();
             for (; f_buf != chunks_to_merge.end(); ++f_buf) {
               FMPI_DBG_STREAM("release p " << f_buf->first);
               buf_alloc.dispose(f_buf->first);
             }
-            // alloc_t += rtlx::ChronoClockNow() - a_t;
 
             chunks_to_merge.clear();
 
@@ -819,39 +814,17 @@ inline void scatteredPairwiseWaitsomeOverlap(
         FMPI_DBG(processed);
 
         auto ret = std::move(mergeBuffer.begin(), mergeBuffer.end(), out);
-        t_comp   = rtlx::ChronoClockNow() - t_start;
         return ret;
       });
-
-#if 0
-        auto t2 = rtlx::ChronoClockNow();
-
-        std::ostringstream os1;
-        os1 << "Rank: " << ctx.rank() << "\n";
-        os1 << "computation took " << t2 - t1 << "s\n";
-        // os1 << "loop time: " << loop_t << "s\n";
-        ////os1 << "op_t took: " << op_t << "s\n";
-        // os1 << "queue_t took: " << queue_t << "s\n";
-        ////os1 << "alloc release took: " << alloc_t << "s\n";
-        // os1 << "work took: " << work << "s\n";
-        // os1 << "real work took: " << real_w << "s\n";
-        os1 << "loop took: " << loop.microsecs() << "\n";
-        os1 << "queue took: " << queue.microsecs() << "\n";
-        os1 << "work took: " << work.microsecs() << "\n";
-        os1 << "real work took: " << real_work.microsecs() << "\n";
-        os1 << "iterations: " << niters << "\n";
-        os1 << "------------------------------\n";
-        std::cout << os1.str();
-        return ret;
-#endif
 
   iterator ret;
   try {
     fut_comm.wait();
-    trace.tock(COMMUNICATION);
-    trace.tick(MERGE);
-    ret = f_comp.get();
-    trace.tock(MERGE);
+    t_comm.finish();
+    {
+      rtlx::TimeTrace tt(trace, MERGE);
+      ret = f_comp.get();
+    }
   } catch (...) {
     throw std::runtime_error("asynchronous Alltoall failed");
   }
@@ -861,9 +834,9 @@ inline void scatteredPairwiseWaitsomeOverlap(
   // dispatcher.loop_until_done();
   FMPI_ASSERT(stats.ntasks == 0);
 
-  trace.put("ComputeThread", t_comp);
-  trace.put("ScheduleThread", t_schedule);
-  trace.put("DispatcherThread.time", stats.dispatch_time);
+  trace.add_time("ComputeThread", t_comp);
+  trace.add_time("ScheduleThread", t_schedule);
+  trace.add_time("DispatcherThread.time", stats.dispatch_time);
   trace.put(
       "DispatcherThread.iterations", static_cast<int>(stats.iterations));
 
@@ -891,7 +864,7 @@ inline void scatteredPairwiseWaitall(
 
   std::ostringstream os;
   os << Schedule::NAME << "Waitall" << NReqs;
-  auto trace = rtlx::TimeTrace{os.str()};
+  auto trace = rtlx::Trace{os.str()};
 
   auto const schedule = Schedule{};
 
@@ -992,80 +965,83 @@ inline void scatteredPairwiseWaitall(
     return std::make_pair(rphase, sphase);
   };
 
-  trace.tick(COMMUNICATION);
+  {
+    rtlx::TimeTrace{trace, COMMUNICATION};
 
-  std::tie(rphase, sphase) =
-      moveReqWindow(std::make_pair(rphase, sphase), reqWin);
-
-  FMPI_CHECK_MPI(mpi::waitall(&(*std::begin(reqs)), &(*std::end(reqs))));
-
-  reqWin.buffer_swap();
-
-  FMPI_ASSERT(reqWin.pending_pieces().empty());
-  FMPI_ASSERT(!reqWin.ready_pieces().empty());
-
-  trace.tock(COMMUNICATION);
-
-  for (auto&& win : range<std::size_t>(nrounds - 1)) {
-    static_cast<void>(win);
-
-    trace.tick(COMMUNICATION);
     std::tie(rphase, sphase) =
         moveReqWindow(std::make_pair(rphase, sphase), reqWin);
-    trace.tock(COMMUNICATION);
 
-    trace.tick(MERGE);
-    op(reqWin.ready_pieces(), mergebuf);
-    auto const nMerged = reqWin.ready_pieces().size() * blocksize;
-    mergebuf += nMerged;
-    mergePsum.push_back(mergePsum.back() + nMerged);
-    reqWin.ready_pieces().clear();
-    trace.tock(MERGE);
-
-    trace.tick(COMMUNICATION);
     FMPI_CHECK_MPI(mpi::waitall(&(*std::begin(reqs)), &(*std::end(reqs))));
+
     reqWin.buffer_swap();
-    trace.tock(COMMUNICATION);
+
+    FMPI_ASSERT(reqWin.pending_pieces().empty());
+    FMPI_ASSERT(!reqWin.ready_pieces().empty());
+  }
+
+  for (auto&& win : range<std::size_t>(nrounds - 1)) {
+    std::ignore = win;
+
+    {
+      rtlx::TimeTrace{trace, COMMUNICATION};
+      std::tie(rphase, sphase) =
+          moveReqWindow(std::make_pair(rphase, sphase), reqWin);
+    }
+
+    {
+      rtlx::TimeTrace{trace, MERGE};
+      op(reqWin.ready_pieces(), mergebuf);
+      auto const nMerged = reqWin.ready_pieces().size() * blocksize;
+      mergebuf += nMerged;
+      mergePsum.push_back(mergePsum.back() + nMerged);
+      reqWin.ready_pieces().clear();
+    }
+
+    {
+      rtlx::TimeTrace{trace, COMMUNICATION};
+      FMPI_CHECK_MPI(mpi::waitall(&(*std::begin(reqs)), &(*std::end(reqs))));
+      reqWin.buffer_swap();
+    }
 
     FMPI_DBG_RANGE(out, mergebuf);
   }
 
-  trace.tick(MERGE);
+  {
+    rtlx::TimeTrace{trace, MERGE};
 
-  auto mergeSrc = &*out;
-  auto target   = buffer.begin();
+    auto mergeSrc = &*out;
+    auto target   = buffer.begin();
 
-  // if we have intermediate merge operations then we have already merged
-  // chunks in the out buffer and use the dedicated merge buffer as
-  // destinated merged buffer. Otherwise, we merge directly into the out
-  // buffer.
-  FMPI_DBG(mergePsum);
-
-  if (mergePsum.back() > 0) {
+    // if we have intermediate merge operations then we have already merged
+    // chunks in the out buffer and use the dedicated merge buffer as
+    // destinated merged buffer. Otherwise, we merge directly into the out
+    // buffer.
     FMPI_DBG(mergePsum);
-    std::transform(
-        std::begin(mergePsum),
-        std::prev(std::end(mergePsum)),
-        std::next(std::begin(mergePsum)),
-        std::back_inserter(reqWin.ready_pieces()),
-        [from = mergeSrc](auto first, auto last) {
-          return std::make_pair(
-              std::next(from, first), std::next(from, last));
-        });
+
+    if (mergePsum.back() > 0) {
+      FMPI_DBG(mergePsum);
+      std::transform(
+          std::begin(mergePsum),
+          std::prev(std::end(mergePsum)),
+          std::next(std::begin(mergePsum)),
+          std::back_inserter(reqWin.ready_pieces()),
+          [from = mergeSrc](auto first, auto last) {
+            return std::make_pair(
+                std::next(from, first), std::next(from, last));
+          });
+    }
+
+    FMPI_DBG("final merge");
+    FMPI_DBG(reqWin.ready_pieces().size());
+
+    op(reqWin.ready_pieces(), target);
+
+    FMPI_DBG(reqWin.ready_pieces());
+
+    if (target != &*out) {
+      std::move(target, target + nels, out);
+    }
   }
-
-  FMPI_DBG("final merge");
-  FMPI_DBG(reqWin.ready_pieces().size());
-
-  op(reqWin.ready_pieces(), target);
-
-  FMPI_DBG(reqWin.ready_pieces());
-
-  if (target != &*out) {
-    std::move(target, target + nels, out);
-  }
-
-  trace.tock(MERGE);
 
   trace.put(detail::N_COMM_ROUNDS, static_cast<int>(nrounds));
 
@@ -1083,144 +1059,39 @@ inline void MpiAlltoAll(
 
   auto nr = ctx.size();
 
-  auto trace = rtlx::TimeTrace{"AlltoAll"};
+  auto trace = rtlx::Trace{"AlltoAll"};
 
-  trace.tick(COMMUNICATION);
+  std::unique_ptr<value_type[]> rbuf;
 
-  auto rbuf = std::unique_ptr<value_type[]>(new value_type[nr * blocksize]);
+  {
+    rtlx::TimeTrace tt(trace, COMMUNICATION);
 
-  FMPI_CHECK_MPI(mpi::alltoall(
-      std::addressof(*begin), blocksize, &rbuf[0], blocksize, ctx));
+    rbuf = std::unique_ptr<value_type[]>(new value_type[nr * blocksize]);
 
-  trace.tock(COMMUNICATION);
+    FMPI_CHECK_MPI(mpi::alltoall(
+        std::addressof(*begin), blocksize, &rbuf[0], blocksize, ctx));
+  }
 
-  trace.tick(MERGE);
+  {
+    rtlx::TimeTrace tt(trace, MERGE);
 
-  std::vector<std::pair<InputIt, InputIt>> chunks;
-  chunks.reserve(nr);
+    std::vector<std::pair<InputIt, InputIt>> chunks;
+    chunks.reserve(nr);
 
-  auto range = fmpi::range<uint32_t>(0, nr * blocksize, blocksize);
+    auto range = fmpi::range<uint32_t>(0, nr * blocksize, blocksize);
 
-  std::transform(
-      std::begin(range),
-      std::end(range),
-      std::back_inserter(chunks),
-      [buf = rbuf.get(), blocksize](auto offset) {
-        auto f = std::next(buf, offset);
-        auto l = std::next(f, blocksize);
-        return std::make_pair(f, l);
-      });
+    std::transform(
+        std::begin(range),
+        std::end(range),
+        std::back_inserter(chunks),
+        [buf = rbuf.get(), blocksize](auto offset) {
+          auto f = std::next(buf, offset);
+          auto l = std::next(f, blocksize);
+          return std::make_pair(f, l);
+        });
 
-  op(chunks, out);
-
-  trace.tock(MERGE);
+    op(chunks, out);
+  }
 }
-#if 0
-
-template <
-    class Schedule,
-    bool isBlocking,
-    class InputIt,
-    class OutputIt,
-    class Op>
-inline void scatteredPairwise(
-    InputIt             begin,
-    OutputIt            out,
-    int                 blocksize,
-    mpi::Context const& ctx,
-    Op&&                op)
-{
-  auto nr = ctx.size();
-  auto me = ctx.rank();
-
-  using value_type = typename std::iterator_traits<InputIt>::value_type;
-
-  auto rbuf = std::unique_ptr<value_type[]>(new value_type[nr * blocksize]);
-
-  std::ostringstream os;
-  os << Schedule::NAME;
-  if (isBlocking) {
-    os << "Blocking";
-  }
-
-  auto trace = rtlx::TimeTrace{os.str()};
-
-  trace.tick(COMMUNICATION);
-  std::copy(
-      begin + me * blocksize,
-      begin + me * blocksize + blocksize,
-      &rbuf[0] + me * blocksize);
-
-  auto commAlgo = Schedule{};
-
-  std::size_t              nreqs = isBlocking ? 2 : nr * 2;
-  std::vector<MPI_Request> reqs(nreqs, MPI_REQUEST_NULL);
-
-  for (int r = 0; r < static_cast<int>(nr); ++r) {
-    auto sendto   = commAlgo.sendRank(ctx, r);
-    auto recvfrom = commAlgo.recvRank(ctx, r);
-
-    if (sendto == me) {
-      sendto = mpi::Rank{};
-    }
-    if (recvfrom == me) {
-      recvfrom = mpi::Rank{};
-    }
-    if (sendto == MPI_PROC_NULL && recvfrom == MPI_PROC_NULL) {
-      continue;
-    }
-
-    FMPI_DBG(sendto);
-    FMPI_DBG(recvfrom);
-
-    FMPI_CHECK(mpi::irecv(
-        std::next(&(rbuf[0]), recvfrom * blocksize),
-        blocksize,
-        recvfrom,
-        EXCH_TAG_RING,
-        ctx,
-        &reqs[isBlocking ? 0 : r]));
-
-    FMPI_CHECK(mpi::isend(
-        std::next(begin, sendto * blocksize),
-        blocksize,
-        sendto,
-        EXCH_TAG_RING,
-        ctx,
-        &reqs[isBlocking ? 1 : nr + r]));
-
-    if (isBlocking) {
-      mpi::waitall(&(*reqs.begin()), &(*reqs.end()));
-    }
-  }
-
-  if (!isBlocking) {
-    mpi::waitall(&(*reqs.begin()), &(*reqs.end()));
-  }
-
-  trace.tock(COMMUNICATION);
-
-  trace.tick(MERGE);
-
-  std::vector<std::pair<InputIt, InputIt>> chunks;
-  chunks.reserve(nr);
-
-  auto range = fmpi::range<uint32_t>(0, nr * blocksize, blocksize);
-
-  std::transform(
-      std::begin(range),
-      std::end(range),
-      std::back_inserter(chunks),
-      [buf = rbuf.get(), blocksize](auto offset) {
-        auto f = std::next(buf, offset);
-        auto l = std::next(f, blocksize);
-        return std::make_pair(f, l);
-      });
-
-  op(chunks, out);
-
-  trace.tock(MERGE);
-}
-#endif
 }  // namespace fmpi
 #endif

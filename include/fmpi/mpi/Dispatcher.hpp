@@ -63,13 +63,16 @@ constexpr bool operator==(Ticket const& l, Ticket const& r) noexcept {
 
 template <mpi::reqsome_op testReqs = mpi::testsome>
 class CommDispatcher {
+  using Timer    = rtlx::Timer<>;
+  using duration = typename Timer::duration;
+
  public:
   struct Statistics {
     std::size_t ntasks{};
     std::size_t busy{};
     std::size_t completed{};
     std::size_t iterations{};
-    double      dispatch_time{};
+    duration    dispatch_time{};
   };
 
  private:
@@ -154,7 +157,6 @@ class CommDispatcher {
   std::atomic_bool running_;
 
   Statistics stats_{};
-  double     t_start_{};
 
  public:
   explicit CommDispatcher(std::size_t winsz);
@@ -236,8 +238,7 @@ inline void CommDispatcher<testReqs>::stop_worker() {
 
 template <typename mpi::reqsome_op testReqs>
 inline void CommDispatcher<testReqs>::start_worker() {
-  t_start_ = rtlx::ChronoClockNow();
-  thread_  = std::thread(&CommDispatcher::worker, this);
+  thread_ = std::thread(&CommDispatcher::worker, this);
 }
 
 template <typename mpi::reqsome_op testReqs>
@@ -275,7 +276,7 @@ inline void CommDispatcher<testReqs>::worker() {
   std::vector<int> new_reqs;
   new_reqs.reserve(winsz_);
 
-  double dispatch_time{};
+  duration dispatch_time{};
 
   // loop until termination
   while (running_.load(std::memory_order_relaxed)) {
