@@ -12,15 +12,19 @@
 
 namespace rtlx {
 
-class TimeTrace;
+class Trace;
 
 class TraceStore {
-  using key_t     = std::string;
+ public:
+  using duration = std::chrono::nanoseconds;
+  using key_t    = std::string;
+  using value_t  = std::variant<duration, int>;
+
+ private:
   using context_t = key_t;
-  using value_t   = std::variant<double, int>;
   using store_t   = std::unordered_map<key_t, value_t>;
 
-  friend class TimeTrace;
+  friend class Trace;
 
  public:
   TraceStore()                      = default;
@@ -49,22 +53,30 @@ class TraceStore {
   std::unordered_map<context_t, std::unordered_map<key_t, value_t>> m_traces;
 };
 
-class TimeTrace {
+class Trace {
  public:
   using key_t   = TraceStore::key_t;
   using value_t = TraceStore::value_t;
 
  public:
-  explicit TimeTrace(TraceStore::context_t ctx);
+  explicit Trace(TraceStore::context_t ctx);
+
+  ~Trace();
 
   static auto enabled() noexcept -> bool;
 
-  void tick(const key_t &key);
-  void tock(const key_t &key);
+  void put(key_t const & /*key*/, int v);
 
-  void put(key_t const & /*key*/, int v) const;
+  template <class Rep, class Period>
+  void add_time(
+      key_t const &key, const std::chrono::duration<Rep, Period> &d) {
+    using duration = typename TraceStore::duration;
 
-  void put(key_t const & /*key*/, double v) const;
+    if constexpr (TraceStore::enabled()) {
+      auto &val = std::get<duration>(m_cache[key]);
+      val += duration{d};
+    }
+  }
 
   auto measurements() const -> std::unordered_map<key_t, value_t> const &;
 
@@ -75,6 +87,36 @@ class TimeTrace {
  private:
   std::string const                  m_context{};
   std::unordered_map<key_t, value_t> m_cache{};
+};
+
+template <class Clock = ChooseClockType::type>
+class TimeTrace {
+  using timer = Timer<Clock>;
+
+ public:
+  TimeTrace(Trace &trace, std::string value)
+    : duration_(0)
+    , timer_(duration_)
+    , trace_(trace)
+    , value_(std::move(value)) {
+  }
+
+  ~TimeTrace() {
+    finish();
+  }
+
+  void finish() {
+    if (!timer_.done()) {
+      timer_.finish();
+      trace_.add_time(value_, duration_);
+    }
+  }
+
+ private:
+  typename Clock::duration duration_{};
+  timer                    timer_;
+  Trace &                  trace_;
+  std::string              value_;
 };
 
 }  // namespace rtlx

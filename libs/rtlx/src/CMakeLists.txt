@@ -8,7 +8,7 @@ if (RTLX_ENABLE_TRACE MATCHES "ON")
     list(APPEND rtlx_defines RTLX_ENABLE_TRACE)
 endif()
 
-target_compile_definitions (rtlx PRIVATE ${rtlx_defines})
+target_compile_definitions (rtlx PUBLIC ${rtlx_defines})
 
 # All users of this library will need at least C++11
 target_compile_features(rtlx PUBLIC cxx_std_11)
