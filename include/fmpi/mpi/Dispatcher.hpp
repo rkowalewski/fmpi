@@ -73,6 +73,8 @@ class CommDispatcher {
     std::size_t completed{};
     std::size_t iterations{};
     duration    dispatch_time{};
+    duration    queue_time{};
+    duration    completion_time{};
   };
 
  private:
@@ -226,7 +228,7 @@ inline CommDispatcher<testReqs>::CommDispatcher(std::size_t winsz)
 
 template <typename mpi::reqsome_op testReqs>
 inline CommDispatcher<testReqs>::~CommDispatcher() {
-  loop_until_done();
+  //loop_until_done();
   stop_worker();
   thread_.join();
 }
@@ -277,13 +279,21 @@ inline void CommDispatcher<testReqs>::worker() {
   new_reqs.reserve(winsz_);
 
   duration dispatch_time{};
+  duration completion_time{};
+  duration queue_time{};
+
+  auto inc_time = [](auto const&monotonic_time, auto& target) {
+    FMPI_ASSERT(!(target > monotonic_time));
+    auto const diff = monotonic_time - target;
+    target += diff;
+  };
 
   // loop until termination
   while (running_.load(std::memory_order_relaxed)) {
     std::size_t nCompleted;
 
     {
-      rtlx::Timer t_reqs{dispatch_time};
+      Timer{completion_time};
       // 1) we first process pending requests...
       nCompleted = has_pending_requests() ? process_requests() : 0;
 
@@ -292,22 +302,24 @@ inline void CommDispatcher<testReqs>::worker() {
 
     // 2) Schedule new requests or at least wait for new requests...
     {
-      rtlx::Timer t_tasks{dispatch_time};
+      Timer{queue_time};
 
       // acquire the lock
       std::unique_lock<std::mutex> lk(mutex_);
-      stats_.iterations++;
-      auto const d = dispatch_time - stats_.dispatch_time;
-      stats_.dispatch_time += d;
 
+      inc_time(completion_time, stats_.completion_time);
+      inc_time(queue_time, stats_.queue_time);
+      inc_time(dispatch_time, stats_.dispatch_time);
+
+      stats_.iterations++;
       stats_.busy -= nCompleted;
 
       if (stats_.ntasks == 0u) {
         // wait for new tasks for a maximum of 10ms
         // If a timeout occurs, unlock and
-        constexpr auto ten_ms = std::chrono::milliseconds(1);
+        constexpr auto interval = std::chrono::microseconds(1);
         if (!cv_tasks_.wait_for(
-                lk, ten_ms, [this]() { return stats_.ntasks > 0; })) {
+                lk, interval, [this]() {return stats_.ntasks > 0; })) {
           // lock is again released...
           continue;
         };
@@ -334,7 +346,7 @@ inline void CommDispatcher<testReqs>::worker() {
     }  // release the lock
 
     {
-      rtlx::Timer t_dispatch{dispatch_time};
+      Timer{dispatch_time};
       // 3) execute new requests. Do this after releasing the lock.
       for (auto&& slot : new_reqs) {
         auto* mpi_req = &mpi_reqs_[slot];

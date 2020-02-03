@@ -568,8 +568,11 @@ inline void scatteredPairwiseWaitsomeOverlap(
 
   // queue for ready tasks
   using chunk = std::pair<mpi::Rank, Span<value_type>>;
-  // auto ready_tasks = boost::lockfree::spsc_queue<chunk>{n_rounds};
+#if 0
+  auto ready_tasks = boost::lockfree::spsc_queue<chunk>{n_rounds};
+#else
   auto ready_tasks = buffered_channel<chunk>{n_rounds};
+#endif
 
   std::vector<std::pair<Ticket, Span<value_type>>> blocks{};
   blocks.reserve(reqsInFlight * n_pipelines);
@@ -583,7 +586,7 @@ inline void scatteredPairwiseWaitsomeOverlap(
   using timer    = rtlx::Timer<>;
   using duration = typename timer::duration;
 
-  duration t_comp{}, t_schedule{};
+  duration t_schedule{};
 
   auto fut_comm = fmpi::async<void>(
       config.scheduler_core,
@@ -597,7 +600,8 @@ inline void scatteredPairwiseWaitsomeOverlap(
        commAlgo,   // const
        begin,      // const
        n_rounds    // const
-  ]() {
+  ]()
+  {
         timer t{t_schedule};
         auto  enqueue_alloc =
             [&buf_alloc, &blocks, blocksize](fmpi::Ticket ticket) {
@@ -673,17 +677,23 @@ inline void scatteredPairwiseWaitsomeOverlap(
 
   using iterator = OutputIt;
 
+  struct ComputeTime {
+    duration queue{0};
+    duration comp{0};
+    duration total{0};
+  } t_compute;
+
   auto f_comp = fmpi::async<iterator>(
       config.comp_core,
       [&ready_tasks,
        &buf_alloc,
        &ctx,
-       &t_comp,
+       &t_compute,
        blocksize,
        begin,
        out,
        comp = std::forward<Op>(op)]() -> iterator {
-        timer t{t_comp};
+        timer t{t_compute.total};
         // chunks to merge
         std::vector<std::pair<OutputIt, OutputIt>> chunks_to_merge;
         chunks_to_merge.reserve(ctx.size());
@@ -706,28 +716,33 @@ inline void scatteredPairwiseWaitsomeOverlap(
         auto dst = out;
 
         while (ntasks != 0u) {
-          FMPI_DBG(buf_alloc.allocatedBlocks());
-          FMPI_DBG(buf_alloc.allocatedHeapBlocks());
-          FMPI_DBG(buf_alloc.isFull());
+          {
+            timer t{t_compute.queue};
+
+            FMPI_DBG(buf_alloc.allocatedBlocks());
+            FMPI_DBG(buf_alloc.allocatedHeapBlocks());
+            FMPI_DBG(buf_alloc.isFull());
 
 #if 0
-            auto const n =
-                ready_tasks.consume_all([&chunks_to_merge](auto const& v) {
-                  auto const [peer, s] = v;
-                  chunks_to_merge.emplace_back(s.data(), s.data() + s.size());
-                });
+              auto const n =
+                  ready_tasks.consume_all([&chunks_to_merge](auto const& v) {
+                    auto const [peer, s] = v;
+                    chunks_to_merge.emplace_back(s.data(), s.data() + s.size());
+                  });
 
-            ntasks -= n;
+              ntasks -= n;
 #else
-          auto c = ready_tasks.value_pop();
-          chunks_to_merge.emplace_back(
-              c.second.data(), c.second.data() + c.second.size());
-          ntasks--;
+            auto c = ready_tasks.value_pop();
+            chunks_to_merge.emplace_back(
+                c.second.data(), c.second.data() + c.second.size());
+            ntasks--;
 #endif
+          }
 
           bool const enough_work = chunks_to_merge.size() >= op_threshold;
 
           if (enough_work) {
+            timer t{t_compute.comp};
             // merge all chunks
             auto last = comp(chunks_to_merge, dst);
 
@@ -749,36 +764,39 @@ inline void scatteredPairwiseWaitsomeOverlap(
           }
         }
 
-        auto const nels = static_cast<std::size_t>(ctx.size()) * blocksize;
+        {
+          timer t{t_compute.comp};
+          auto const nels = static_cast<std::size_t>(ctx.size()) * blocksize;
 
-        using merge_buffer_t = tlx::
-            SimpleVector<value_type, tlx::SimpleVectorMode::NoInitNoDestroy>;
+          using merge_buffer_t = tlx::
+              SimpleVector<value_type, tlx::SimpleVectorMode::NoInitNoDestroy>;
 
-        auto mergeBuffer = merge_buffer_t{nels};
+          auto mergeBuffer = merge_buffer_t{nels};
 
-        // generate pairs of chunks to merge
-        std::copy(
-            std::begin(processed),
-            std::end(processed),
-            std::back_inserter(chunks_to_merge));
+          // generate pairs of chunks to merge
+          std::copy(
+              std::begin(processed),
+              std::end(processed),
+              std::back_inserter(chunks_to_merge));
 
-        FMPI_DBG(chunks_to_merge.size());
-        // merge
-        auto const last = comp(chunks_to_merge, mergeBuffer.begin());
+          FMPI_DBG(chunks_to_merge.size());
+          // merge
+          auto const last = comp(chunks_to_merge, mergeBuffer.begin());
 
-        for (auto f = std::begin(chunks_to_merge);
-             f != std::prev(std::end(chunks_to_merge), processed.size());
-             ++f) {
-          FMPI_DBG_STREAM("release p " << f->first);
-          buf_alloc.dispose(f->first);
+          for (auto f = std::begin(chunks_to_merge);
+               f != std::prev(std::end(chunks_to_merge), processed.size());
+               ++f) {
+            FMPI_DBG_STREAM("release p " << f->first);
+            buf_alloc.dispose(f->first);
+          }
+
+          FMPI_ASSERT(last == mergeBuffer.end());
+
+          FMPI_DBG(processed);
+
+          auto ret = std::move(mergeBuffer.begin(), mergeBuffer.end(), out);
+          return ret;
         }
-
-        FMPI_ASSERT(last == mergeBuffer.end());
-
-        FMPI_DBG(processed);
-
-        auto ret = std::move(mergeBuffer.begin(), mergeBuffer.end(), out);
-        return ret;
       });
 
   iterator ret;
@@ -798,9 +816,13 @@ inline void scatteredPairwiseWaitsomeOverlap(
   // dispatcher.loop_until_done();
   FMPI_ASSERT(stats.ntasks == 0);
 
-  trace.add_time("ComputeThread", t_comp);
+  trace.add_time("ComputeThread.queue_time", t_compute.queue);
+  trace.add_time("ComputeThread.compute_time", t_compute.comp);
+  trace.add_time("ComputeThread.total_time", t_compute.total);
   trace.add_time("ScheduleThread", t_schedule);
-  trace.add_time("DispatcherThread.time", stats.dispatch_time);
+  trace.add_time("DispatcherThread.dispatch_time", stats.dispatch_time);
+  trace.add_time("DispatcherThread.queue_time", stats.queue_time);
+  trace.add_time("DispatcherThread.completion_time", stats.completion_time);
   trace.put(
       "DispatcherThread.iterations", static_cast<int>(stats.iterations));
 

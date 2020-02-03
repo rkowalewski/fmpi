@@ -67,7 +67,8 @@ fmpi::Config::Config()
     dispatcher_core =
       (std::size_t(my_core) < ncores) ? my_core + ncores : my_core - ncores;
     scheduler_core = my_core;
-    comp_core      = scheduler_core + 1;
+    comp_core = my_core;
+    //comp_core      = scheduler_core + 1;
   }
   else
   {
