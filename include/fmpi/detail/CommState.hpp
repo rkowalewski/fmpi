@@ -83,7 +83,7 @@ struct SlidingReqWindow {
   iterator               mergebuf_{};
   std::vector<iter_pair> pending_{};
   std::vector<iter_pair> ready_{};
-};  // namespace detail
+};
 
 }  // namespace detail
 }  // namespace fmpi

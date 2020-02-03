@@ -201,7 +201,7 @@ inline void bruck(
 #endif
 
   {
-    rtlx::TimeTrace tt{trace, MERGE};
+    rtlx::TimeTrace tt{trace, COMPUTATION};
 
     std::vector<std::pair<InputIt, InputIt>> chunks;
     chunks.reserve(nr);
@@ -371,7 +371,7 @@ inline void bruck_indexed(
   }
 
   {
-    rtlx::TimeTrace tt{trace, MERGE};
+    rtlx::TimeTrace tt{trace, COMPUTATION};
 
     std::vector<std::pair<InputIt, InputIt>> chunks;
     chunks.reserve(nr);
@@ -550,7 +550,7 @@ inline void bruck_interleave(
 
     if (r > 0) {
       {
-        rtlx::TimeTrace tt{trace, MERGE};
+        rtlx::TimeTrace tt{trace, COMPUTATION};
         // merge chunks of last iteration...
         // auto const op_first = (r == 1) ? 0 : (one << (r - 1)) * blocksize;
         auto const op_first = merged.back();
@@ -619,7 +619,7 @@ inline void bruck_interleave(
   }
 
   {
-    rtlx::TimeTrace tt{trace, MERGE};
+    rtlx::TimeTrace tt{trace, COMPUTATION};
 
     auto const nchunks = niter;
 
@@ -807,7 +807,7 @@ inline void bruck_mod(
   }
 
   {
-    rtlx::TimeTrace tt{trace, MERGE};
+    rtlx::TimeTrace tt{trace, COMPUTATION};
 
     std::vector<std::pair<InputIt, InputIt>> chunks;
     chunks.reserve(nr);

@@ -1,40 +1,37 @@
 #ifndef FMPI_CONTAINER_STACKCONTAINER_HPP
 #define FMPI_CONTAINER_STACKCONTAINER_HPP
 
+#include <vector>
+
 #include <tlx/stack_allocator.hpp>
 
-#include <vector>
+#include <fmpi/Config.hpp>
 
 namespace fmpi {
 
 namespace detail {
 
-constexpr std::size_t MAX_STACK_SIZE_BUF = 1024;
-
 template <class T, std::size_t N>
 constexpr std::size_t stackCapacity() {
   constexpr auto requested = N * sizeof(T);
 
-  return (MAX_STACK_SIZE_BUF < requested) ? MAX_STACK_SIZE_BUF : requested;
+  return (kContainerStackSize < requested) ? kContainerStackSize : requested;
 }
 }  // namespace detail
 
-template <class ContainerType, std::size_t Size>
+template <class ContainerType, std::size_t Capacity>
 class StackContainer {
-  static constexpr std::size_t stack_capacity =
-      detail::stackCapacity<typename ContainerType::value_type, Size>();
-
-  using stack_arena = tlx::StackArena<stack_capacity>;
+  static_assert(Capacity <= kContainerStackSize, "invalid stack size");
+  using stack_arena = tlx::StackArena<Capacity>;
 
  public:
   using container_type = ContainerType;
   using value_type     = typename container_type::value_type;
-  using allocator_type = tlx::StackAllocator<value_type, stack_capacity>;
+  using allocator_type = tlx::StackAllocator<value_type, Capacity>;
 
   StackContainer()
     : allocator_(arena_)
     , container_(allocator_) {
-    container_.reserve(Size);
   }
 
   // Getters for the actual container.
@@ -72,12 +69,13 @@ class StackVector
         std::vector<
             T,
             tlx::StackAllocator<T, detail::stackCapacity<T, Size>()>>,
-        Size> {
+        detail::stackCapacity<T, Size>()> {
  private:
+  static constexpr std::size_t capacity = detail::stackCapacity<T, Size>();
+
   using base = StackContainer<
-      std::
-          vector<T, tlx::StackAllocator<T, detail::stackCapacity<T, Size>()>>,
-      Size>;
+      std::vector<T, tlx::StackAllocator<T, capacity>>,
+      capacity>;
 
  public:
   StackVector()

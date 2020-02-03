@@ -8,7 +8,7 @@
 namespace fmpi {
 
 constexpr const char TOTAL[]         = "Ttotal";
-constexpr const char MERGE[]         = "Tcomp";
+constexpr const char COMPUTATION[]         = "Tcomp";
 constexpr const char COMMUNICATION[] = "Tcomm";
 
 constexpr int EXCH_TAG_RING  = 110435;
@@ -18,7 +18,10 @@ constexpr int EXCH_TAG_BRUCK = 110436;
 constexpr std::size_t kCacheLineSize      = 64;
 constexpr std::size_t kCacheLineAlignment = 64;
 
+// MPI Thread Level
 constexpr auto kMpiThreadLevel = MPI_THREAD_SERIALIZED;
+
+constexpr std::size_t kContainerStackSize = 1024 * 1024;
 
 void initialize(int*, char*** argv);
 void finalize();

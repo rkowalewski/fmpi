@@ -32,11 +32,9 @@ namespace fmpi {
 
 namespace detail {
 
-template <typename F, typename... Ts>
-inline auto make_async(F&& f, Ts&&... params) {
-  // Suggested in effective modern C++ to get true asynchrony
-  return std::async(
-      std::launch::async, std::forward<F>(f), std::forward<Ts>(params)...);
+template <class T, std::size_t N>
+constexpr std::size_t maximum_stack_capacity() {
+  return std::min(fmpi::kContainerStackSize / sizeof(T), N);
 }
 
 static constexpr char N_COMM_ROUNDS[] = "Ncomm_rounds";
@@ -98,7 +96,7 @@ inline void scatteredPairwise_lt3(
       std::make_pair(begin + me * blocksize, begin + (me + 1) * blocksize));
 
   if (ctx.size() == 1) {
-    rtlx::TimeTrace tt(trace, MERGE);
+    rtlx::TimeTrace tt(trace, COMPUTATION);
     op(chunks, out);
     return;
   }
@@ -120,7 +118,7 @@ inline void scatteredPairwise_lt3(
   }
 
   {
-    rtlx::TimeTrace tt(trace, MERGE);
+    rtlx::TimeTrace tt(trace, COMPUTATION);
 
     chunks.emplace_back(std::make_pair(
         out + other * blocksize, out + (other + 1) * blocksize));
@@ -137,118 +135,32 @@ template <class T, std::size_t Capacity>
 using lfq_fifo =
     boost::lockfree::spsc_queue<T, boost::lockfree::capacity<Capacity>>;
 
-template <class Iterator, std::size_t Capacity>
-void push_fifo(
-    Iterator begin,
-    Iterator end,
-    lfq_fifo<typename std::iterator_traits<Iterator>::value_type, Capacity>&
-        fifo) {
-  FMPI_DBG_STREAM(
-      "pushing " << std::distance(begin, end) << " on fifo of capacity "
-                 << Capacity);
-  FMPI_ASSERT(
-      std::distance(begin, end) <=
-      static_cast<typename std::iterator_traits<Iterator>::difference_type>(
-          Capacity));
-  for (auto it = begin; it != end;) {
-    it = fifo.push(it, end);
-  }
-}
+template <
+    class InputIteratorIterator,
+    class OutputIterator,
+    class Op,
+    class Pred>
+std::pair<InputIteratorIterator, OutputIterator> apply_compute(
+    InputIteratorIterator first,
+    InputIteratorIterator last,
+    OutputIterator        d_first,
+    Op&&                  op,
+    Pred&&                has_enough_work) {
+  auto const n_merges = std::distance(first, last);
 
-template <class TaskQueue, class ReadyQueue, class OutputIterator, class Op>
-inline OutputIterator compute(
-    TaskQueue&                     q_tasks,
-    ReadyQueue&                    q_done,
-    typename TaskQueue::value_type local_task,
-    std::size_t                    n_remote_tasks,
-    std::size_t                    n_producers,
-    OutputIterator                 output,
-    Op&&                           op,
-    std::size_t                    op_threshold) {
-  using value_type =
-      typename std::iterator_traits<OutputIterator>::value_type;
-  using Task = typename TaskQueue::value_type;
-  // chunks to merge
-  std::vector<Task> chunks_to_merge;
-  chunks_to_merge.reserve(n_remote_tasks);
-  chunks_to_merge.push_back(local_task);
+  if (!has_enough_work(first, last)) return std::make_pair(first, d_first);
 
-  auto const blocksize = std::distance(local_task.first, local_task.second);
+  std::vector<
+      typename std::iterator_traits<InputIteratorIterator>::value_type>
+      chunks;
 
-  // prefix sum over all processed chunks
-  std::vector<Task> processed;
-  processed.reserve(n_producers);
+  chunks.reserve(n_merges);
+  std::copy(first, last, std::back_inserter(chunks));
 
-  std::size_t n_arrivals = 0;
+  // 2) merge all chunks
+  auto d_last = op(chunks, d_first);
 
-  auto first = output;
-
-  FMPI_DBG(n_remote_tasks);
-
-  while (n_arrivals < n_remote_tasks) {
-    auto const n_old = chunks_to_merge.size();
-    auto const n_new = q_tasks.pop(std::back_inserter(chunks_to_merge));
-    FMPI_DBG(n_new);
-    auto const n_merges = n_old + n_new;
-
-    n_arrivals += n_new;
-    FMPI_DBG(n_arrivals);
-
-    // minimum number of chunks to merge: ideally we have a full level2
-    // cache
-    bool const enough_work = n_merges >= op_threshold;
-
-    FMPI_DBG(n_merges);
-
-    if (enough_work) {
-      // 2) merge all chunks
-      auto last = op(chunks_to_merge, first);
-
-      // 4) release completed buffers for future receives
-      auto fbuf = std::begin(chunks_to_merge);
-
-      if (first == output) {
-        std::advance(fbuf, 1);
-      }
-
-      auto const nready = std::distance(fbuf, std::end(chunks_to_merge));
-
-      FMPI_DBG(nready);
-
-      detail::push_fifo(fbuf, std::end(chunks_to_merge), q_done);
-
-      chunks_to_merge.clear();
-
-      // 3) increase out iterator
-      processed.emplace_back(std::make_pair(first, last));
-      std::swap(first, last);
-    } else {
-      // we can eventually replace this with a wait method
-      // std::this_thread::yield();
-    }
-  }
-
-  auto const nels = static_cast<std::size_t>(n_producers) * blocksize;
-
-  using merge_buffer_t =
-      tlx::SimpleVector<value_type, tlx::SimpleVectorMode::NoInitNoDestroy>;
-
-  auto mergeBuffer = merge_buffer_t{nels};
-  // generate pairs of chunks to merge
-  std::copy(
-      std::begin(processed),
-      std::end(processed),
-      std::back_inserter(chunks_to_merge));
-
-  FMPI_DBG(chunks_to_merge.size());
-  // merge
-  auto const last = op(chunks_to_merge, mergeBuffer.begin());
-
-  FMPI_ASSERT(last == mergeBuffer.end());
-
-  FMPI_DBG(processed);
-
-  return std::move(mergeBuffer.begin(), mergeBuffer.end(), output);
+  return std::make_pair(last, d_last);
 }
 }  // namespace detail
 
@@ -279,6 +191,13 @@ inline void scatteredPairwiseWaitsome(
   static_assert(
       utilization_threshold > 1, "at least two concurrent receives required");
 
+  auto has_enough_work = [](auto first_piece, auto last_piece) {
+    auto const n = std::distance(first_piece, last_piece);
+    FMPI_ASSERT(n >= 0);
+
+    return std::size_t(n) >= utilization_threshold;
+  };
+
   using value_type = typename std::iterator_traits<InputIt>::value_type;
 
   auto const nr = ctx.size();
@@ -298,7 +217,7 @@ inline void scatteredPairwiseWaitsome(
     return;
   }
 
-  rtlx::TimeTrace t_comm{trace, COMMUNICATION};
+  rtlx::TimeTrace t_prepare{trace, COMMUNICATION};
 
   constexpr auto winreqs = 2 * NReqs;
 
@@ -310,66 +229,58 @@ inline void scatteredPairwiseWaitsome(
 
   auto winbuf = window_buffer{blocksize * 2 * reqsInFlight};
   using bufit = typename window_buffer::iterator;
-  using chunk = std::pair<bufit, bufit>;
+  using piece = std::pair<bufit, bufit>;
 
-  auto lfq_done = detail::lfq_fifo<chunk, NReqs>{};
+  auto lfq_done = detail::lfq_fifo<piece, NReqs>{};
 
-  auto lfq_freelist = detail::lfq_fifo<chunk, winreqs>{};
+  using freelist_t = StackContainer<
+      tlx::RingBuffer<piece, tlx::StackAllocator<piece, kContainerStackSize>>,
+      kContainerStackSize>;
+
+  freelist_t freelist{};
+  freelist->allocate(winreqs);
+  FMPI_ASSERT(freelist->size() == 0);
+
   {
-    auto chunks = std::array<chunk, winreqs>{};
-    auto r      = range<std::size_t>(chunks.size());
+    auto r = range<std::size_t>(winreqs);
 
     std::transform(
         std::begin(r),
         std::end(r),
-        std::begin(chunks),
+        std::front_inserter(freelist.container()),
         [begin = std::begin(winbuf), blocksize](auto idx) {
           return std::make_pair(
               std::next(begin, idx * blocksize),
               std::next(begin, (idx + 1) * blocksize));
         });
-
-    detail::push_fifo(std::begin(chunks), std::end(chunks), lfq_freelist);
   }
 
-  auto async_compute =
-      detail::make_async([&lfq_done,
-                          &lfq_freelist,
-                          lchunk = std::make_pair(
-                              std::next(begin, me * blocksize),
-                              std::next(begin, (me + 1) * blocksize)),
-                          totalExchanges,
-                          nr,
-                          out,
-                          op] {
-        return detail::compute(
-            lfq_done,
-            lfq_freelist,
-            lchunk,
-            totalExchanges,
-            nr,
-            out,
-            op,
-            utilization_threshold);
-      });
-
   StackVector<MPI_Request, winreqs> reqs{};
+  reqs->resize(winreqs, MPI_REQUEST_NULL);
   FMPI_ASSERT(reqs->capacity() == winreqs);
-  reqs->resize(reqs->capacity(), MPI_REQUEST_NULL);
 
-  StackVector<chunk, NReqs> arrived_chunks;
-  arrived_chunks->resize(arrived_chunks->capacity());
+  // StackVector<piece, NReqs> arrived_chunks;
+  // arrived_chunks->resize(NReqs);
+  std::vector<piece> arrived_chunks;
+  arrived_chunks.reserve(NReqs + 1);
+
+  arrived_chunks.push_back(std::make_pair(
+      std::next(begin, me * blocksize),
+      std::next(begin, (me + 1) * blocksize)));
+
+  std::vector<piece> pieces_done;
+  pieces_done.reserve(nr);
 
   StackVector<int, winreqs> indices{};
+  indices->resize(winreqs);
   FMPI_ASSERT(indices->capacity() == winreqs);
-  indices->resize(indices->capacity());
   // initially we can use the full array of request indices for send and
   // receives
   std::iota(
       indices->begin(), std::next(indices->begin(), reqsInFlight * 2), 0);
 
-  StackVector<chunk, NReqs> occupied{};
-  occupied->resize(occupied->capacity());
+  StackVector<piece, NReqs> occupied{};
+  occupied->resize(NReqs);
 
   FMPI_ASSERT(2 * reqsInFlight <= reqs->size());
 
@@ -378,11 +289,9 @@ inline void scatteredPairwiseWaitsome(
     return commAlgo.recvRank(ctx, phase);
   };
 
-  auto rbufAlloc = [&occupied, &lfq_freelist](auto /*peer*/, auto reqIdx) {
-    chunk c;
-    while (!lfq_freelist.pop(c)) {
-      // std::this_thread::yield();
-    }
+  auto rbufAlloc = [&occupied, &freelist](auto /*peer*/, auto reqIdx) {
+    auto c = freelist->back();
+    freelist->pop_back();
     return (occupied[reqIdx] = c);
   };
 
@@ -420,6 +329,7 @@ inline void scatteredPairwiseWaitsome(
   std::size_t       rphase     = 0;
   std::size_t       nSlotsRecv = reqsInFlight;
   std::size_t       nSlotsSend = reqsInFlight;
+  auto              d_first    = out;
 
   // Yes, this is an int due to API requirements in our trace module
   int n_comm_rounds = 0;
@@ -428,7 +338,10 @@ inline void scatteredPairwiseWaitsome(
   // requests
   auto sreqs_pivot = std::next(indices->begin(), reqsInFlight);
 
+  t_prepare.finish();
+
   do {
+    rtlx::TimeTrace t_comm{trace, COMMUNICATION};
     ++n_comm_rounds;
 
     FMPI_DBG(n_comm_rounds);
@@ -514,40 +427,91 @@ inline void scatteredPairwiseWaitsome(
 
     FMPI_DBG(nsent);
 
-    {
-      FMPI_DBG_STREAM("pushing " << nrecv << " on comp queue...");
-
-      // ensure that we never try to push more than we have available
-      // capacity
-      FMPI_ASSERT(nrecv <= arrived_chunks->size());
-
-      auto last = std::transform(
-          reqsCompleted.first,
-          sreqs_pivot,
-          arrived_chunks->begin(),
-          [&occupied](auto reqIdx) { return occupied[reqIdx]; });
-
-      detail::push_fifo(arrived_chunks->begin(), last, lfq_done);
-    }
-
     nSlotsRecv = std::min<std::size_t>(totalExchanges - nrreqs, nrecv);
     nSlotsSend = std::min<std::size_t>(totalExchanges - nsreqs, nsent);
 
     FMPI_ASSERT((reqsCompleted.first + nSlotsRecv) <= sreqs_pivot);
 
+    t_comm.finish();
+
+    {
+      rtlx::TimeTrace t_comp{trace, COMPUTATION};
+      FMPI_DBG_STREAM("pushing " << nrecv << " on comp queue...");
+
+      // ensure that we never try to push more than we have available
+      // capacity
+      FMPI_ASSERT(nrecv <= arrived_chunks.capacity());
+
+      std::transform(
+          reqsCompleted.first,
+          sreqs_pivot,
+          std::back_inserter(arrived_chunks),
+          [&occupied](auto reqIdx) { return occupied[reqIdx]; });
+
+      FMPI_DBG(arrived_chunks.size());
+
+      auto [last_piece, d_last] = detail::apply_compute(
+          arrived_chunks.begin(),
+          arrived_chunks.end(),
+          d_first,
+          std::forward<Op>(op),
+          has_enough_work);
+
+      FMPI_DBG_RANGE(d_first, d_last);
+      auto const has_computed = d_first != d_last;
+      if (has_computed) {
+        auto first_to_release = arrived_chunks.begin();
+        std::advance(first_to_release, (d_first == out));
+        // release chunks
+        std::copy(
+            first_to_release,
+            last_piece,
+            std::front_inserter(freelist.container()));
+
+        pieces_done.emplace_back(d_first, d_last);
+        std::swap(d_first, d_last);
+
+        arrived_chunks.erase(arrived_chunks.begin(), last_piece);
+      }
+    }
   } while (nc_reqs < total_reqs);
 
-  t_comm.finish();
+  trace.put(detail::N_COMM_ROUNDS, n_comm_rounds);
 
   {
-    rtlx::TimeTrace tt{trace, MERGE};
-    FMPI_DBG("waiting for compute");
-    auto const last = async_compute.get();
-    FMPI_ASSERT(last == out + (std::size_t(nr) * blocksize));
-  }
+    rtlx::TimeTrace t_comp{trace, COMPUTATION};
+    auto const      nels = static_cast<std::size_t>(nr) * blocksize;
 
-  trace.put(detail::N_COMM_ROUNDS, n_comm_rounds);
-}  // namespace fmpi
+    using merge_buffer_t =
+        tlx::SimpleVector<value_type, tlx::SimpleVectorMode::NoInitNoDestroy>;
+
+    auto mergeBuffer = merge_buffer_t{nels};
+
+    std::copy(
+        std::begin(pieces_done),
+        std::end(pieces_done),
+        std::back_inserter(arrived_chunks));
+
+    FMPI_DBG(arrived_chunks.size());
+
+    for (auto&& r : arrived_chunks) {
+      FMPI_DBG_RANGE(r.first, r.second);
+    }
+
+    auto [last_piece, d_last] = detail::apply_compute(
+        std::begin(arrived_chunks),
+        std::end(arrived_chunks),
+        mergeBuffer.begin(),
+        std::forward<Op>(op),
+        [](auto first, auto last) { return std::distance(first, last) > 0; });
+
+    FMPI_DBG_RANGE(mergeBuffer.begin(), mergeBuffer.end());
+    FMPI_DBG(std::make_pair(d_last, mergeBuffer.end()));
+    FMPI_ASSERT(d_last == mergeBuffer.end());
+
+    std::move(mergeBuffer.begin(), mergeBuffer.end(), out);
+  }
+}
 
 template <
     class Schedule,
@@ -822,7 +786,7 @@ inline void scatteredPairwiseWaitsomeOverlap(
     fut_comm.wait();
     t_comm.finish();
     {
-      rtlx::TimeTrace tt(trace, MERGE);
+      rtlx::TimeTrace tt(trace, COMPUTATION);
       ret = f_comp.get();
     }
   } catch (...) {
@@ -989,7 +953,7 @@ inline void scatteredPairwiseWaitall(
     }
 
     {
-      rtlx::TimeTrace{trace, MERGE};
+      rtlx::TimeTrace{trace, COMPUTATION};
       op(reqWin.ready_pieces(), mergebuf);
       auto const nMerged = reqWin.ready_pieces().size() * blocksize;
       mergebuf += nMerged;
@@ -1007,7 +971,7 @@ inline void scatteredPairwiseWaitall(
   }
 
   {
-    rtlx::TimeTrace{trace, MERGE};
+    rtlx::TimeTrace{trace, COMPUTATION};
 
     auto mergeSrc = &*out;
     auto target   = buffer.begin();
@@ -1073,7 +1037,7 @@ inline void MpiAlltoAll(
   }
 
   {
-    rtlx::TimeTrace tt(trace, MERGE);
+    rtlx::TimeTrace tt(trace, COMPUTATION);
 
     std::vector<std::pair<InputIt, InputIt>> chunks;
     chunks.reserve(nr);
