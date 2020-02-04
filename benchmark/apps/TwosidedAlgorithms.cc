@@ -142,6 +142,46 @@ static std::vector<std::pair<
                           iterator_t,
                           merger_t<iterator_t, iterator_t>,
                           4>),
+                  std::make_pair(
+                      "RingWaitsomeOverlap8",
+                      fmpi::scatteredPairwiseWaitsomeOverlap<
+                          fmpi::FlatHandshake,
+                          iterator_t,
+                          iterator_t,
+                          merger_t<iterator_t, iterator_t>,
+                          8>),
+                  std::make_pair(
+                      "RingWaitsomeOverlap16",
+                      fmpi::scatteredPairwiseWaitsomeOverlap<
+                          fmpi::FlatHandshake,
+                          iterator_t,
+                          iterator_t,
+                          merger_t<iterator_t, iterator_t>,
+                          16>),
+                  std::make_pair(
+                      "OneFactorWaitsomeOverlap4",
+                      fmpi::scatteredPairwiseWaitsomeOverlap<
+                          fmpi::OneFactor,
+                          iterator_t,
+                          iterator_t,
+                          merger_t<iterator_t, iterator_t>,
+                          4>),
+                  std::make_pair(
+                      "OneFactorWaitsomeOverlap8",
+                      fmpi::scatteredPairwiseWaitsomeOverlap<
+                          fmpi::OneFactor,
+                          iterator_t,
+                          iterator_t,
+                          merger_t<iterator_t, iterator_t>,
+                          8>),
+                  std::make_pair(
+                      "OneFactorWaitsomeOverlap16",
+                      fmpi::scatteredPairwiseWaitsomeOverlap<
+                          fmpi::OneFactor,
+                          iterator_t,
+                          iterator_t,
+                          merger_t<iterator_t, iterator_t>,
+                          16>),
                   // Bruck Algorithms, first the original one, then a modified
                   // version which omits the last local rotation step
                   std::make_pair(
@@ -324,15 +364,6 @@ int main(int argc, char* argv[]) {
               return acc + std::distance(c.first, c.second);
             });
 
-#if 0
-        __gnu_parallel::multiway_merge(
-            std::begin(seqs),
-            std::end(seqs),
-            res,
-            nels,
-            std::less<>{},
-            __gnu_parallel::parallel_tag{nthreads});
-#else
         return tlx::parallel_multiway_merge(
             std::begin(seqs),
             std::end(seqs),
@@ -342,7 +373,6 @@ int main(int argc, char* argv[]) {
             tlx::MultiwayMergeAlgorithm::MWMA_ALGORITHM_DEFAULT,
             tlx::MultiwayMergeSplittingAlgorithm::MWMSA_DEFAULT,
             omp_get_max_threads());
-#endif
       };
 
       // first we want to obtain the correct result which we can verify then
@@ -405,11 +435,6 @@ int main(int argc, char* argv[]) {
         }
 
         auto& traceStore = rtlx::TraceStore::GetInstance();
-
-        // int wait = algo.first == "AlltoAll";
-        int wait = 0;
-        while (wait)
-          ;
 
         if (it >= nwarmup) {
           m.algorithm = algo.first;
