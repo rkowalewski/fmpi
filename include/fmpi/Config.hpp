@@ -21,7 +21,8 @@ constexpr std::size_t kCacheLineAlignment = 64;
 // MPI Thread Level
 constexpr auto kMpiThreadLevel = MPI_THREAD_SERIALIZED;
 
-constexpr std::size_t kContainerStackSize = 1024 * 1024;
+constexpr std::size_t kContainerStackSize = 1024 * 512;
+constexpr std::size_t kMaxContiguousBufferSize = 1024 * 512;
 
 void initialize(int*, char*** argv);
 void finalize();
@@ -32,6 +33,7 @@ struct Config {
   int dispatcher_core{};
   int scheduler_core{};
   int comp_core{};
+  int domain_size{};
 
   static Config const& instance();
 

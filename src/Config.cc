@@ -32,7 +32,7 @@ fmpi::Config::Config()
     }
   }
 
-  std::size_t domain_size = 1;
+  domain_size = 1;
   {
     auto const* env = std::getenv("FMPI_DOMAIN_SIZE");
     if (env)

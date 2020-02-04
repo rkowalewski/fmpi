@@ -561,8 +561,14 @@ inline void scatteredPairwiseWaitsomeOverlap(
   // intermediate buffer for two pipelines
   using buffer_allocator = HeapAllocator<value_type, true /*thread_safe*/>;
 
-  uint16_t const buffersz  = winsz * blocksize * n_pipelines;
-  auto           buf_alloc = buffer_allocator{buffersz};
+  std::size_t const domain_size = Config::instance().domain_size;
+
+  auto const buffersz =
+    std::min(domain_size * kMaxContiguousBufferSize / sizeof(value_type) * n_pipelines,
+      winsz * blocksize * n_pipelines);
+
+  auto   buf_alloc = buffer_allocator{
+    std::min<std::size_t>(buffersz, std::numeric_limits<uint16_t>::max())};
 
   FMPI_DBG(buffersz);
 
@@ -747,9 +753,7 @@ inline void scatteredPairwiseWaitsomeOverlap(
             auto last = comp(chunks_to_merge, dst);
 
             auto f_buf = chunks_to_merge.begin();
-            if (processed.size() == 0) {
-              std::advance(f_buf, 1);
-            }
+            std::advance(f_buf, processed.size() == 0);
 
             for (; f_buf != chunks_to_merge.end(); ++f_buf) {
               FMPI_DBG_STREAM("release p " << f_buf->first);
