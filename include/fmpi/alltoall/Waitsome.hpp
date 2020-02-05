@@ -6,14 +6,13 @@
 
 #include <tlx/container/ring_buffer.hpp>
 
+#include <fmpi/Dispatcher.hpp>
 #include <fmpi/Span.hpp>
 
 #include <fmpi/allocator/HeapAllocator.hpp>
 #include <fmpi/container/StackContainer.hpp>
 #include <fmpi/container/buffered_channel.hpp>
 #include <fmpi/detail/Async.hpp>
-
-#include <fmpi/mpi/Dispatcher.hpp>
 
 namespace fmpi {
 

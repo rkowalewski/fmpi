@@ -6,6 +6,7 @@
 
 #include <boost/container/small_vector.hpp>
 #include <boost/lockfree/spsc_queue.hpp>
+#include <fmpi/Dispatcher.hpp>
 #include <fmpi/NumericRange.hpp>
 #include <fmpi/Span.hpp>
 #include <fmpi/allocator/ContiguousPoolAllocator.hpp>
@@ -15,7 +16,6 @@
 #include <fmpi/detail/Async.hpp>
 #include <fmpi/detail/Capture.hpp>
 #include <fmpi/mpi/Algorithm.hpp>
-#include <fmpi/mpi/Dispatcher.hpp>
 #include <fmpi/mpi/Environment.hpp>
 #include <fmpi/mpi/Request.hpp>
 #include <future>
@@ -81,17 +81,17 @@ int main(int argc, char* argv[]) {
   printf("omp_get_num_places: %d\n", nplaces);
 
   std::vector<int> myprocs;
-  for(int i = 0; i < nplaces; ++i) {
+  for (int i = 0; i < nplaces; ++i) {
     int nprocs = omp_get_place_num_procs(i);
     myprocs.resize(nprocs);
     omp_get_place_proc_ids(i, myprocs.data());
     std::ostringstream os;
     os << "rank: " << world.rank() << ", place num: " << i << ", places: {";
-    std::copy(myprocs.begin(), myprocs.end(), std::ostream_iterator<int>(os, ", "));
+    std::copy(
+        myprocs.begin(), myprocs.end(), std::ostream_iterator<int>(os, ", "));
     os << "}\n";
     std::cout << os.str();
   }
-
 
   if (provided < MPI_THREAD_SERIALIZED) {
     std::cerr << "MPI_THREAD_SERIALIZED not supported\n";
@@ -140,8 +140,7 @@ int run() {
 
   auto ready_tasks = fmpi::buffered_channel<rank_data_pair>{world.size()};
 
-  uint16_t const size =
-      std::min<uint16_t>(winsz, world.size()) * blocksize;
+  uint16_t const size = std::min<uint16_t>(winsz, world.size()) * blocksize;
 
   auto buf_alloc =
       fmpi::HeapAllocator<value_type, true /*thread_safe*/>{size};
@@ -218,9 +217,9 @@ int run() {
 
   FMPI_ASSERT(ret == rbuf.end());
 
-  //auto const pending_tasks = dispatcher.pendingTasks();
-  //FMPI_ASSERT(pending_tasks.first == 0 && pending_tasks.second == 0);
-  //FMPI_ASSERT(pending_tasks.first == 0 && pending_tasks.second == 0);
+  // auto const pending_tasks = dispatcher.pendingTasks();
+  // FMPI_ASSERT(pending_tasks.first == 0 && pending_tasks.second == 0);
+  // FMPI_ASSERT(pending_tasks.first == 0 && pending_tasks.second == 0);
 
   if (!std::equal(std::begin(rbuf), std::end(rbuf), std::begin(expect))) {
     throw std::runtime_error("invalid result");
