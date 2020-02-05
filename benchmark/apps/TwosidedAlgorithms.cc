@@ -1,17 +1,18 @@
 #include <omp.h>
 
+#include <regex>
+
+#include <tlx/algorithm.hpp>
+
+#include <rtlx/ScopedLambda.hpp>
+
+#include <fmpi/AlltoAll.hpp>
+#include <fmpi/Bruck.hpp>
+#include <fmpi/Random.hpp>
+
 #include <MPISynchronizedBarrier.hpp>
 #include <Params.hpp>
 #include <TwosidedAlgorithms.hpp>
-#include <fmpi/AlltoAll.hpp>
-#include <fmpi/Bruck.hpp>
-#include <fmpi/Math.hpp>
-#include <fmpi/Random.hpp>
-#include <parallel/algorithm>
-#include <regex>
-#include <rtlx/ScopedLambda.hpp>
-#include <tlx/algorithm.hpp>
-#include <tlx/container/simple_vector.hpp>
 
 #ifdef NDEBUG
 constexpr int nwarmup = 1;
@@ -21,195 +22,8 @@ constexpr int nwarmup = 0;
 
 // The container where we store our
 using value_t = int;
-using storage_t =
+using container =
     tlx::SimpleVector<value_t, tlx::SimpleVectorMode::NoInitNoDestroy>;
-using iterator_t = typename storage_t::iterator;
-
-template <class InputIterator, class OutputIterator>
-using merger_t = std::function<OutputIterator(
-    std::vector<std::pair<InputIterator, InputIterator>>, OutputIterator)>;
-
-static std::vector<std::pair<
-    std::string,
-    fmpi_algrithm_t<iterator_t, merger_t<iterator_t, iterator_t>>>>
-    ALGORITHMS = {std::make_pair(
-                      "AlltoAll",
-                      fmpi::MpiAlltoAll<
-                          iterator_t,
-                          iterator_t,
-                          merger_t<iterator_t, iterator_t>>),
-                  std::make_pair(
-                      "RingWaitall4",
-                      fmpi::scatteredPairwiseWaitall<
-                          fmpi::FlatHandshake,
-                          iterator_t,
-                          iterator_t,
-                          merger_t<iterator_t, iterator_t>,
-                          4>),
-                  std::make_pair(
-                      "RingWaitall8",
-                      fmpi::scatteredPairwiseWaitall<
-                          fmpi::FlatHandshake,
-                          iterator_t,
-                          iterator_t,
-                          merger_t<iterator_t, iterator_t>,
-                          8>),
-                  std::make_pair(
-                      "RingWaitall16",
-                      fmpi::scatteredPairwiseWaitall<
-                          fmpi::FlatHandshake,
-                          iterator_t,
-                          iterator_t,
-                          merger_t<iterator_t, iterator_t>,
-                          16>),
-                  std::make_pair(
-                      "OneFactorWaitall4",
-                      fmpi::scatteredPairwiseWaitall<
-                          fmpi::OneFactor,
-                          iterator_t,
-                          iterator_t,
-                          merger_t<iterator_t, iterator_t>,
-                          4>),
-                  std::make_pair(
-                      "OneFactorWaitall8",
-                      fmpi::scatteredPairwiseWaitall<
-                          fmpi::OneFactor,
-                          iterator_t,
-                          iterator_t,
-                          merger_t<iterator_t, iterator_t>,
-                          8>),
-                  std::make_pair(
-                      "OneFactorWaitall16",
-                      fmpi::scatteredPairwiseWaitall<
-                          fmpi::OneFactor,
-                          iterator_t,
-                          iterator_t,
-                          merger_t<iterator_t, iterator_t>,
-                          16>),
-                  std::make_pair(
-                      "RingWaitsome4",
-                      fmpi::scatteredPairwiseWaitsome<
-                          fmpi::FlatHandshake,
-                          iterator_t,
-                          iterator_t,
-                          merger_t<iterator_t, iterator_t>,
-                          4>),
-                  std::make_pair(
-                      "RingWaitsome8",
-                      fmpi::scatteredPairwiseWaitsome<
-                          fmpi::FlatHandshake,
-                          iterator_t,
-                          iterator_t,
-                          merger_t<iterator_t, iterator_t>,
-                          8>),
-                  std::make_pair(
-                      "RingWaitsome16",
-                      fmpi::scatteredPairwiseWaitsome<
-                          fmpi::FlatHandshake,
-                          iterator_t,
-                          iterator_t,
-                          merger_t<iterator_t, iterator_t>,
-                          16>),
-                  std::make_pair(
-                      "OneFactorWaitsome4",
-                      fmpi::scatteredPairwiseWaitsome<
-                          fmpi::OneFactor,
-                          iterator_t,
-                          iterator_t,
-                          merger_t<iterator_t, iterator_t>,
-                          4>),
-                  std::make_pair(
-                      "OneFactorWaitsome8",
-                      fmpi::scatteredPairwiseWaitsome<
-                          fmpi::OneFactor,
-                          iterator_t,
-                          iterator_t,
-                          merger_t<iterator_t, iterator_t>,
-                          8>),
-                  std::make_pair(
-                      "OneFactorWaitsome16",
-                      fmpi::scatteredPairwiseWaitsome<
-                          fmpi::OneFactor,
-                          iterator_t,
-                          iterator_t,
-                          merger_t<iterator_t, iterator_t>,
-                          16>),
-                  std::make_pair(
-                      "RingWaitsomeOverlap4",
-                      fmpi::scatteredPairwiseWaitsomeOverlap<
-                          fmpi::FlatHandshake,
-                          iterator_t,
-                          iterator_t,
-                          merger_t<iterator_t, iterator_t>,
-                          4>),
-                  std::make_pair(
-                      "RingWaitsomeOverlap8",
-                      fmpi::scatteredPairwiseWaitsomeOverlap<
-                          fmpi::FlatHandshake,
-                          iterator_t,
-                          iterator_t,
-                          merger_t<iterator_t, iterator_t>,
-                          8>),
-                  std::make_pair(
-                      "RingWaitsomeOverlap16",
-                      fmpi::scatteredPairwiseWaitsomeOverlap<
-                          fmpi::FlatHandshake,
-                          iterator_t,
-                          iterator_t,
-                          merger_t<iterator_t, iterator_t>,
-                          16>),
-                  std::make_pair(
-                      "OneFactorWaitsomeOverlap4",
-                      fmpi::scatteredPairwiseWaitsomeOverlap<
-                          fmpi::OneFactor,
-                          iterator_t,
-                          iterator_t,
-                          merger_t<iterator_t, iterator_t>,
-                          4>),
-                  std::make_pair(
-                      "OneFactorWaitsomeOverlap8",
-                      fmpi::scatteredPairwiseWaitsomeOverlap<
-                          fmpi::OneFactor,
-                          iterator_t,
-                          iterator_t,
-                          merger_t<iterator_t, iterator_t>,
-                          8>),
-                  std::make_pair(
-                      "OneFactorWaitsomeOverlap16",
-                      fmpi::scatteredPairwiseWaitsomeOverlap<
-                          fmpi::OneFactor,
-                          iterator_t,
-                          iterator_t,
-                          merger_t<iterator_t, iterator_t>,
-                          16>),
-                  // Bruck Algorithms, first the original one, then a modified
-                  // version which omits the last local rotation step
-                  std::make_pair(
-                      "Bruck",
-                      fmpi::bruck<
-                          iterator_t,
-                          iterator_t,
-                          merger_t<iterator_t, iterator_t>>),
-                  std::make_pair(
-                      "Bruck_indexed",
-                      fmpi::bruck_indexed<
-                          iterator_t,
-                          iterator_t,
-                          merger_t<iterator_t, iterator_t>>),
-                  std::make_pair(
-                      "Bruck_interleave",
-                      fmpi::bruck_interleave<
-                          iterator_t,
-                          iterator_t,
-                          merger_t<iterator_t, iterator_t>>),
-                  std::make_pair(
-                      "Bruck_Mod",
-                      fmpi::bruck_mod<
-                          iterator_t,
-                          iterator_t,
-                          merger_t<iterator_t, iterator_t>>)
-
-};
 
 int main(int argc, char* argv[]) {
   constexpr auto required = MPI_THREAD_SERIALIZED;
@@ -240,16 +54,42 @@ int main(int argc, char* argv[]) {
     return 1;
   }
 
+  using iterator_t = typename container::iterator;
+  auto merger      = [](std::vector<std::pair<iterator_t, iterator_t>> seqs,
+                   iterator_t                                     res) {
+    // parallel merge does not support inplace merging
+    // nels must be the number of elements in all sequences
+    RTLX_ASSERT(seqs.size());
+    RTLX_ASSERT(res);
+
+    auto const size = std::accumulate(
+        std::begin(seqs),
+        std::end(seqs),
+        std::size_t(0),
+        [](auto acc, auto c) {
+          return acc + std::distance(c.first, c.second);
+        });
+
+    return tlx::parallel_multiway_merge(
+        std::begin(seqs),
+        std::end(seqs),
+        res,
+        size,
+        std::less<>{},
+        tlx::MultiwayMergeAlgorithm::MWMA_ALGORITHM_DEFAULT,
+        tlx::MultiwayMergeSplittingAlgorithm::MWMSA_DEFAULT,
+        omp_get_max_threads());
+  };
+
+  auto ALGORITHMS = algorithm_list<iterator_t, decltype(merger)>();
+
   if (!params.pattern.empty()) {
     // remove algorithms not matching a pattern
-    ALGORITHMS.erase(
-        std::remove_if(
-            std::begin(ALGORITHMS),
-            std::end(ALGORITHMS),
-            [regex = std::regex(params.pattern)](auto const& algo) {
-              return !std::regex_match(algo.first, regex);
-            }),
-        ALGORITHMS.end());
+    for (auto it = std::begin(ALGORITHMS); it != std::end(ALGORITHMS); ++it) {
+      if (!std::regex_match(it->first, std::regex(params.pattern))) {
+        ALGORITHMS.erase(it);
+      }
+    }
   }
 
   if (!fmpi::isPow2(nr)) {
@@ -313,9 +153,9 @@ int main(int argc, char* argv[]) {
 
     auto nels = sendcount * nr;
 
-    auto data    = storage_t(nels);
-    auto out     = storage_t(nels);
-    auto correct = storage_t(0);
+    auto data    = container(nels);
+    auto out     = container(nels);
+    auto correct = container(0);
 
     for (auto it = 0; it < static_cast<int>(params.niters) + nwarmup; ++it) {
 #pragma omp parallel
@@ -349,36 +189,10 @@ int main(int argc, char* argv[]) {
             std::next(data.begin(), (block + 1) * sendcount)));
       }
 
-      auto merger = [](std::vector<std::pair<iterator_t, iterator_t>> seqs,
-                       iterator_t                                     res) {
-        // parallel merge does not support inplace merging
-        // nels must be the number of elements in all sequences
-        RTLX_ASSERT(seqs.size());
-        RTLX_ASSERT(res);
-
-        auto const size = std::accumulate(
-            std::begin(seqs),
-            std::end(seqs),
-            std::size_t(0),
-            [](auto acc, auto c) {
-              return acc + std::distance(c.first, c.second);
-            });
-
-        return tlx::parallel_multiway_merge(
-            std::begin(seqs),
-            std::end(seqs),
-            res,
-            size,
-            std::less<>{},
-            tlx::MultiwayMergeAlgorithm::MWMA_ALGORITHM_DEFAULT,
-            tlx::MultiwayMergeSplittingAlgorithm::MWMSA_DEFAULT,
-            omp_get_max_threads());
-      };
-
       // first we want to obtain the correct result which we can verify then
       // with our own algorithms
       if (params.check) {
-        correct = storage_t(nels);
+        correct = container(nels);
         fmpi::MpiAlltoAll(
             data.begin(),
             correct.begin(),

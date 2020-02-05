@@ -4,12 +4,14 @@
 #include <mpi.h>
 
 #include <cstddef>
+#include <iosfwd>
 
 namespace fmpi {
 
 constexpr const char TOTAL[]         = "Ttotal";
-constexpr const char COMPUTATION[]         = "Tcomp";
+constexpr const char COMPUTATION[]   = "Tcomp";
 constexpr const char COMMUNICATION[] = "Tcomm";
+constexpr const char N_COMM_ROUNDS[] = "Ncomm_rounds";
 
 constexpr int EXCH_TAG_RING  = 110435;
 constexpr int EXCH_TAG_BRUCK = 110436;
@@ -21,10 +23,10 @@ constexpr std::size_t kCacheLineAlignment = 64;
 // MPI Thread Level
 constexpr auto kMpiThreadLevel = MPI_THREAD_SERIALIZED;
 
-//constexpr std::size_t kContainerStackSize = 1024 * 4;
-//constexpr std::size_t kMaxContiguousBufferSize = 1024 * 32;
+// constexpr std::size_t kContainerStackSize = 1024 * 4;
+// constexpr std::size_t kMaxContiguousBufferSize = 1024 * 32;
 
-constexpr std::size_t kContainerStackSize = 1024 * 512;
+constexpr std::size_t kContainerStackSize      = 1024 * 512;
 constexpr std::size_t kMaxContiguousBufferSize = 1024 * 512;
 
 void initialize(int*, char*** argv);
