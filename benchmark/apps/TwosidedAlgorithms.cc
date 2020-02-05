@@ -81,13 +81,18 @@ int main(int argc, char* argv[]) {
         omp_get_max_threads());
   };
 
-  auto ALGORITHMS = algorithm_list<iterator_t, decltype(merger)>();
+  auto ALGORITHMS =
+      algorithm_list<iterator_t, iterator_t, decltype(merger)>();
 
   if (!params.pattern.empty()) {
     // remove algorithms not matching a pattern
-    for (auto it = std::begin(ALGORITHMS); it != std::end(ALGORITHMS); ++it) {
-      if (!std::regex_match(it->first, std::regex(params.pattern))) {
-        ALGORITHMS.erase(it);
+    auto const regex = std::regex(".*Overlap.*");
+    for (auto it = std::begin(ALGORITHMS); it != std::end(ALGORITHMS);) {
+      auto const matches = std::regex_match(it->first, regex);
+      if (!matches) {
+        it = ALGORITHMS.erase(it);
+      } else {
+        ++it;
       }
     }
   }
