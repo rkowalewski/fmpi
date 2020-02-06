@@ -228,7 +228,7 @@ inline CommDispatcher<testReqs>::CommDispatcher(std::size_t winsz)
 
 template <typename mpi::reqsome_op testReqs>
 inline CommDispatcher<testReqs>::~CommDispatcher() {
-  //loop_until_done();
+  // loop_until_done();
   stop_worker();
   thread_.join();
 }
@@ -282,7 +282,7 @@ inline void CommDispatcher<testReqs>::worker() {
   duration completion_time{};
   duration queue_time{};
 
-  auto inc_time = [](auto const&monotonic_time, auto& target) {
+  auto inc_time = [](auto const& monotonic_time, auto& target) {
     FMPI_ASSERT(!(target > monotonic_time));
     auto const diff = monotonic_time - target;
     target += diff;
@@ -319,7 +319,7 @@ inline void CommDispatcher<testReqs>::worker() {
         // If a timeout occurs, unlock and
         constexpr auto interval = std::chrono::microseconds(1);
         if (!cv_tasks_.wait_for(
-                lk, interval, [this]() {return stats_.ntasks > 0; })) {
+                lk, interval, [this]() { return stats_.ntasks > 0; })) {
           // lock is again released...
           continue;
         };
@@ -365,6 +365,13 @@ template <typename mpi::reqsome_op testReqs>
 inline std::size_t CommDispatcher<testReqs>::process_requests() {
   int* last;
 
+  auto const nreqs = std::count_if(
+      std::begin(mpi_reqs_), std::end(mpi_reqs_), [](auto const& req) {
+        return req != MPI_REQUEST_NULL;
+      });
+
+  FMPI_DBG(nreqs);
+
   auto mpi_ret = testReqs(
       &*std::begin(mpi_reqs_),
       &*std::end(mpi_reqs_),
@@ -375,6 +382,8 @@ inline std::size_t CommDispatcher<testReqs>::process_requests() {
   FMPI_CHECK_MPI(mpi_ret);
 
   auto const nCompleted = std::distance(&*std::begin(indices_), last);
+
+  FMPI_DBG(nCompleted);
 
   // left half of reqs array array are receives
   // right half sends

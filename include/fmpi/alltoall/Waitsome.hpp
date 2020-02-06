@@ -500,7 +500,7 @@ inline void scatteredPairwiseWaitsomeOverlap(
 
   // Dispatcher Thread
 
-  fmpi::CommDispatcher dispatcher{winsz};
+  fmpi::CommDispatcher<mpi::waitsome> dispatcher{winsz};
   dispatcher.start_worker();
   dispatcher.pinToCore(config.dispatcher_core);
 
@@ -581,6 +581,10 @@ inline void scatteredPairwiseWaitsomeOverlap(
             auto const sticket = dispatcher.postAsync(
                 request_type::ISEND,
                 [&ctx, speer, sb](MPI_Request* req, Ticket) -> int {
+
+                  FMPI_DBG_STREAM(
+                      "mpi::isend to rank " << speer << ", span: " << sb);
+
                   return mpi::isend(
                       sb.data(),
                       sb.size(),
