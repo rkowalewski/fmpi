@@ -38,8 +38,8 @@ int main(int argc, char* argv[]) {
 
   mpi::Context worldCtx{MPI_COMM_WORLD};
 
-  auto me = worldCtx.rank();
-  auto nr = worldCtx.size();
+  auto const me = worldCtx.rank();
+  auto const nr = worldCtx.size();
 
   if (provided < required) {
     if (me == 0) {
@@ -147,7 +147,7 @@ int main(int argc, char* argv[]) {
     RTLX_ASSERT(blocksize >= sizeof(value_t));
     RTLX_ASSERT(blocksize % sizeof(value_t) == 0);
 
-    auto sendcount = blocksize / sizeof(value_t);
+    auto const sendcount = blocksize / sizeof(value_t);
 
     FMPI_DBG(sendcount);
 
@@ -156,14 +156,14 @@ int main(int argc, char* argv[]) {
     // Required by good old 32-bit MPI
     RTLX_ASSERT(sendcount > 0 && sendcount < std::numeric_limits<int>::max());
 
-    auto nels = sendcount * nr;
+    auto const nels = sendcount * nr;
 
     auto data    = container(nels);
     auto out     = container(nels);
     auto correct = container(0);
 
     for (auto it = 0; it < static_cast<int>(params.niters) + nwarmup; ++it) {
-#pragma omp parallel
+#pragma omp parallel default(none) shared(data)
       {
         std::mt19937_64 generator(random_seed_seq::get_instance());
         std::uniform_int_distribution<value_t> distribution(-1E6, 1E6);
