@@ -70,11 +70,11 @@ class Function<RET(ARGS...), STORAGE_SIZE> {
  public:
   Function() = default;
   // Ctors
-  Function(RET (*ptr)(ARGS...));  // construct with function pointer
+  explicit Function(RET (*ptr)(ARGS...));  // construct with function pointer
   template <typename FUNCTOR>
-  Function(FUNCTOR&& functor);  // construct with functor
+  explicit Function(FUNCTOR&& functor);  // construct with functor
   Function(const Function<RET(ARGS...)>& other) = delete;
-  Function(Function<RET(ARGS...)>&& other);
+  explicit Function(Function<RET(ARGS...)>&& other);
   Function& operator=(const Function<RET(ARGS...), STORAGE_SIZE>& other) =
       delete;
   Function& operator=(Function<RET(ARGS...), STORAGE_SIZE>&& other);
@@ -148,7 +148,7 @@ Function<RET(ARGS...), STORAGE_SIZE>::Function(RET (*ptr)(ARGS...))
 template <typename RET, typename... ARGS, std::size_t STORAGE_SIZE>
 template <typename FUNCTOR>
 Function<RET(ARGS...), STORAGE_SIZE>::Function(FUNCTOR&& functor) {
-  static_assert(!std::is_lvalue_reference<FUNCTOR>::value, "");
+  static_assert(!std::is_lvalue_reference<FUNCTOR>::value);
   initFunctor(
       std::forward<FUNCTOR>(functor), std::is_lvalue_reference<FUNCTOR>());
 }

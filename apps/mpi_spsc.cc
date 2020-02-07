@@ -278,7 +278,7 @@ void schedule_comm(
 
     auto sticket = dispatcher.postAsync(
         fmpi::request_type::ISEND,
-        [sb, peer, &ctx](MPI_Request* req, fmpi::Ticket) -> int {
+        [sb, peer, &ctx](MPI_Request* req, fmpi::Ticket /*unused*/) -> int {
           return mpi::isend(
               sb.data(),
               sb.size(),
@@ -287,7 +287,7 @@ void schedule_comm(
               ctx,
               req);
         },
-        [](MPI_Status /*unused*/, fmpi::Ticket) {
+        [](MPI_Status /*unused*/, fmpi::Ticket /*unused*/) {
           std::cout << "callback fire for send\n";
         });
 

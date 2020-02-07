@@ -39,7 +39,7 @@ struct HeapAllocator : public ContiguousPoolAllocator<T, ThreadSafe> {
     typedef HeapAllocator<U> other;
   };
   //------------------------------- Methods ----------------------------------
-  HeapAllocator(index_type size)
+  explicit HeapAllocator(index_type size)
     : _size(size)
     , _buffer(std::make_unique<aligned_type[]>(size)) {
     if (!_buffer) {
@@ -56,11 +56,11 @@ struct HeapAllocator : public ContiguousPoolAllocator<T, ThreadSafe> {
 
   // Rebound types
   template <typename U>
-  HeapAllocator(const HeapAllocator<U>& other)
+  explicit HeapAllocator(const HeapAllocator<U>& other)
     : HeapAllocator(other.size()) {
   }
   template <typename U>
-  HeapAllocator(HeapAllocator<U>&& other)
+  explicit HeapAllocator(HeapAllocator<U>&& other)
     : ContiguousPoolAllocator<T>(std::move(other))
     , _size((index_type)resize<U, T>(other._size))
     , _buffer(other._buffer) {
@@ -76,19 +76,19 @@ struct HeapAllocator : public ContiguousPoolAllocator<T, ThreadSafe> {
       const HeapAllocator& other) {
     return HeapAllocator(other.size());
   }
-  bool operator==(const this_type&) const {
+  bool operator==(const this_type& /*unused*/) const {
     return true;
   }
-  bool operator!=(const this_type&) const {
+  bool operator!=(const this_type& /*unused*/) const {
     return false;
   }
-  index_type size() const {
+  [[nodiscard]] index_type size() const {
     return _size;
   }
 
  private:
   //------------------------------- Members ----------------------------------
-  index_type                      _size;
+  index_type                      _size{};
   std::unique_ptr<aligned_type[]> _buffer;
 };
 }  // namespace fmpi

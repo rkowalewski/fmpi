@@ -54,7 +54,7 @@ struct Config {
   Config& operator=(Config&&) = delete;
 };
 
-std::ostream& operator<<(std::ostream&, const Config&);
+std::ostream& operator<<(std::ostream& /*os*/, const Config& /*pinning*/);
 
 void print_config(std::ostream& os);
 

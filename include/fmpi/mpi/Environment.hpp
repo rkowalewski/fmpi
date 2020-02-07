@@ -15,7 +15,6 @@ class Context {
 
  public:
   explicit Context(MPI_Comm comm);
-  ~Context();
 
   Context(const Context&) = delete;
   Context& operator=(const Context&) = delete;

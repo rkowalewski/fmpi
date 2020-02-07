@@ -39,7 +39,7 @@ fmpi::Config::Config() {
   domain_size = 1;
   {
     auto const* env = std::getenv("FMPI_DOMAIN_SIZE");
-    if (env) {
+    if (env != nullptr) {
       std::istringstream{std::string(env)} >> domain_size;
     }
   }

@@ -27,7 +27,7 @@ class Timer {
  public:
   using duration = typename Clock::duration;
 
-  constexpr Timer(duration& marker)
+  constexpr explicit Timer(duration& marker)
     : _done(false)
     , _mark(marker)
     , _start(Clock::now()) {
@@ -38,14 +38,16 @@ class Timer {
   }
 
   void finish() {
-    if (_done) return;
+    if (_done) {
+      return;
+    }
 
     _stop = Clock::now();
 
     _mark += _stop - _start;
     _done = true;
   }
-  bool done() const noexcept {
+  [[nodiscard]] bool done() const noexcept {
     return _done;
   }
 

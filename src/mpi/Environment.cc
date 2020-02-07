@@ -16,9 +16,6 @@ Context::Context(MPI_Comm comm)
   m_rank = static_cast<Rank>(rank);
 }
 
-Context::~Context() {
-}
-
 auto Context::rank() const noexcept -> Rank {
   return m_rank;
 }

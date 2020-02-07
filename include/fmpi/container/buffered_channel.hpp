@@ -6,8 +6,8 @@
 // based on Dmitry Vyukov's MPMC queue
 // (http://www.1024cores.net/home/lock-free-algorithms/queues/bounded-mpmc-queue)
 
-#ifndef BUFFERED_CHANNEL_H
-#define BUFFERED_CHANNEL_H
+#ifndef FMPI_CONTAINER_BUFFERED_CHANNEL_HPP
+#define FMPI_CONTAINER_BUFFERED_CHANNEL_HPP
 
 #include <atomic>
 #include <chrono>
@@ -66,7 +66,7 @@ class buffered_channel {
   // shared read cacheline
   alignas(kCacheLineAlignment) slot* slots_{nullptr};
   std::size_t capacity_;
-  char        pad_[kCacheLineSize];
+  char        pad_[kCacheLineSize]{};
   std::size_t waiting_consumer_{0};
 
   bool is_full_() {
@@ -198,7 +198,8 @@ class buffered_channel {
           not_empty_cnd_.notify_one();
         }
         return status;
-      } else if (channel_op_status::full == status) {
+      }
+      if (channel_op_status::full == status) {
         std::unique_lock<std::mutex> lk{mtx_};
         if (is_closed()) {
           return channel_op_status::closed;
@@ -225,7 +226,8 @@ class buffered_channel {
         s->cycle.store(idx + capacity_, std::memory_order_release);
         not_full_cnd_.notify_one();
         return std::move(value);
-      } else if (channel_op_status::empty == status) {
+      }
+      if (channel_op_status::empty == status) {
         std::unique_lock<std::mutex> lk{mtx_};
         ++waiting_consumer_;
         if (is_closed()) {
@@ -246,4 +248,4 @@ class buffered_channel {
 };
 }  // namespace fmpi
 
-#endif  // BUFFERED_CHANNEL_H
+#endif  // FMPI_CONTAINER_BUFFERED_CHANNEL_HPP

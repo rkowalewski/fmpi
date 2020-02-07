@@ -1,5 +1,5 @@
-#ifndef FMPI_ALLOCATOR_CONTIGUOUSPOOLMANAGER_HPP
-#define FMPI_ALLOCATOR_CONTIGUOUSPOOLMANAGER_HPP
+#ifndef FMPI_ALLOCATOR_CONTIGUOUSPOOLALLOCATOR_HPP
+#define FMPI_ALLOCATOR_CONTIGUOUSPOOLALLOCATOR_HPP
 
 #include <memory>
 #include <mutex>
@@ -15,7 +15,7 @@ struct LockGuard : public std::lock_guard<std::mutex> {
 
 template <>
 struct LockGuard<false> {
-  LockGuard(std::mutex& /*unused*/) {
+  explicit LockGuard(std::mutex& /*unused*/) {
   }
 };
 }  // namespace detail
@@ -62,10 +62,11 @@ struct ContiguousPoolAllocator {
   };
   // Rebound types
   template <typename U>
-  ContiguousPoolAllocator(
+  explicit ContiguousPoolAllocator(
       const ContiguousPoolAllocator<U, ThreadSafe>& other);
   template <typename U>
-  ContiguousPoolAllocator(ContiguousPoolAllocator<U, ThreadSafe>&& other);
+  explicit ContiguousPoolAllocator(
+      ContiguousPoolAllocator<U, ThreadSafe>&& other);
   template <typename U>
   ContiguousPoolAllocator& operator                  =(
       const ContiguousPoolAllocator<U, ThreadSafe>&) = delete;
@@ -88,21 +89,21 @@ struct ContiguousPoolAllocator {
   //------------------------- Accessors ------------------------------
   void          setBuffer(aligned_type* buffer, index_type size);
   pointer       address(reference x) const;
-  const_pointer address(const_reference x) const;
-  size_type     max_size() const;
+  [[nodiscard]] const_pointer address(const_reference x) const;
+  [[nodiscard]] size_type     max_size() const;
   template <typename... Args>
   void    construct(T* p, Args&&... args);
   void    destroy(pointer p);
-  pointer allocate(size_type = 1, const_pointer = 0);
-  void    deallocate(pointer p, size_type = 1);
+  pointer allocate(size_type /*n*/ = 1, const_pointer /*unused*/ = nullptr);
+  void    deallocate(pointer p, size_type /*n*/ = 1);
   template <typename... Args>
   pointer    create(Args&&... args);
   void       dispose(pointer p);
-  size_t     allocatedBlocks() const;
-  size_t     allocatedHeapBlocks() const;
-  bool       isFull() const;
-  bool       isEmpty() const;
-  index_type size() const;
+  [[nodiscard]] size_t     allocatedBlocks() const;
+  [[nodiscard]] size_t     allocatedHeapBlocks() const;
+  [[nodiscard]] bool       isFull() const;
+  [[nodiscard]] bool       isEmpty() const;
+  [[nodiscard]] index_type size() const;
   explicit   operator bool() const;
 
  private:
@@ -188,9 +189,9 @@ void ContiguousPoolAllocator<T, ThreadSafe>::setBuffer(
   }
   _control->_size   = size;
   _control->_buffer = buffer;
-  if (_control->_freeBlocks) {
+
     delete[] _control->_freeBlocks;
-  }
+
   _control->_freeBlocks = new index_type[size];
   if (!_control->_freeBlocks) {
     throw std::bad_alloc();
@@ -235,7 +236,8 @@ void ContiguousPoolAllocator<T, ThreadSafe>::destroy(pointer p) {
 
 template <typename T, bool ThreadSafe>
 typename ContiguousPoolAllocator<T, ThreadSafe>::pointer
-ContiguousPoolAllocator<T, ThreadSafe>::allocate(size_type n, const_pointer) {
+ContiguousPoolAllocator<T, ThreadSafe>::allocate(
+    size_type n, const_pointer /*unused*/) {
   assert(bufferStart());
   {
     detail::LockGuard<ThreadSafe> lock(_control->_mutex);

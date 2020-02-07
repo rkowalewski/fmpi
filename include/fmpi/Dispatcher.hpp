@@ -1,5 +1,5 @@
-#ifndef FMPI_MPI_DISPATCHER_HPP
-#define FMPI_MPI_DISPATCHER_HPP
+#ifndef FMPI_DISPATCHER_HPP
+#define FMPI_DISPATCHER_HPP
 
 #include <mpi.h>
 
@@ -53,7 +53,7 @@ struct Ticket {
   uint32_t id{};
 };
 
-std::ostream& operator<<(std::ostream& os, Ticket const& ticket) {
+inline std::ostream& operator<<(std::ostream& os, Ticket const& ticket) {
   os << "{ id : " << ticket.id << " }";
   return os;
 }
@@ -81,7 +81,6 @@ class CommDispatcher {
   static constexpr uint16_t default_task_capacity = 1000;
   /// Task Signature
   using task_t = Function<int(MPI_Request*, Ticket)>;
-
   /// Callback Signature
   using callback_t = Function<void(MPI_Status, Ticket)>;
 
@@ -111,7 +110,6 @@ class CommDispatcher {
 
   using queue_list_allocator = HeapAllocator<Task, false>;
   using queue_list = std::list<Task, ContiguousPoolAllocator<Task, false>>;
-  // using queue_list = std::list<Task>;
 
   // Uniq Task ID
   uint32_t seqCounter_{};  // counter for uniq ticket ids
@@ -165,10 +163,8 @@ class CommDispatcher {
 
   ~CommDispatcher();
 
-  Ticket postAsync(
-      request_type                          qid,
-      Function<int(MPI_Request*, Ticket)>&& task,
-      Function<void(MPI_Status, Ticket)>&&  callback);
+  template <typename T, typename C>
+  Ticket postAsync(request_type qid, T&& task, C&& callback);
 
   void loop_until_done();
 
@@ -244,14 +240,6 @@ inline void CommDispatcher<testReqs>::start_worker() {
 }
 
 template <typename mpi::reqsome_op testReqs>
-inline Ticket CommDispatcher<testReqs>::postAsync(
-    request_type                          qid,
-    Function<int(MPI_Request*, Ticket)>&& task,
-    Function<void(MPI_Status, Ticket)>&&  callback) {
-  return do_enqueue(qid, std::move(task), std::move(callback));
-}
-
-template <typename mpi::reqsome_op testReqs>
 inline Ticket CommDispatcher<testReqs>::do_enqueue(
     request_type type, task_t&& task, callback_t&& callback) {
   Ticket ticket;
@@ -314,7 +302,7 @@ inline void CommDispatcher<testReqs>::worker() {
       stats_.iterations++;
       stats_.busy -= nCompleted;
 
-      if (stats_.ntasks == 0u) {
+      if (stats_.ntasks == 0U) {
         // wait for new tasks for a maximum of 10ms
         // If a timeout occurs, unlock and
         constexpr auto interval = std::chrono::microseconds(1);
@@ -361,6 +349,16 @@ inline void CommDispatcher<testReqs>::worker() {
   }
 }
 
+template <mpi::reqsome_op testReqs>
+template <typename T, typename C>
+Ticket CommDispatcher<testReqs>::postAsync(
+    request_type qid, T&& task, C&& callback) {
+  return do_enqueue(
+      qid,
+      task_t{std::forward<T>(task)},
+      callback_t{std::forward<C>(callback)});
+}
+
 template <typename mpi::reqsome_op testReqs>
 inline std::size_t CommDispatcher<testReqs>::process_requests() {
   int* last;
@@ -405,7 +403,9 @@ inline std::size_t CommDispatcher<testReqs>::process_requests() {
   for (auto it = &*std::begin(indices_); it < fstSent; ++it) {
     auto& processed = pending_[*it];
 
-    if (!processed.callback) continue;
+    if (!processed.callback) {
+      continue;
+    }
 
     // we explcitly set the error field to propagate succeeded MPI calls.
     // MPI does not do that, unfortunately.
