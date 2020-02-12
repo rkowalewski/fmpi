@@ -20,6 +20,7 @@ fmpi::Config const& fmpi::Config::instance() {
   static fmpi::Config config{};
   return config;
 }
+
 fmpi::Config::Config() {
   {
     int flag;

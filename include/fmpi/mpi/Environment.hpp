@@ -1,9 +1,9 @@
 #ifndef FMPI_MPI_ENVIRONMENT_HPP
 #define FMPI_MPI_ENVIRONMENT_HPP
 
-#include <mpi.h>
-
 #include <cstdint>
+
+#include <mpi.h>
 
 #include <fmpi/mpi/Rank.hpp>
 
@@ -25,15 +25,26 @@ class Context {
 
   [[nodiscard]] auto mpiComm() const noexcept -> MPI_Comm;
 
+  static Context& world();
+
  private:
   size_type m_size{};
   Rank      m_rank{};
   MPI_Comm  m_comm{MPI_COMM_NULL};
 };
 
-bool is_thread_main();
+enum class ThreadLevel : int
+{
+  Single     = MPI_THREAD_SINGLE,
+  Funneled   = MPI_THREAD_FUNNELED,
+  Serialized = MPI_THREAD_SERIALIZED,
+  Multiple   = MPI_THREAD_MULTIPLE
+};
 
-std::string processor_name();
+bool initialize(int* argc, char*** argv, ThreadLevel level);
+void finalize();
+
+bool is_thread_main();
 
 auto splitSharedComm(Context const& baseComm) -> Context;
 

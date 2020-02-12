@@ -6,7 +6,6 @@
 #include <fmpi/mpi/Environment.hpp>
 #include <fmpi/mpi/TypeMapper.hpp>
 
-
 namespace mpi {
 
 template <class T>

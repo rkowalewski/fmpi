@@ -5,6 +5,7 @@
 #include <tlx/algorithm.hpp>
 
 #include <rtlx/ScopedLambda.hpp>
+#include <rtlx/UnorderedMap.hpp>
 
 #include <fmpi/AlltoAll.hpp>
 #include <fmpi/Bruck.hpp>
@@ -26,31 +27,27 @@ using container =
     tlx::SimpleVector<value_t, tlx::SimpleVectorMode::NoInitNoDestroy>;
 
 int main(int argc, char* argv[]) {
-  constexpr auto required = MPI_THREAD_SERIALIZED;
+  // Initialize MPI
+  auto const success =
+      mpi::initialize(&argc, &argv, mpi::ThreadLevel::Serialized);
+  RTLX_ASSERT(success);
 
-  int provided;
+  auto finalizer = rtlx::scope_exit([]() { mpi::finalize(); });
 
-  RTLX_ASSERT_RETURNS(
-      MPI_Init_thread(&argc, &argv, required, &provided), MPI_SUCCESS);
-
-  auto finalizer = rtlx::scope_exit(
-      []() { RTLX_ASSERT_RETURNS(MPI_Finalize(), MPI_SUCCESS); });
-
-  mpi::Context worldCtx{MPI_COMM_WORLD};
-
-  auto const me = worldCtx.rank();
-  auto const nr = worldCtx.size();
-
-  if (provided < required) {
-    if (me == 0) {
-      std::cout << "MPI_THREAD_SERIALIZED is not supported!\n";
-      return 1;
-    }
-  }
+  auto& world = mpi::Context::world();
 
   fmpi::benchmark::Params params{};
+  if (!fmpi::benchmark::process(argc, argv, world, params)) {
+    return 1;
+  }
 
-  if (!fmpi::benchmark::process(argc, argv, worldCtx, params)) {
+  auto const me = world.rank();
+  auto const nr = world.size();
+
+  if ((nr % params.nhosts) != 0) {
+    if (me == 0) {
+      std::cout << "number of ranks must be equal on all nodes\n";
+    }
     return 1;
   }
 
@@ -86,15 +83,10 @@ int main(int argc, char* argv[]) {
 
   if (!params.pattern.empty()) {
     // remove algorithms not matching a pattern
-    auto const regex = std::regex(".*Overlap.*");
-    for (auto it = std::begin(ALGORITHMS); it != std::end(ALGORITHMS);) {
-      auto const matches = std::regex_match(it->first, regex);
-      if (!matches) {
-        it = ALGORITHMS.erase(it);
-      } else {
-        ++it;
-      }
-    }
+    auto const regex = std::regex(params.pattern);
+    rtlx::erase_if(ALGORITHMS, [regex](auto const& entry) {
+      return !std::regex_match(entry.first, regex);
+    });
   }
 
   if (!fmpi::isPow2(nr)) {
@@ -109,13 +101,11 @@ int main(int argc, char* argv[]) {
     }
   }
 
-  RTLX_ASSERT((nr % params.nhosts) == 0);
-
   if (me == 0) {
     std::cout << "Node Topology:\n";
   }
 
-  MPI_Barrier(worldCtx.mpiComm());
+  MPI_Barrier(world.mpiComm());
 
   int32_t const ppn = nr / params.nhosts;
 
@@ -126,7 +116,7 @@ int main(int argc, char* argv[]) {
     std::cout << os.str();
   }
 
-  MPI_Barrier(worldCtx.mpiComm());
+  MPI_Barrier(world.mpiComm());
 
   if (me == 0) {
     std::cout << "\n";
@@ -136,7 +126,7 @@ int main(int argc, char* argv[]) {
 
   // calibrate clock
   auto clock           = SynchronizedClock{};
-  bool is_clock_synced = clock.Init(worldCtx.mpiComm());
+  bool is_clock_synced = clock.Init(world.mpiComm());
   RTLX_ASSERT(is_clock_synced);
 
   FMPI_DBG(params.niters);
@@ -202,7 +192,7 @@ int main(int argc, char* argv[]) {
             data.begin(),
             correct.begin(),
             static_cast<int>(sendcount),
-            worldCtx,
+            world,
             merger);
       }
 
@@ -220,15 +210,15 @@ int main(int argc, char* argv[]) {
 
         // We always want to guarantee that all processors start at the same
         // time, so this is a real barrier
-        auto barrier = clock.Barrier(worldCtx.mpiComm());
-        RTLX_ASSERT(barrier.Success(worldCtx.mpiComm()));
+        auto barrier = clock.Barrier(world.mpiComm());
+        RTLX_ASSERT(barrier.Success(world.mpiComm()));
 
         auto total = run_algorithm(
             algo.second,
             data.begin(),
             out.begin(),
             static_cast<int>(sendcount),
-            worldCtx,
+            world,
             merger);
 
         if (params.check) {
@@ -272,7 +262,7 @@ int main(int argc, char* argv[]) {
 
       // synchronize before advancing to the next stage
       FMPI_DBG("Iteration Finished");
-      MPI_Barrier(worldCtx.mpiComm());
+      MPI_Barrier(world.mpiComm());
     }
   }
 

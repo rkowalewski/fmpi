@@ -1,6 +1,10 @@
+#include <mpi.h>
+
 #include <fmpi/Debug.hpp>
 #include <fmpi/mpi/Environment.hpp>
+
 #include <rtlx/Assert.hpp>
+#include <rtlx/Enum.hpp>
 
 namespace mpi {
 
@@ -13,7 +17,7 @@ Context::Context(MPI_Comm comm)
   m_size = sz;
 
   RTLX_ASSERT_RETURNS(MPI_Comm_rank(m_comm, &rank), MPI_SUCCESS);
-  m_rank = static_cast<Rank>(rank);
+  m_rank = Rank{rank};
 }
 
 auto Context::rank() const noexcept -> Rank {
@@ -43,10 +47,27 @@ auto splitSharedComm(Context const& baseComm) -> Context {
   return Context{sharedComm};
 }
 
+Context& Context::world() {
+  static Context ctx{MPI_COMM_WORLD};
+  return ctx;
+}
+
 bool is_thread_main() {
   int flag;
   FMPI_CHECK_MPI(MPI_Is_thread_main(&flag));
   return flag == 1;
 }
 
+bool initialize(int* argc, char*** argv, ThreadLevel level) {
+  auto const required = rtlx::to_underlying(level);
+  int        provided;
+
+  auto const success = MPI_Init_thread(argc, argv, required, &provided);
+
+  return success == MPI_SUCCESS && required <= provided;
+}
+
+void finalize() {
+  RTLX_ASSERT_RETURNS(MPI_Finalize(), MPI_SUCCESS);
+}
 }  // namespace mpi

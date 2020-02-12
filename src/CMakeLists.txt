@@ -1,10 +1,11 @@
 add_library(fmpi
-    mpi/Environment.cc
     mpi/Algorithm.cc
+    mpi/Environment.cc
     mpi/Rank.cc
     mpi/Request.cc
     Schedule.cc
     Config.cc
+    Dispatcher.cc
     )
 
 target_include_directories(fmpi PUBLIC ../include)

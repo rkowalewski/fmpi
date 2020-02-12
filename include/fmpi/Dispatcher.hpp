@@ -7,8 +7,10 @@
 #include <deque>
 #include <mutex>
 #include <numeric>
+#include <queue>
 #include <thread>
 
+#include <rtlx/Enum.hpp>
 #include <rtlx/Timer.hpp>
 
 #include <tlx/container/ring_buffer.hpp>
@@ -53,10 +55,8 @@ struct Ticket {
   uint32_t id{};
 };
 
-inline std::ostream& operator<<(std::ostream& os, Ticket const& ticket) {
-  os << "{ id : " << ticket.id << " }";
-  return os;
-}
+std::ostream& operator<<(std::ostream& os, fmpi::Ticket const& ticket);
+
 constexpr bool operator==(Ticket const& l, Ticket const& r) noexcept {
   return l.id == r.id;
 }
@@ -80,36 +80,37 @@ class CommDispatcher {
  private:
   static constexpr uint16_t default_task_capacity = 1000;
   /// Task Signature
-  using task_t = Function<int(MPI_Request*, Ticket)>;
+  using task_func = Function<int(MPI_Request*, Ticket)>;
   /// Callback Signature
-  using callback_t = Function<void(MPI_Status, Ticket)>;
+  using callback_func = Function<void(MPI_Status, Ticket)>;
 
   template <class _T>
   using simple_vector =
       tlx::SimpleVector<_T, tlx::SimpleVectorMode::NoInitNoDestroy>;
 
-  static constexpr auto n_types = to_underlying(request_type::SENTINEL);
+  static constexpr auto n_types = rtlx::to_underlying(request_type::SENTINEL);
 
   static_assert(n_types == 2, "only two request types supported for now");
 
   /// Workload Item keeping a task, done callback and a ticket
   struct alignas(kCacheLineAlignment) Task {
-    task_t     task{};
-    callback_t callback{};
-    Ticket     ticket{};
-    status     state{status::pending};
+    task_func     task{};
+    callback_func callback{};
+    Ticket        ticket{};
+    status        state{status::pending};
 
     Task() = default;
 
-    Task(task_t&& f, callback_t&& c, Ticket t)
+    Task(task_func&& f, callback_func&& c, Ticket t)
       : task(std::move(f))
       , callback(std::move(c))
       , ticket(t) {
     }
   };
 
-  using queue_list_allocator = HeapAllocator<Task, false>;
-  using queue_list = std::list<Task, ContiguousPoolAllocator<Task, false>>;
+  using task_allocator = HeapAllocator<Task, false>;
+  using task_list  = std::list<Task, ContiguousPoolAllocator<Task, false>>;
+  using task_queue = std::queue<Task, task_list>;
 
   // Uniq Task ID
   uint32_t seqCounter_{};  // counter for uniq ticket ids
@@ -118,13 +119,10 @@ class CommDispatcher {
   // Thread Safe Work Sharing //
   //////////////////////////////
 
-  queue_list_allocator alloc_;
+  task_allocator alloc_;
 
   // Task Lists: One for each type
-  std::array<queue_list, n_types> queues_;
-  // total over all tasks
-  // std::size_t ntasks_{};
-  // std::size_t busy_{};
+  std::array<task_queue, n_types> queues_;
 
   // Mutex to protect work sharing variables
   mutable std::mutex mutex_;
@@ -132,6 +130,8 @@ class CommDispatcher {
   std::condition_variable cv_tasks_;
   // Condition to signal a finished task
   std::condition_variable cv_finished_;
+
+  Statistics stats_{};
 
   //////////////////////////////////
   // Sliding Window Worker Thread //
@@ -156,8 +156,6 @@ class CommDispatcher {
   std::thread      thread_;
   std::atomic_bool running_;
 
-  Statistics stats_{};
-
  public:
   explicit CommDispatcher(std::size_t winsz);
 
@@ -176,23 +174,19 @@ class CommDispatcher {
   Statistics stats() const;
 
  private:
-  Ticket do_enqueue(request_type type, task_t&& task, callback_t&& callback);
+  Ticket do_enqueue(
+      request_type type, task_func&& task, callback_func&& callback);
 
   std::size_t process_requests();
 
-  [[nodiscard]] bool has_pending_requests() const noexcept {
-    return std::any_of(
-        std::begin(mpi_reqs_), std::end(mpi_reqs_), [](auto const& req) {
-          return req != MPI_REQUEST_NULL;
-        });
-  }
+  [[nodiscard]] bool has_pending_requests() const noexcept;
 
   void worker();
-};
+};  // namespace fmpi
 
 template <typename mpi::reqsome_op testReqs>
 inline CommDispatcher<testReqs>::CommDispatcher(std::size_t winsz)
-  : alloc_(queue_list_allocator{default_task_capacity})
+  : alloc_(task_allocator{default_task_capacity})
   , winsz_(winsz)
   , reqs_in_flight_(winsz_ / n_types)
   , pending_(winsz_)
@@ -201,7 +195,7 @@ inline CommDispatcher<testReqs>::CommDispatcher(std::size_t winsz)
   , indices_(winsz_)
   , running_(true) {
   for (auto&& i : range(queues_.size())) {
-    queues_[i] = std::move(queue_list{alloc_});
+    queues_[i] = std::move(task_queue{alloc_});
   }
 
   std::uninitialized_fill(
@@ -241,7 +235,7 @@ inline void CommDispatcher<testReqs>::start_worker() {
 
 template <typename mpi::reqsome_op testReqs>
 inline Ticket CommDispatcher<testReqs>::do_enqueue(
-    request_type type, task_t&& task, callback_t&& callback) {
+    request_type type, task_func&& task, callback_func&& callback) {
   Ticket ticket;
   {
     // 1) Acquire lock
@@ -252,7 +246,7 @@ inline Ticket CommDispatcher<testReqs>::do_enqueue(
 
     ++stats_.ntasks;
 
-    queues_[to_underlying(type)].push_front(
+    queues_[rtlx::to_underlying(type)].push(
         Task{std::move(task), std::move(callback), ticket});
   }  // 3) Release lock
 
@@ -270,10 +264,9 @@ inline void CommDispatcher<testReqs>::worker() {
   duration completion_time{};
   duration queue_time{};
 
-  auto inc_time = [](auto const& monotonic_time, auto& target) {
-    FMPI_ASSERT(!(target > monotonic_time));
-    auto const diff = monotonic_time - target;
-    target += diff;
+  auto reset_time = [](auto const& monotonic_time, auto& target) {
+    auto const old = std::exchange(target, monotonic_time);
+    FMPI_ASSERT(!(old > monotonic_time));
   };
 
   // loop until termination
@@ -295,9 +288,9 @@ inline void CommDispatcher<testReqs>::worker() {
       // acquire the lock
       std::unique_lock<std::mutex> lk(mutex_);
 
-      inc_time(completion_time, stats_.completion_time);
-      inc_time(queue_time, stats_.queue_time);
-      inc_time(dispatch_time, stats_.dispatch_time);
+      reset_time(completion_time, stats_.completion_time);
+      reset_time(queue_time, stats_.queue_time);
+      reset_time(dispatch_time, stats_.dispatch_time);
 
       stats_.iterations++;
       stats_.busy -= nCompleted;
@@ -318,8 +311,8 @@ inline void CommDispatcher<testReqs>::worker() {
         for (auto&& unused : range(n)) {
           std::ignore = unused;
 
-          auto task = std::move(queues_[q].back());
-          queues_[q].pop_back();
+          auto task = std::move(queues_[q].front());
+          queues_[q].pop();
 
           // get a free slot
           auto const slot = req_slots_[q].back();
@@ -355,8 +348,8 @@ Ticket CommDispatcher<testReqs>::postAsync(
     request_type qid, T&& task, C&& callback) {
   return do_enqueue(
       qid,
-      task_t{std::forward<T>(task)},
-      callback_t{std::forward<C>(callback)});
+      task_func{std::forward<T>(task)},
+      callback_func{std::forward<C>(callback)});
 }
 
 template <typename mpi::reqsome_op testReqs>
@@ -393,12 +386,14 @@ inline std::size_t CommDispatcher<testReqs>::process_requests() {
   std::copy(
       &*std::begin(indices_),
       fstSent,
-      std::front_inserter(req_slots_[to_underlying(request_type::IRECV)]));
+      std::front_inserter(
+          req_slots_[rtlx::to_underlying(request_type::IRECV)]));
 
   std::copy(
       fstSent,
       last,
-      std::front_inserter(req_slots_[to_underlying(request_type::ISEND)]));
+      std::front_inserter(
+          req_slots_[rtlx::to_underlying(request_type::ISEND)]));
 
   for (auto it = &*std::begin(indices_); it < fstSent; ++it) {
     auto& processed = pending_[*it];
@@ -446,6 +441,14 @@ inline void CommDispatcher<testReqs>::loop_until_done() {
     cv_finished_.wait(
         lk, [this]() { return stats_.ntasks == 0 && stats_.busy == 0; });
   }
+}
+
+template <mpi::reqsome_op testReqs>
+inline bool CommDispatcher<testReqs>::has_pending_requests() const noexcept {
+  return std::any_of(
+      std::begin(mpi_reqs_), std::end(mpi_reqs_), [](auto const& req) {
+        return req != MPI_REQUEST_NULL;
+      });
 }
 
 }  // namespace fmpi
