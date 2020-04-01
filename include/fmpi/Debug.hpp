@@ -139,7 +139,12 @@ auto operator<<(std::ostream& os, std::pair<F, T> const& p) -> std::ostream& {
     static_cast<void>(__VA_ARGS__); \
   } while (0)
 
-#define FMPI_DBG_RANGE(...)
+#define FMPI_DBG_RANGE(f, l) \
+  do {                       \
+    static_cast<void>(f);    \
+    static_cast<void>(l);    \
+  } while (0)
+
 #define FMPI_DBG_STREAM(...)
 #endif
 

@@ -27,7 +27,7 @@ template <
     class OutputIt,
     class Op,
     size_t NReqs>
-void scatteredPairwiseWaitsome(
+void RingWaitsome(
     InputIt             begin,
     OutputIt            out,
     int                 blocksize,
@@ -40,7 +40,7 @@ template <
     class OutputIt,
     class Op,
     size_t NReqs>
-inline void scatteredPairwiseWaitsomeOverlap(
+inline void RingWaitsomeOverlap(
     InputIt             begin,
     OutputIt            out,
     int                 blocksize,
@@ -53,7 +53,7 @@ template <
     class OutputIt,
     class Op,
     size_t NReqs>
-inline void scatteredPairwiseWaitall(
+inline void RingWaitall(
     InputIt             begin,
     OutputIt            out,
     int                 blocksize,

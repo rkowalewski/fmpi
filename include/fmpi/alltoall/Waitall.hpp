@@ -27,7 +27,7 @@ template <
     class OutputIt,
     class Op,
     size_t NReqs = 1>
-inline void scatteredPairwiseWaitall(
+inline void RingWaitall(
     InputIt               begin,
     OutputIt              out,
     int                   blocksize,
@@ -50,7 +50,7 @@ inline void scatteredPairwiseWaitall(
       "running algorithm " << os.str() << ", blocksize: " << blocksize);
 
   if (nr < 3) {
-    detail::scatteredPairwise_lt3(
+    detail::Ring_lt3(
         begin, out, blocksize, ctx, std::forward<Op&&>(op), trace);
     return;
   }

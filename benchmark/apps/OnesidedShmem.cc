@@ -59,21 +59,21 @@ std::array<std::pair<std::string, twoSidedAlgo_t>, 9> TWO_SIDED = {
             merge_t<iterator_t, iterator_t>>),
     std::make_pair(
         "ScatteredPairwiseFlatHandshake",
-        fmpi::scatteredPairwise<
+        fmpi::Ring<
             fmpi::AllToAllAlgorithm::FLAT_HANDSHAKE,
             iterator_t,
             iterator_t,
             merge_t<iterator_t, iterator_t>>),
     std::make_pair(
         "ScatteredPairwiseOneFactor",
-        fmpi::scatteredPairwise<
+        fmpi::Ring<
             fmpi::AllToAllAlgorithm::ONE_FACTOR,
             iterator_t,
             iterator_t,
             merge_t<iterator_t, iterator_t>>),
     std::make_pair(
         "ScatteredPairwiseWaitsomeFlatHandshake4",
-        fmpi::scatteredPairwiseWaitsome<
+        fmpi::RingWaitsome<
             fmpi::AllToAllAlgorithm::FLAT_HANDSHAKE,
             iterator_t,
             iterator_t,
@@ -81,7 +81,7 @@ std::array<std::pair<std::string, twoSidedAlgo_t>, 9> TWO_SIDED = {
             4>),
     std::make_pair(
         "ScatteredPairwiseWaitsomeFlatHandshake8",
-        fmpi::scatteredPairwiseWaitsome<
+        fmpi::RingWaitsome<
             fmpi::AllToAllAlgorithm::FLAT_HANDSHAKE,
             iterator_t,
             iterator_t,
@@ -89,7 +89,7 @@ std::array<std::pair<std::string, twoSidedAlgo_t>, 9> TWO_SIDED = {
             8>),
     std::make_pair(
         "ScatteredPairwiseWaitsomeFlatHandshake16",
-        fmpi::scatteredPairwiseWaitsome<
+        fmpi::RingWaitsome<
             fmpi::AllToAllAlgorithm::FLAT_HANDSHAKE,
             iterator_t,
             iterator_t,
@@ -97,7 +97,7 @@ std::array<std::pair<std::string, twoSidedAlgo_t>, 9> TWO_SIDED = {
             16>),
     std::make_pair(
         "ScatteredPairwiseWaitsomeOneFactor4",
-        fmpi::scatteredPairwiseWaitsome<
+        fmpi::RingWaitsome<
             fmpi::AllToAllAlgorithm::ONE_FACTOR,
             iterator_t,
             iterator_t,
@@ -105,7 +105,7 @@ std::array<std::pair<std::string, twoSidedAlgo_t>, 9> TWO_SIDED = {
             4>),
     std::make_pair(
         "ScatteredPairwiseWaitsomeOneFactor8",
-        fmpi::scatteredPairwiseWaitsome<
+        fmpi::RingWaitsome<
             fmpi::AllToAllAlgorithm::ONE_FACTOR,
             iterator_t,
             iterator_t,
@@ -113,7 +113,7 @@ std::array<std::pair<std::string, twoSidedAlgo_t>, 9> TWO_SIDED = {
             8>),
     std::make_pair(
         "ScatteredPairwiseWaitsomeOneFactor16",
-        fmpi::scatteredPairwiseWaitsome<
+        fmpi::RingWaitsome<
             fmpi::AllToAllAlgorithm::ONE_FACTOR,
             iterator_t,
             iterator_t,
@@ -122,16 +122,16 @@ std::array<std::pair<std::string, twoSidedAlgo_t>, 9> TWO_SIDED = {
 #if 0
     std::make_pair(
         "ScatteredPairwiseWaitany16",
-        fmpi::scatteredPairwiseWaitany<iterator_t, iterator_t, merge_t, 16>),
+        fmpi::RingWaitany<iterator_t, iterator_t, merge_t, 16>),
     std::make_pair(
         "ScatteredPairwiseWaitany32",
-        fmpi::scatteredPairwiseWaitany<iterator_t, iterator_t, merge_t, 32>),
+        fmpi::RingWaitany<iterator_t, iterator_t, merge_t, 32>),
     std::make_pair(
         "ScatteredPairwiseWaitany64",
-        fmpi::scatteredPairwiseWaitany<iterator_t, iterator_t, merge_t, 64>),
+        fmpi::RingWaitany<iterator_t, iterator_t, merge_t, 64>),
     std::make_pair(
         "ScatteredPairwiseWaitany128",
-        fmpi::scatteredPairwiseWaitany<iterator_t, iterator_t, merge_t, 128>),
+        fmpi::RingWaitany<iterator_t, iterator_t, merge_t, 128>),
     // Hierarchical XOR Shift Hypercube, works only if #PEs is power of two
     std::make_pair(
         "Hypercube", fmpi::hypercube<iterator_t, iterator_t, merge_t>),

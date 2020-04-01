@@ -88,7 +88,7 @@ template <
     class OutputIt,
     class Op,
     size_t NReqs = 2>
-inline void scatteredPairwiseWaitsome(
+inline void RingWaitsome(
     InputIt             begin,
     OutputIt            out,
     int                 blocksize,
@@ -123,7 +123,7 @@ inline void scatteredPairwiseWaitsome(
       "running algorithm " << os.str() << ", blocksize: " << blocksize);
 
   if (nr < 3) {
-    detail::scatteredPairwise_lt3(
+    detail::Ring_lt3(
         begin, out, blocksize, ctx, std::forward<Op&&>(op), trace);
     return;
   }
@@ -430,7 +430,7 @@ template <
     class OutputIt,
     class Op,
     size_t NReqs = 2>
-inline void scatteredPairwiseWaitsomeOverlap(
+inline void RingWaitsomeOverlap(
     InputIt             begin,
     OutputIt            out,
     int                 blocksize,
@@ -452,7 +452,7 @@ inline void scatteredPairwiseWaitsomeOverlap(
       "running algorithm " << os.str() << ", blocksize: " << blocksize);
 
   if (nr < 3) {
-    detail::scatteredPairwise_lt3(
+    detail::Ring_lt3(
         begin, out, blocksize, ctx, std::forward<Op&&>(op), trace);
     return;
   }
