@@ -1,25 +1,37 @@
+/*
+ * Copyright (c) Facebook, Inc. and its affiliates.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
 #include <omp.h>
 
 #include <regex>
-
-#include <tlx/algorithm.hpp>
-
-#include <rtlx/ScopedLambda.hpp>
-#include <rtlx/UnorderedMap.hpp>
 
 #include <fmpi/AlltoAll.hpp>
 #include <fmpi/Bruck.hpp>
 #include <fmpi/Random.hpp>
 
+#include <rtlx/ScopedLambda.hpp>
+#include <rtlx/UnorderedMap.hpp>
+
+#include <tlx/algorithm.hpp>
+
 #include <MPISynchronizedBarrier.hpp>
 #include <Params.hpp>
 #include <TwosidedAlgorithms.hpp>
 
-#ifdef NDEBUG
-constexpr int nwarmup = 1;
-#else
-constexpr int nwarmup = 0;
-#endif
+#include <fmpi/concurrency/CacheLocality.hpp>
 
 // The container where we store our
 using value_t = int;
@@ -28,10 +40,7 @@ using container =
 
 int main(int argc, char* argv[]) {
   // Initialize MPI
-  auto const success =
-      mpi::initialize(&argc, &argv, mpi::ThreadLevel::Serialized);
-  RTLX_ASSERT(success);
-
+  mpi::initialize(&argc, &argv, mpi::ThreadLevel::Serialized);
   auto finalizer = rtlx::scope_exit([]() { mpi::finalize(); });
 
   auto& world = mpi::Context::world();
@@ -78,50 +87,31 @@ int main(int argc, char* argv[]) {
         omp_get_max_threads());
   };
 
-  auto ALGORITHMS =
-      algorithm_list<iterator_t, iterator_t, decltype(merger)>();
+  auto ALGORITHMS = algorithm_list<iterator_t, iterator_t, decltype(merger)>(
+      params.pattern, world);
 
-  if (!params.pattern.empty()) {
-    // remove algorithms not matching a pattern
-    auto const regex = std::regex(params.pattern);
-    rtlx::erase_if(ALGORITHMS, [regex](auto const& entry) {
-      return !std::regex_match(entry.first, regex);
-    });
-  }
-
-  if (!fmpi::isPow2(nr)) {
-    // remove bruck_mod if we have not a power of 2 ranks.
-    auto it = std::find_if(
-        std::begin(ALGORITHMS), std::end(ALGORITHMS), [](auto const& algo) {
-          return algo.first == "Bruck_Mod";
-        });
-
-    if (it != std::end(ALGORITHMS)) {
-      ALGORITHMS.erase(it);
-    }
-  }
-
-  if (me == 0) {
-    std::cout << "Node Topology:\n";
-  }
-
-  MPI_Barrier(world.mpiComm());
-
-  int32_t const ppn = nr / params.nhosts;
-
-  if (me < ppn) {
+  {
+    MPI_Barrier(world.mpiComm());
     std::ostringstream os;
-    os << "  MPI Rank " << me << "\n";
-    fmpi::print_config(os);
+
+    if (me == 0) {
+      os << "Node Topology:\n";
+    }
+
+    int32_t const ppn = nr / params.nhosts;
+
+    if (me < ppn) {
+      os << "  MPI Rank " << me << "\n";
+      fmpi::print_config(os);
+    }
+
     std::cout << os.str();
+    MPI_Barrier(world.mpiComm());
   }
 
-  MPI_Barrier(world.mpiComm());
-
   if (me == 0) {
-    std::cout << "\n";
     fmpi::benchmark::printBenchmarkPreamble(std::cout, "++ ", "\n");
-    printMeasurementHeader(std::cout);
+    write_csv_header(std::cout);
   }
 
   // calibrate clock
@@ -178,12 +168,6 @@ int main(int argc, char* argv[]) {
         }
       }
 
-      for (std::size_t block = 0; block < std::size_t(nr); ++block) {
-        RTLX_ASSERT(std::is_sorted(
-            std::next(data.begin(), block * sendcount),
-            std::next(data.begin(), (block + 1) * sendcount)));
-      }
-
       // first we want to obtain the correct result which we can verify then
       // with our own algorithms
       if (params.check) {
@@ -205,7 +189,7 @@ int main(int argc, char* argv[]) {
       m.nbytes    = nels * nr * sizeof(value_t);
       m.blocksize = blocksize;
 
-      for (auto const& algo : ALGORITHMS) {
+      for (auto&& algo : ALGORITHMS) {
         FMPI_DBG_STREAM("running algorithm: " << algo.first);
 
         // We always want to guarantee that all processors start at the same
@@ -214,6 +198,7 @@ int main(int argc, char* argv[]) {
         RTLX_ASSERT(barrier.Success(world.mpiComm()));
 
         auto total = run_algorithm(
+
             algo.second,
             data.begin(),
             out.begin(),
@@ -222,25 +207,8 @@ int main(int argc, char* argv[]) {
             merger);
 
         if (params.check) {
-          auto check = std::equal(
-              correct.begin(), std::next(correct.begin(), nels), out.begin());
-
-          if (!check) {
-            std::ostringstream os;
-            os << "[ERROR] [Rank " << me << "] " << algo.first
-               << ": incorrect sequence (";
-            std::copy(
-                out.begin(),
-                out.end(),
-                std::ostream_iterator<value_t>(os, ", "));
-            os << ") vs. (";
-            std::copy(
-                correct.begin(),
-                correct.end(),
-                std::ostream_iterator<value_t>(os, ", "));
-            os << ")\n";
-            std::cerr << os.str();
-          }
+          validate(
+              out.begin(), out.end(), correct.begin(), world, algo.first);
         }
 
         auto& traceStore = rtlx::TraceStore::GetInstance();
@@ -251,10 +219,11 @@ int main(int argc, char* argv[]) {
 
           auto traces = traceStore.traces(algo.first);
 
-          // insert total time
-          traces.insert(std::make_pair(fmpi::TOTAL, total));
+          write_csv_line(std::cout, m, std::make_pair(fmpi::TOTAL, total));
 
-          printMeasurementCsvLine(std::cout, m, traces);
+          for (auto&& entry : traces) {
+            write_csv_line(std::cout, m, entry);
+          }
         }
 
         traceStore.erase(algo.first);
@@ -276,7 +245,7 @@ std::ostream& operator<<(
   return os;
 }
 
-void printMeasurementHeader(std::ostream& os) {
+void write_csv_header(std::ostream& os) {
   os << "Nodes, Procs, Threads, Round, NBytes, Blocksize, Algo, Rank, "
         "Iteration, "
         "Measurement, "
@@ -289,25 +258,42 @@ std::ostream& operator<<(
   return os;
 }
 
-void printMeasurementCsvLine(
-    std::ostream&      os,
-    Measurement const& params,
-    std::unordered_map<std::string, typename rtlx::TraceStore::value_t> const&
-        traces) {
-  for (auto&& trace : traces) {
-    std::ostringstream myos;
-    myos << params.nhosts << ", ";
-    myos << params.nprocs << ", ";
-    myos << params.nthreads << ", ";
-    myos << params.step << ", ";
-    myos << params.nbytes << ", ";
-    myos << params.blocksize << ", ";
-    myos << params.algorithm << ", ";
-    myos << params.me << ", ";
-    myos << params.iter << ", ";
-    myos << trace.first << ", ";
-    myos << trace.second << "\n";
-
-    os << myos.str();
-  }
+void write_csv_line(
+    std::ostream&                                                     os,
+    Measurement const&                                                params,
+    std::pair<std::string, typename rtlx::TraceStore::value_t> const& entry) {
+  std::ostringstream myos;
+  myos << params.nhosts << ", ";
+  myos << params.nprocs << ", ";
+  myos << params.nthreads << ", ";
+  myos << params.step << ", ";
+  myos << params.nbytes << ", ";
+  myos << params.blocksize << ", ";
+  myos << params.algorithm << ", ";
+  myos << params.me << ", ";
+  myos << params.iter << ", ";
+  myos << entry.first << ", ";
+  myos << entry.second << "\n";
+  os << myos.str();
 }
+
+#if 0
+  auto& sys = folly::CacheLocality::system<>();
+
+  std::ostringstream os1;
+
+  os1 << "numCpus= " << sys.numCpus << "\n";
+  os1 << "numCachesByLevel= \n";
+  for (std::size_t i = 0; i < sys.numCachesByLevel.size(); ++i) {
+    os1 << "  [" << i << "]= " << sys.numCachesByLevel[i] << "\n";
+  }
+  os1 << "localityIndexByCpu= \n";
+  for (std::size_t i = 0; i < sys.localityIndexByCpu.size(); ++i) {
+    os1 << "  [" << i << "]= " << sys.localityIndexByCpu[i] << "\n";
+  }
+
+  if (me == 0) {
+    std::cout << os1.str();
+  }
+  return 0;
+#endif

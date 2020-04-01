@@ -20,8 +20,8 @@
 #include <fmpi/Debug.hpp>
 #include <fmpi/NumericRange.hpp>
 #include <fmpi/Span.hpp>
-#include <fmpi/Utils.hpp>
 #include <fmpi/allocator/HeapAllocator.hpp>
+#include <fmpi/common/Porting.hpp>
 #include <fmpi/container/BoundedBuffer.hpp>
 #include <fmpi/detail/Capture.hpp>
 #include <fmpi/mpi/Algorithm.hpp>

@@ -1,8 +1,10 @@
 add_library(fmpi
+    concurrency/CacheLocality.cc
     mpi/Algorithm.cc
     mpi/Environment.cc
     mpi/Rank.cc
     mpi/Request.cc
+    common/Porting.cc
     Schedule.cc
     Config.cc
     Dispatcher.cc

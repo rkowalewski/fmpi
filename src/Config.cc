@@ -7,14 +7,7 @@
 
 #include <fmpi/Config.hpp>
 #include <fmpi/Debug.hpp>
-
-static inline int get_num_threads() {
-#ifdef _OPENMP
-  return omp_get_max_threads();
-#else
-  return std::thread::hardware_concurrency();
-#endif
-}
+#include <fmpi/common/Porting.hpp>
 
 fmpi::Config const& fmpi::Config::instance() {
   static fmpi::Config config{};
@@ -136,6 +129,8 @@ void fmpi::print_config(std::ostream& os) {
       os << os1.str();
     }
 
-    os << " ]\n";
+    os << "]";
   }
+
+  os << std::endl;
 }

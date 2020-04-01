@@ -3,13 +3,15 @@
 
 #include <future>
 
-#include <fmpi/Utils.hpp>
+#include <fmpi/common/Porting.hpp>
 #include <fmpi/detail/Capture.hpp>
 #include <fmpi/mpi/Environment.hpp>
 
 #include <rtlx/Timer.hpp>
 
 namespace fmpi {
+
+namespace detail {
 
 template <typename RET, typename FUNC, typename... ARGS>
 constexpr void call_with_promise(
@@ -23,6 +25,7 @@ constexpr void call_with_promise(
   callable();
   pr.set_value();
 }
+}  // namespace detail
 
 template <typename R, typename F, typename... Ts>
 inline std::future<R> async(int core, F&& f, Ts&&... params) {
@@ -39,23 +42,23 @@ inline std::future<R> async(int core, F&& f, Ts&&... params) {
 #if defined(NDEBUG)
     auto thread =
         std::thread([fn = std::move(lambda), p = std::move(pr)]() mutable {
-          call_with_promise(fn, p);
+            detail::call_with_promise(fn, p);
         });
 #else
     auto thread = std::thread(
         [fn = std::move(lambda), p = std::move(pr), core]() mutable {
           auto const cpu = sched_getcpu();
           FMPI_DBG(std::make_pair(cpu, core));
-        //  FMPI_ASSERT(cpu == core);
+          //  FMPI_ASSERT(cpu == core);
 
-          call_with_promise(fn, p);
+          detail::call_with_promise(fn, p);
         });
 #endif
 
     fmpi::pinThreadToCore(thread, core);
     thread.detach();
   } else {
-    call_with_promise(lambda, pr);
+    detail::call_with_promise(lambda, pr);
   }
 
   return fut;

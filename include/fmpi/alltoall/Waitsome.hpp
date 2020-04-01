@@ -4,15 +4,18 @@
 #include <cstdint>
 #include <numeric>
 
-#include <tlx/container/ring_buffer.hpp>
-
 #include <fmpi/Dispatcher.hpp>
 #include <fmpi/Span.hpp>
 
 #include <fmpi/allocator/HeapAllocator.hpp>
+#include <fmpi/alltoall/Detail.hpp>
 #include <fmpi/container/StackContainer.hpp>
 #include <fmpi/container/buffered_channel.hpp>
 #include <fmpi/detail/Async.hpp>
+
+#include <rtlx/Trace.hpp>
+
+#include <tlx/container/ring_buffer.hpp>
 
 namespace fmpi {
 
@@ -469,7 +472,7 @@ inline void scatteredPairwiseWaitsomeOverlap(
   // intermediate buffer for two pipelines
   using buffer_allocator = HeapAllocator<value_type, true /*thread_safe*/>;
 
-  std::size_t const nthreads = Config::instance().num_threads;
+  std::size_t const nthreads = config.num_threads;
 
   FMPI_DBG(nthreads);
   FMPI_DBG(blocksize);
@@ -736,8 +739,10 @@ inline void scatteredPairwiseWaitsomeOverlap(
 
   auto const stats = dispatcher.stats();
 
-  // dispatcher.loop_until_done();
+#ifndef NDEBUG
+  dispatcher.loop_until_done();
   FMPI_ASSERT(stats.ntasks == 0);
+#endif
 
   trace.add_time("ComputeThread.queue_time", t_compute.queue);
   trace.add_time("ComputeThread.compute_time", t_compute.comp);

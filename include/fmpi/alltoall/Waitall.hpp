@@ -3,12 +3,16 @@
 
 #include <sstream>
 
+#include <fmpi/Debug.hpp>
+#include <fmpi/Schedule.hpp>
+#include <fmpi/alltoall/Detail.hpp>
 #include <fmpi/mpi/Environment.hpp>
 #include <fmpi/mpi/Request.hpp>
 
-#include <fmpi/Schedule.hpp>
+#include <rtlx/Trace.hpp>
 
 #include <tlx/math/div_ceil.hpp>
+#include <tlx/simple_vector.hpp>
 
 namespace fmpi {
 
@@ -24,14 +28,14 @@ template <
     class Op,
     size_t NReqs = 1>
 inline void scatteredPairwiseWaitall(
-    InputIt             begin,
-    OutputIt            out,
-    int                 blocksize,
-    mpi::Context const& ctx,
-    Op&&                op) {
+    InputIt               begin,
+    OutputIt              out,
+    int                   blocksize,
+    ::mpi::Context const& ctx,
+    Op&&                  op) {
   using value_type = typename std::iterator_traits<OutputIt>::value_type;
-  using buffer_t =
-      tlx::SimpleVector<value_type, tlx::SimpleVectorMode::NoInitNoDestroy>;
+  using buffer_t   = ::tlx::
+      SimpleVector<value_type, ::tlx::SimpleVectorMode::NoInitNoDestroy>;
 
   auto me = ctx.rank();
   auto nr = ctx.size();

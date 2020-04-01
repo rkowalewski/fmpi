@@ -6,9 +6,7 @@ add_subdirectory(google/benchmark)
 
 add_library(MPISynchronizedBarrier MPISynchronizedBarrier/MPISynchronizedBarrier.cc)
 
-target_include_directories(MPISynchronizedBarrier PUBLIC
-    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}>/MPISynchronizedBarrier/
-    $<INSTALL_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}>/MPISynchronizedBarrier/)
+target_include_directories(MPISynchronizedBarrier PUBLIC MPISynchronizedBarrier)
 
 target_link_libraries(MPISynchronizedBarrier PRIVATE MPI::MPI_CXX)
 

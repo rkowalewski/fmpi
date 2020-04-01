@@ -1,11 +1,19 @@
-#ifndef FMPI_UTILS_HPP
-#define FMPI_UTILS_HPP
+#include <fmpi/OpenMP.hpp>
+#include <fmpi/common/Porting.hpp>
 
 #include <thread>
 
 namespace fmpi {
 
-inline bool pinThreadToCore(std::thread& thread, int core_id) {
+int get_num_threads() {
+#ifdef _OPENMP
+  return omp_get_max_threads();
+#else
+  return std::thread::hardware_concurrency();
+#endif
+}
+
+bool pinThreadToCore(std::thread& thread, int core_id) {
   cpu_set_t cpuSet;
   CPU_ZERO(&cpuSet);
   CPU_SET(core_id % std::thread::hardware_concurrency(), &cpuSet);
@@ -14,6 +22,4 @@ inline bool pinThreadToCore(std::thread& thread, int core_id) {
 
   return rc == 0;
 }
-
 }  // namespace fmpi
-#endif
