@@ -1,5 +1,5 @@
-#ifndef FMPI_CONCURRENCY_HPP
-#define FMPI_CONCURRENCY_HPP
+#ifndef FMPI_CONCURRENCY_CACHELOCALITY_HPP
+#define FMPI_CONCURRENCY_CACHELOCALITY_HPP
 
 #include <atomic>
 #include <functional>

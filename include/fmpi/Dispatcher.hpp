@@ -6,6 +6,7 @@
 #include <atomic>
 #include <deque>
 #include <mutex>
+#include <new>
 #include <numeric>
 #include <queue>
 #include <thread>
@@ -22,6 +23,7 @@
 #include <fmpi/Span.hpp>
 #include <fmpi/allocator/HeapAllocator.hpp>
 #include <fmpi/common/Porting.hpp>
+#include <fmpi/concurrency/UnlockGuard.hpp>
 #include <fmpi/container/BoundedBuffer.hpp>
 #include <fmpi/detail/Capture.hpp>
 #include <fmpi/mpi/Algorithm.hpp>
@@ -68,13 +70,19 @@ class CommDispatcher {
 
  public:
   struct Statistics {
-    std::size_t ntasks{};
-    std::size_t busy{};
-    std::size_t completed{};
-    std::size_t iterations{};
-    duration    dispatch_time{};
-    duration    queue_time{};
-    duration    completion_time{};
+    // modified externally and internally
+    // synchronization between producers and consumers
+    alignas(kCacheLineAlignment) std::size_t ntasks{};
+
+    // modified internally, read externally
+    alignas(kCacheLineAlignment) struct {
+      std::size_t busy{};
+      std::size_t completed{};
+      std::size_t iterations{};
+      duration    dispatch_time{};
+      duration    queue_time{};
+      duration    completion_time{};
+    };
   };
 
  private:
@@ -122,7 +130,7 @@ class CommDispatcher {
   task_allocator alloc_;
 
   // Task Lists: One for each type
-  std::array<task_queue, n_types> queues_;
+  alignas(kCacheLineAlignment) std::array<task_queue, n_types> queues_;
 
   // Mutex to protect work sharing variables
   mutable std::mutex mutex_;
@@ -177,9 +185,12 @@ class CommDispatcher {
   Ticket do_enqueue(
       request_type type, task_func&& task, callback_func&& callback);
 
-  std::size_t process_requests();
+  std::size_t progress_requests();
 
   [[nodiscard]] bool has_pending_requests() const noexcept;
+
+  // !!! CAUTION: Never Call this without holding the mutex !!!
+  bool is_all_done() const noexcept;
 
   void worker();
 };  // namespace fmpi
@@ -218,7 +229,6 @@ inline CommDispatcher<testReqs>::CommDispatcher(std::size_t winsz)
 
 template <typename mpi::reqsome_op testReqs>
 inline CommDispatcher<testReqs>::~CommDispatcher() {
-  // loop_until_done();
   stop_worker();
   thread_.join();
 }
@@ -248,9 +258,10 @@ inline Ticket CommDispatcher<testReqs>::do_enqueue(
 
     queues_[rtlx::to_underlying(type)].push(
         Task{std::move(task), std::move(callback), ticket});
-  }  // 3) Release lock
 
-  cv_tasks_.notify_one();
+    // 3) signal
+    cv_tasks_.notify_one();
+  }  // 4) Release lock
 
   return ticket;
 }
@@ -261,69 +272,77 @@ inline void CommDispatcher<testReqs>::worker() {
   new_reqs.reserve(winsz_);
 
   duration dispatch_time{};
-  duration completion_time{};
-  duration queue_time{};
-
-  auto reset_time = [](auto const& monotonic_time, auto& target) {
-    auto const old = std::exchange(target, monotonic_time);
-    FMPI_ASSERT(!(old > monotonic_time));
-  };
 
   // loop until termination
   while (running_.load(std::memory_order_relaxed)) {
-    std::size_t nCompleted;
+    std::size_t nCompleted{};
+
+    duration completion_time{};
 
     {
       Timer{completion_time};
       // 1) we first process pending requests...
-      nCompleted = has_pending_requests() ? process_requests() : 0;
-
-      cv_finished_.notify_one();
+      nCompleted = has_pending_requests() ? progress_requests() : 0;
     }
 
     // 2) Schedule new requests or at least wait for new requests...
     {
-      Timer{queue_time};
+      duration queue_time{};
+      {
+        Timer{queue_time};
 
-      // acquire the lock
-      std::unique_lock<std::mutex> lk(mutex_);
+        using lock = std::unique_lock<std::mutex>;
 
-      reset_time(completion_time, stats_.completion_time);
-      reset_time(queue_time, stats_.queue_time);
-      reset_time(dispatch_time, stats_.dispatch_time);
+        // acquire the lock
+        lock lk(mutex_);
 
-      stats_.iterations++;
-      stats_.busy -= nCompleted;
+        FMPI_ASSERT(stats_.busy >= nCompleted);
 
-      if (stats_.ntasks == 0U) {
-        // wait for new tasks for a maximum of 10ms
+        stats_.iterations++;
+        stats_.busy -= nCompleted;
+        stats_.completion_time += completion_time;
+
+        stats_.dispatch_time += dispatch_time;
+        dispatch_time = duration{};
+
+        // wait for new tasks for a maximum of 1ms
         // If a timeout occurs, unlock and
         constexpr auto interval = std::chrono::microseconds(1);
         if (!cv_tasks_.wait_for(
-                lk, interval, [this]() { return stats_.ntasks > 0; })) {
-          // lock is again released...
-          continue;
-        };
-      }
+                lk, interval, [this]() { return stats_.ntasks > 0U; })) {
+          // we should still own the lock..
+          FMPI_ASSERT(lk.owns_lock());
 
-      for (auto&& q : range(n_types)) {
-        auto const n = std::min(req_slots_[q].size(), queues_[q].size());
-        for (auto&& unused : range(n)) {
-          std::ignore = unused;
+          cv_finished_.notify_one();
 
-          auto task = std::move(queues_[q].front());
-          queues_[q].pop();
-
-          // get a free slot
-          auto const slot = req_slots_[q].back();
-          req_slots_[q].pop_back();
-
-          pending_[slot] = std::move(task);
-          new_reqs.push_back(slot);
+          continue;  // lock is released...
         }
-      }
-      stats_.ntasks -= new_reqs.size();
-      stats_.busy += new_reqs.size();
+
+        // We definitely have some tasks to do...
+
+        for (auto&& q : range(n_types)) {
+          auto const n = std::min(req_slots_[q].size(), queues_[q].size());
+          for (auto&& unused : range(n)) {
+            std::ignore = unused;
+
+            auto task = std::move(queues_[q].front());
+            queues_[q].pop();
+
+            // get a free slot
+            auto const slot = req_slots_[q].back();
+            req_slots_[q].pop_back();
+
+            pending_[slot] = std::move(task);
+            new_reqs.push_back(slot);
+          }
+        }
+        stats_.ntasks -= new_reqs.size();
+        stats_.busy += new_reqs.size();
+      }  // queue_time timer stop
+
+      stats_.queue_time += queue_time;
+
+      cv_finished_.notify_one();
     }  // release the lock
 
     {
@@ -353,7 +372,7 @@ Ticket CommDispatcher<testReqs>::postAsync(
 }
 
 template <typename mpi::reqsome_op testReqs>
-inline std::size_t CommDispatcher<testReqs>::process_requests() {
+inline std::size_t CommDispatcher<testReqs>::progress_requests() {
   int* last;
 
   auto const nreqs = std::count_if(
@@ -413,8 +432,6 @@ inline std::size_t CommDispatcher<testReqs>::process_requests() {
 
     FMPI_ASSERT(prev == status::running);
 
-    // TODO(rkowalewski): error handling if some requests fail?
-
     processed.callback(mpi_statuses_[*it], processed.ticket);
   }
 
@@ -437,10 +454,7 @@ CommDispatcher<testReqs>::stats() const {
 template <mpi::reqsome_op testReqs>
 inline void CommDispatcher<testReqs>::loop_until_done() {
   std::unique_lock<std::mutex> lk{mutex_};
-  if (!(stats_.ntasks == 0 && stats_.busy == 0)) {
-    cv_finished_.wait(
-        lk, [this]() { return stats_.ntasks == 0 && stats_.busy == 0; });
-  }
+  cv_finished_.wait(lk, [this]() { return is_all_done(); });
 }
 
 template <mpi::reqsome_op testReqs>
@@ -449,6 +463,11 @@ inline bool CommDispatcher<testReqs>::has_pending_requests() const noexcept {
       std::begin(mpi_reqs_), std::end(mpi_reqs_), [](auto const& req) {
         return req != MPI_REQUEST_NULL;
       });
+}
+
+template <mpi::reqsome_op testReqs>
+inline bool CommDispatcher<testReqs>::is_all_done() const noexcept {
+  return stats_.ntasks == 0 && stats_.busy == 0;
 }
 
 }  // namespace fmpi

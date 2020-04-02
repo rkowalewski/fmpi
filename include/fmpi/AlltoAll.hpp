@@ -73,5 +73,6 @@ inline void MpiAlltoAll(
 #include <fmpi/alltoall/MpiAlltoall.hpp>
 #include <fmpi/alltoall/Waitall.hpp>
 #include <fmpi/alltoall/Waitsome.hpp>
+#include <fmpi/alltoall/WaitsomeOverlap.hpp>
 
 #endif
