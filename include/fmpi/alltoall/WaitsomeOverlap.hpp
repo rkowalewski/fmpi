@@ -77,6 +77,8 @@ inline void RingWaitsomeOverlap(
       std::min(required, capacity),
       std::numeric_limits<typename buffer_allocator::index_type>::max());
 
+  FMPI_ASSERT(required <= capacity);
+
   auto buf_alloc = buffer_allocator{
       static_cast<typename buffer_allocator::index_type>(n_buffer_nels)};
 
@@ -329,10 +331,10 @@ inline void RingWaitsomeOverlap(
     throw std::runtime_error("asynchronous Alltoall failed");
   }
 
-  auto const stats = dispatcher.stats();
-
 #ifndef NDEBUG
   dispatcher.loop_until_done();
+  auto const stats = dispatcher.stats();
+
   FMPI_ASSERT(stats.ntasks == 0);
 
   trace.add_time("DispatcherThread.dispatch_time", stats.dispatch_time);
