@@ -75,7 +75,7 @@ class CommDispatcher {
     alignas(kCacheLineAlignment) std::size_t ntasks{};
 
     // modified internally, read externally
-    alignas(kCacheLineAlignment) struct {
+    struct alignas(kCacheLineAlignment) {
       std::size_t busy{};
       std::size_t completed{};
       std::size_t iterations{};
@@ -83,6 +83,16 @@ class CommDispatcher {
       duration    queue_time{};
       duration    completion_time{};
     };
+
+    Statistics():
+      ntasks{}
+    , busy{}
+    , completed{}
+    , iterations{}
+    , dispatch_time{}
+    , queue_time{}
+    , completion_time{}
+    {}
   };
 
  private:

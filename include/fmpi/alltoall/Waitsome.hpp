@@ -371,8 +371,6 @@ inline void RingWaitsome(
             d_first,
             std::forward<Op>(op));
 
-        FMPI_DBG_RANGE(d_first, d_last);
-
         // release chunks
         std::move(
             // skip local piece which does not need to be deallocated
@@ -406,17 +404,12 @@ inline void RingWaitsome(
 
     FMPI_DBG(arrived_chunks.size());
 
-    for (auto&& r : arrived_chunks) {
-      FMPI_DBG_RANGE(r.first, r.second);
-    }
-
     auto [last_piece, d_last] = detail::apply_compute(
         std::begin(arrived_chunks),
         std::end(arrived_chunks),
         mergeBuffer.begin(),
         std::forward<Op>(op));
 
-    FMPI_DBG_RANGE(mergeBuffer.begin(), mergeBuffer.end());
     FMPI_DBG(std::make_pair(d_last, mergeBuffer.end()));
     FMPI_ASSERT(d_last == mergeBuffer.end());
 

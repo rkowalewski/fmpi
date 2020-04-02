@@ -1,6 +1,6 @@
 #ifndef FMPI_OPENMP_HPP
 #define FMPI_OPENMP_HPP
-#if defined(ENABLE_OPENMP)
+#if defined(_OPENMP)
 #include <omp.h>
 #else
 typedef int         omp_int_t;

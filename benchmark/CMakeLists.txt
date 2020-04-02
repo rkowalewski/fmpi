@@ -7,10 +7,7 @@ target_include_directories(twoSidedAlgorithms PRIVATE include apps src)
 
 # Make sure you link your targets with this command. It can also link libraries and
 # even flags, so linking a target that does not exist will not give a configure-time error.
-target_link_libraries(twoSidedAlgorithms PRIVATE OpenMP::OpenMP_CXX MPI::MPI_CXX
-    MPISynchronizedBarrier tlx Morton rtlx fmpi)
-# link tlx
-target_compile_options(twoSidedAlgorithms PRIVATE ${OpenMP_CXX_FLAGS})
+target_link_libraries(twoSidedAlgorithms MPISynchronizedBarrier tlx Morton rtlx fmpi)
 
 add_custom_target(GitVersion
     COMMAND ${CMAKE_COMMAND}

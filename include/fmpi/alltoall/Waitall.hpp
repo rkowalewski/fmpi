@@ -180,8 +180,6 @@ inline void RingWaitall(
       FMPI_CHECK_MPI(mpi::waitall(&(*std::begin(reqs)), &(*std::end(reqs))));
       reqWin.buffer_swap();
     }
-
-    FMPI_DBG_RANGE(out, mergebuf);
   }
 
   {
@@ -222,8 +220,6 @@ inline void RingWaitall(
   }
 
   trace.put(N_COMM_ROUNDS, static_cast<int>(nrounds));
-
-  FMPI_DBG_RANGE(out, out + nr * blocksize);
 }
 namespace detail {
 
