@@ -3,6 +3,8 @@
 
 #include <future>
 
+#include <fmpi/Config.hpp>
+#include <fmpi/Debug.hpp>
 #include <fmpi/common/Porting.hpp>
 #include <fmpi/detail/Capture.hpp>
 #include <fmpi/mpi/Environment.hpp>
@@ -13,18 +15,17 @@ namespace fmpi {
 
 namespace detail {
 
-template <typename RET, typename FUNC, typename... ARGS>
+template <typename RET>
 constexpr void call_with_promise(
-    fmpi::Capture<RET, FUNC, ARGS...>& callable, std::promise<RET>& pr) {
-  pr.set_value(callable());
+    fmpi::Function<RET()>&& callable, std::promise<RET>& pr) {
+  if constexpr (std::is_void_v<RET>) {
+    callable();
+    pr.set_value();
+  } else {
+    pr.set_value(callable());
+  }
 }
 
-template <typename FUNC, typename... ARGS>
-constexpr void call_with_promise(
-    fmpi::Capture<void, FUNC, ARGS...>& callable, std::promise<void>& pr) {
-  callable();
-  pr.set_value();
-}
 }  // namespace detail
 
 template <typename R, typename F, typename... Ts>
@@ -32,33 +33,25 @@ inline std::future<R> async(int core, F&& f, Ts&&... params) {
   auto lambda =
       fmpi::makeCapture<R>(std::forward<F>(f), std::forward<Ts>(params)...);
 
-  auto pr  = std::promise<R>{};
-  auto fut = pr.get_future();
+  using function_t = fmpi::Function<R()>;
+
+  auto task = function_t{std::move(lambda)};
+  auto pr   = std::promise<R>{};
+  auto fut  = pr.get_future();
 
   FMPI_ASSERT(mpi::is_thread_main());
   auto const& config = Config::instance();
 
   if (config.main_core != core) {
-#if defined(NDEBUG)
-    auto thread =
-        std::thread([fn = std::move(lambda), p = std::move(pr)]() mutable {
-            detail::call_with_promise(fn, p);
-        });
-#else
     auto thread = std::thread(
-        [fn = std::move(lambda), p = std::move(pr), core]() mutable {
-          auto const cpu = sched_getcpu();
-          FMPI_DBG(std::make_pair(cpu, core));
-          //  FMPI_ASSERT(cpu == core);
-
-          detail::call_with_promise(fn, p);
+        [task = function_t(std::move(task)), p = std::move(pr)]() mutable {
+          detail::call_with_promise(std::move(task), p);
         });
-#endif
 
     fmpi::pinThreadToCore(thread, core);
     thread.detach();
   } else {
-    detail::call_with_promise(lambda, pr);
+    detail::call_with_promise(std::move(task), pr);
   }
 
   return fut;
