@@ -106,7 +106,7 @@ inline void RingWaitsomeOverlap(
 
   duration t_schedule{};
 
-  auto fut_comm = fmpi::async<void>(
+  auto fut_comm = fmpi::async(
       config.scheduler_core,
       [&buf_alloc,
        &dispatcher,
@@ -203,7 +203,7 @@ inline void RingWaitsomeOverlap(
     duration total{0};
   } t_compute;
 
-  auto f_comp = fmpi::async<iterator>(
+  auto f_comp = fmpi::async(
       config.comp_core,
       [&ready_tasks,
        &buf_alloc,

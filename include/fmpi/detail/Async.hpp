@@ -15,46 +15,43 @@ namespace fmpi {
 
 namespace detail {
 
-template <typename RET>
-constexpr void call_with_promise(
-    fmpi::Function<RET()>&& callable, std::promise<RET>& pr) {
-  if constexpr (std::is_void_v<RET>) {
-    callable();
-    pr.set_value();
+template <typename F, typename... Args>
+using async_invoke_result_t =
+    std::invoke_result_t<std::decay_t<F>, std::decay_t<Args>...>;
+
+template <typename R, typename F, typename... Args>
+constexpr void set_promise_value(std::promise<R>& p, F&& f, Args&&... args) {
+  if constexpr (std::is_void_v<R>) {
+    std::forward<F>(f)(std::forward<Args>(args)...);
+    p.set_value();
   } else {
-    pr.set_value(callable());
+    auto value = std::forward<F>(f)(std::forward<Args>(args)...);
+    p.set_value(std::move(value));
   }
 }
-
 }  // namespace detail
 
-template <typename R, typename F, typename... Ts>
-inline std::future<R> async(int core, F&& f, Ts&&... params) {
-  auto lambda =
-      fmpi::makeCapture<R>(std::forward<F>(f), std::forward<Ts>(params)...);
+template <typename F, typename... Ts>
+inline auto async(int /*core*/, F&& f, Ts&&... params)
+    -> std::future<detail::async_invoke_result_t<F, Ts...>> {
+  using future_inner_type = detail::async_invoke_result_t<F, Ts...>;
 
-  using function_t = fmpi::Function<R()>;
+  auto promise_ptr = std::make_unique<std::promise<future_inner_type>>();
+  auto result      = promise_ptr->get_future();
+  auto thread      = std::thread([promise_ptr = std::move(promise_ptr),
+                             f           = std::forward<F>(f),
+                             params...]() mutable {
+    try {
+      detail::set_promise_value(
+          *promise_ptr, std::forward<F>(f), std::forward<Ts...>(params)...);
+    } catch (...) {
+      promise_ptr->set_exception(std::current_exception());
+    }
+  });
 
-  auto task = function_t{std::move(lambda)};
-  auto pr   = std::promise<R>{};
-  auto fut  = pr.get_future();
+  thread.detach();
 
-  FMPI_ASSERT(mpi::is_thread_main());
-  auto const& config = Config::instance();
-
-  if (config.main_core != core) {
-    auto thread = std::thread(
-        [task = function_t(std::move(task)), p = std::move(pr)]() mutable {
-          detail::call_with_promise(std::move(task), p);
-        });
-
-    fmpi::pinThreadToCore(thread, core);
-    thread.detach();
-  } else {
-    detail::call_with_promise(std::move(task), pr);
-  }
-
-  return fut;
+  return result;
 }
 }  // namespace fmpi
 

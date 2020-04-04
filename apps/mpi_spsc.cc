@@ -175,7 +175,7 @@ int run() {
     blocks.erase(it);
   };
 
-  auto f_comm = fmpi::async<void>(
+  auto f_comm = fmpi::async(
       pinning.scheduler_core,
       [first = std::begin(sbuf),
        last  = std::end(sbuf),
@@ -186,7 +186,7 @@ int run() {
         schedule_comm(first, last, world, blocksize, dispatcher, enq, deq);
       });
 
-  auto f_comp = fmpi::async<iterator>(
+  auto f_comp = fmpi::async(
       pinning.comp_core,
       [&ready_tasks, &rbuf, &buf_alloc, ntasks = world.size()]() -> iterator {
         auto n = ntasks;

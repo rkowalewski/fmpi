@@ -5,28 +5,6 @@
 
 namespace fmpi {
 
-#if 0
-// Capture args and add them as additional arguments
-template <typename Lambda, typename... Args>
-auto capture_call(Lambda&& lambda, Args&&... args) {
-  return [lambda       = std::forward<Lambda>(lambda),
-          capture_args = std::make_tuple(std::forward<Args>(args)...)](
-             auto&&... original_args) mutable {
-    return std::apply(
-        [&lambda](auto&&... args) {
-          lambda(std::forward<decltype(args)>(args)...);
-        },
-        std::tuple_cat(
-            std::forward_as_tuple(original_args...),
-            std::apply(
-                [](auto&&... args) {
-                  return std::forward_as_tuple<Args...>(std::move(args)...);
-                },
-                std::move(capture_args))));
-  };
-}
-#endif
-
 //==============================================================================================
 //                                   class Capture
 //==============================================================================================
@@ -67,14 +45,26 @@ class Function<RET(ARGS...), STORAGE_SIZE> {
   using Callback   = RET (*)(void*, ARGS...);
   using Destructor = void (*)(void*);
 
+  union Data;
+
+  template <class T>
+  using fits_inline = std::bool_constant<
+      sizeof(T) <= sizeof(Data) && alignof(T) <= alignof(Data) &&
+      std::is_nothrow_move_constructible_v<T>>;
+
+  static_assert(sizeof(Data) <= STORAGE_SIZE);
+
+ public:
+  using return_type = RET;
+
  public:
   Function() = default;
   // Ctors
   explicit Function(RET (*ptr)(ARGS...));  // construct with function pointer
   template <typename FUNCTOR>
-  explicit Function(FUNCTOR&& functor);  // construct with functor
+  Function(FUNCTOR&& functor);  // NOLINT
   Function(const Function<RET(ARGS...)>& other) = delete;
-  explicit Function(Function<RET(ARGS...)>&& other);
+  Function(Function<RET(ARGS...)>&& other);  // NOLINT
   Function& operator=(const Function<RET(ARGS...), STORAGE_SIZE>& other) =
       delete;
   Function& operator=(Function<RET(ARGS...), STORAGE_SIZE>&& other);
@@ -84,15 +74,18 @@ class Function<RET(ARGS...), STORAGE_SIZE> {
   RET      operator()(ARGS... args);
   explicit operator bool() const;
 
+  template <class F, class... CaptureArgs>
+  static Function make(F&& f, CaptureArgs&&... capture);
+
  private:
   static void dummy(void* /*unused*/) {
   }
 
   template <typename FUNCTOR>
-  void initFunctor(FUNCTOR&& functor, std::true_type /*unused*/);
+  void initFunctor(FUNCTOR&& functor, std::true_type /*fits_inline*/);
 
   template <typename FUNCTOR>
-  void initFunctor(FUNCTOR&& functor, std::false_type /*unused*/);
+  void initFunctor(FUNCTOR&& functor, std::false_type /*fits_inline*/);
 
   union Data {
     Data() {
@@ -110,7 +103,7 @@ class Function<RET(ARGS...), STORAGE_SIZE> {
 };
 
 //==============================================================================================
-//                                   class Capture
+//                                   Implementation of Capture
 //==============================================================================================
 template <typename RET, typename FUNC, typename... ARGS>
 template <typename F, typename... T>
@@ -134,7 +127,7 @@ Capture<RET, FUNC, ARGS...> makeCapture(FUNC&& func, ARGS&&... args) {
 }
 
 //==============================================================================================
-//                                   class Function
+//                                   Implementation of Function
 //==============================================================================================
 
 template <typename RET, typename... ARGS, std::size_t STORAGE_SIZE>
@@ -148,9 +141,10 @@ Function<RET(ARGS...), STORAGE_SIZE>::Function(RET (*ptr)(ARGS...))
 template <typename RET, typename... ARGS, std::size_t STORAGE_SIZE>
 template <typename FUNCTOR>
 Function<RET(ARGS...), STORAGE_SIZE>::Function(FUNCTOR&& functor) {
-  static_assert(!std::is_lvalue_reference<FUNCTOR>::value);
-  initFunctor(
-      std::forward<FUNCTOR>(functor), std::is_lvalue_reference<FUNCTOR>());
+  static_assert(
+      fits_inline<FUNCTOR>::value || std::is_lvalue_reference_v<FUNCTOR>);
+
+  initFunctor(std::forward<FUNCTOR>(functor), fits_inline<FUNCTOR>{});
 }
 
 template <typename RET, typename... ARGS, std::size_t STORAGE_SIZE>
@@ -200,7 +194,7 @@ Function<RET(ARGS...), STORAGE_SIZE>::operator bool() const {
 template <typename RET, typename... ARGS, std::size_t STORAGE_SIZE>
 template <typename FUNCTOR>
 void Function<RET(ARGS...), STORAGE_SIZE>::initFunctor(
-    FUNCTOR&& functor, std::true_type /*unused*/) {
+    FUNCTOR&& functor, std::false_type /*unused*/) {
   callable_ = std::addressof(functor);
   invoker_  = [](void* ptr, ARGS... args) -> RET {
     return (*reinterpret_cast<FUNCTOR*>(ptr))(std::forward<ARGS>(args)...);
@@ -210,11 +204,7 @@ void Function<RET(ARGS...), STORAGE_SIZE>::initFunctor(
 template <typename RET, typename... ARGS, std::size_t STORAGE_SIZE>
 template <typename FUNCTOR>
 void Function<RET(ARGS...), STORAGE_SIZE>::initFunctor(
-    FUNCTOR&& functor, std::false_type /*unused*/) {
-  static_assert(
-      sizeof(FUNCTOR) <= STORAGE_SIZE,
-      "functional object doesn't fit into internal storage");
-
+    FUNCTOR&& functor, std::true_type /*unused*/) {
   destructor_ = [](void* ptr) {
     if (!ptr) {
       return;
@@ -228,6 +218,14 @@ void Function<RET(ARGS...), STORAGE_SIZE>::initFunctor(
   invoker_  = [](void* ptr, ARGS... args) -> RET {
     return (*reinterpret_cast<FUNCTOR*>(ptr))(std::forward<ARGS>(args)...);
   };
+}
+
+template <typename RET, typename... ARGS, std::size_t STORAGE_SIZE>
+template <class F, class... CaptureArgs>
+Function<RET(ARGS...), STORAGE_SIZE>
+Function<RET(ARGS...), STORAGE_SIZE>::make(F&& f, CaptureArgs&&... params) {
+  return Function<RET(ARGS...)>{makeCapture<RET>(
+      std::forward<F>(f), std::forward<CaptureArgs...>(params)...)};
 }
 
 }  // namespace fmpi

@@ -84,15 +84,15 @@ class CommDispatcher {
       duration    completion_time{};
     };
 
-    Statistics():
-      ntasks{}
-    , busy{}
-    , completed{}
-    , iterations{}
-    , dispatch_time{}
-    , queue_time{}
-    , completion_time{}
-    {}
+    Statistics()
+      : ntasks{}
+      , busy{}
+      , completed{}
+      , iterations{}
+      , dispatch_time{}
+      , queue_time{}
+      , completion_time{} {
+    }
   };
 
  private:
