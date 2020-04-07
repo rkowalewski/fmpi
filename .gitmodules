@@ -10,3 +10,6 @@
 [submodule "external/google/benchmark"]
 	path = external/google/benchmark
 	url = git@github.com:google/benchmark.git
+[submodule "external/SPSCQueue"]
+	path = external/SPSCQueue
+	url = git@github.com:rigtorp/SPSCQueue.git

@@ -10,20 +10,18 @@
 
 namespace mpi {
 
-using mpi_rank = int32_t;
-
-struct Rank {
+class Rank {
  public:
   Rank() = default;
-  explicit Rank(mpi_rank rank) noexcept;
-           operator mpi_rank() const noexcept;  // NOLINT
+  explicit Rank(int rank) noexcept;
+           operator int() const noexcept;  // NOLINT
   explicit operator bool() const noexcept;
 
   auto operator++() -> Rank&;
   auto operator++(int) const -> const Rank;
 
  private:
-  mpi_rank m_rank{MPI_PROC_NULL};
+  int m_rank{MPI_PROC_NULL};
 };
 
 auto operator+(Rank const& lhs, Rank const& rhs) noexcept -> Rank;

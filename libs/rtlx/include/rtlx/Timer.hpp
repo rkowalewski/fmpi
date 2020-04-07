@@ -66,6 +66,10 @@ constexpr double to_seconds(const std::chrono::duration<Rep, Period>& d) {
   return std::chrono::duration_cast<duration>(d).count();
 }
 
+template <class Clock, class F>
+auto timed_exection() -> typename Clock::duration {
+}
+
 }  // namespace rtlx
 
 #endif

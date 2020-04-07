@@ -335,8 +335,6 @@ inline void RingWaitsomeOverlap(
   dispatcher.loop_until_done();
   auto const stats = dispatcher.stats();
 
-  FMPI_ASSERT(stats.ntasks == 0);
-
   trace.add_time("DispatcherThread.dispatch_time", stats.dispatch_time);
   trace.add_time("DispatcherThread.queue_time", stats.queue_time);
   trace.add_time("DispatcherThread.completion_time", stats.completion_time);

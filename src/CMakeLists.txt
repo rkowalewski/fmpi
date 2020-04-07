@@ -14,7 +14,7 @@ target_include_directories(fmpi PUBLIC ../include)
 
 target_link_libraries(fmpi PUBLIC MPI::MPI_CXX OpenMP::OpenMP_CXX Boost::boost dbg_macro)
 target_compile_options(fmpi PUBLIC ${OpenMP_CXX_FLAGS})
-target_link_libraries(fmpi PRIVATE rtlx tlx)
+target_link_libraries(fmpi PRIVATE rtlx tlx SPSCQueue)
 
 if(HWLOC_FOUND)
     target_link_libraries(fmpi PRIVATE fmpi::hwloc)
