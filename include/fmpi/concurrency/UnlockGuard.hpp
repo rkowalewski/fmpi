@@ -5,7 +5,7 @@ namespace fmpi {
 
 template <typename Lockable>
 struct UnlockGuard {
-  UnlockGuard(Lockable& mtx_)
+  explicit UnlockGuard(Lockable& mtx_)
     : mtx(mtx_) {
     mtx.unlock();
   }

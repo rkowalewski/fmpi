@@ -144,7 +144,7 @@ inline void RingWaitall(
   };
 
   {
-    rtlx::TimeTrace{trace, COMMUNICATION};
+    rtlx::TimeTrace give_me_a_name{trace, COMMUNICATION};
 
     std::tie(rphase, sphase) =
         moveReqWindow(std::make_pair(rphase, sphase), reqWin);
@@ -161,13 +161,13 @@ inline void RingWaitall(
     std::ignore = win;
 
     {
-      rtlx::TimeTrace{trace, COMMUNICATION};
+      rtlx::TimeTrace give_me_a_name{trace, COMMUNICATION};
       std::tie(rphase, sphase) =
           moveReqWindow(std::make_pair(rphase, sphase), reqWin);
     }
 
     {
-      rtlx::TimeTrace{trace, COMPUTATION};
+      rtlx::TimeTrace give_me_a_name{trace, COMPUTATION};
       op(reqWin.ready_pieces(), mergebuf);
       auto const nMerged = reqWin.ready_pieces().size() * blocksize;
       mergebuf += nMerged;
@@ -176,14 +176,14 @@ inline void RingWaitall(
     }
 
     {
-      rtlx::TimeTrace{trace, COMMUNICATION};
+      rtlx::TimeTrace give_me_a_name{trace, COMMUNICATION};
       FMPI_CHECK_MPI(mpi::waitall(&(*std::begin(reqs)), &(*std::end(reqs))));
       reqWin.buffer_swap();
     }
   }
 
   {
-    rtlx::TimeTrace{trace, COMPUTATION};
+    rtlx::TimeTrace give_me_a_name{trace, COMPUTATION};
 
     auto mergeSrc = &*out;
     auto target   = buffer.begin();

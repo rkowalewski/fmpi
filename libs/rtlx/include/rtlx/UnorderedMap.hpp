@@ -1,5 +1,5 @@
-#ifndef RTLX_ALGORITHMS_HPP
-#define RTLX_ALGORITHMS_HPP
+#ifndef RTLX_UNORDEREDMAP_HPP
+#define RTLX_UNORDEREDMAP_HPP
 
 #include <unordered_map>
 

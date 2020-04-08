@@ -282,7 +282,7 @@ inline void RingWaitsomeOverlap(
             processed.emplace_back(d_first, d_last);
             std::swap(d_first, d_last);
           } else {
-            // TODO: merge processed chunks
+            // TODO(rkowalewski): merge processed chunks
           }
         }
 

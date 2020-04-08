@@ -75,7 +75,7 @@ class Function<RET(ARGS...), STORAGE_SIZE> {
   explicit operator bool() const;
 
   template <class F, class... CaptureArgs>
-  static Function make(F&& f, CaptureArgs&&... capture);
+  static Function make(F&& f, CaptureArgs&&... params);
 
  private:
   static void dummy(void* /*unused*/) {

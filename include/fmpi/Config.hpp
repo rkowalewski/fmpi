@@ -64,7 +64,7 @@ constexpr std::size_t max_align_(std::size_t a, std::size_t e, Es... es) {
 }
 template <typename... Ts>
 struct max_align_t_ {
-  static constexpr std::size_t value = max_align_(0u, alignof(Ts)...);
+  static constexpr std::size_t value = max_align_(0U, alignof(Ts)...);
 };
 using max_align_v_ = max_align_t_<
     long double,
@@ -93,7 +93,7 @@ constexpr std::size_t hardware_constructive_interference_size = 64;
 //  mimic: std::hardware_destructive_interference_size, C++17
 constexpr std::size_t hardware_destructive_interference_size = 128;
 
-static_assert(hardware_destructive_interference_size >= max_align_v, "");
+static_assert(hardware_destructive_interference_size >= max_align_v);
 
 constexpr std::size_t kCacheLineAlignment =
     hardware_destructive_interference_size;

@@ -1,5 +1,6 @@
 #ifndef CONTAINER__SIMPLE_VECTOR_H
 #define CONTAINER__SIMPLE_VECTOR_H
+#if 0
 
 #include <tlx/container/simple_vector.hpp>
 
@@ -36,4 +37,5 @@ class SimpleVector
 };
 
 }  // namespace fmpi
+#endif
 #endif

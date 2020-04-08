@@ -29,7 +29,7 @@ struct CacheLocality {
   /// 1 more than the maximum value that can be returned from sched_getcpu
   /// or getcpu.  This is the number of hardware thread contexts provided
   /// by the processors
-  std::size_t numCpus;
+  std::size_t numCpus{};
 
   /// Holds the number of caches present at each cache level (0 is
   /// the closest to the cpu).  This is the number of AccessSpreader

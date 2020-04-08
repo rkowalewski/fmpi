@@ -25,7 +25,7 @@
 #include <fmpi/common/Porting.hpp>
 #include <fmpi/concurrency/UnlockGuard.hpp>
 #include <fmpi/container/BoundedBuffer.hpp>
-#include <fmpi/container/InstrusiveList.hpp>
+#include <fmpi/container/IntrusiveList.hpp>
 #include <fmpi/detail/Capture.hpp>
 #include <fmpi/mpi/Algorithm.hpp>
 #include <fmpi/mpi/Environment.hpp>
@@ -112,27 +112,27 @@ class Message {
     return buf_;
   }
 
-  const void* readable_buffer() const noexcept {
+  [[nodiscard]] const void* readable_buffer() const noexcept {
     return buf_;
   }
 
-  MPI_Datatype type() const noexcept {
+  [[nodiscard]] MPI_Datatype type() const noexcept {
     return type_;
   }
 
-  std::size_t count() const noexcept {
+  [[nodiscard]] std::size_t count() const noexcept {
     return count_;
   }
 
-  mpi::Rank peer() const noexcept {
+  [[nodiscard]] mpi::Rank peer() const noexcept {
     return envelope_.peer;
   }
 
-  mpi::Comm comm() const noexcept {
+  [[nodiscard]] mpi::Comm comm() const noexcept {
     return envelope_.comm;
   }
 
-  mpi::Tag tag() const noexcept {
+  [[nodiscard]] mpi::Tag tag() const noexcept {
     return envelope_.tag;
   }
 
@@ -198,7 +198,7 @@ class CommDispatcher {
   //////////////////////////////
 
   // Task Lists: One for each type
-  alignas(kCacheLineAlignment) std::array<task_queue, n_types> queues_;
+  alignas(kCacheLineAlignment) std::array<task_queue, n_types> queues_{};
 
   task_allocator alloc_;
 
@@ -219,22 +219,22 @@ class CommDispatcher {
   //////////////////////////////////
 
   // Window Size
-  std::size_t winsz_;
+  std::size_t winsz_{};
   // Requests in flight for each type, currently: winsz / n_types
-  std::size_t reqs_in_flight_;
+  std::size_t reqs_in_flight_{};
   // Pending tasks: explicitly use a normal vector to default construct
   // elements: explicitly use a normal vector to default construct elements
-  tlx::SimpleVector<Task> pending_;
+  tlx::SimpleVector<Task> pending_{};
   // MPI_Requests
-  simple_vector<MPI_Request> mpi_reqs_;
+  simple_vector<MPI_Request> mpi_reqs_{};
   // MPI_Statuses - only for receive requests
-  simple_vector<MPI_Status> mpi_statuses_;
+  simple_vector<MPI_Status> mpi_statuses_{};
   // indices of request slots in the sliding window
-  simple_vector<int> indices_;
+  simple_vector<int> indices_{};
   // free slots for each request type
-  std::array<tlx::RingBuffer<int>, n_types> req_slots_;
-  std::array<std::list<signal>, n_types>    signals_;
-  std::array<std::list<callback>, n_types>  callbacks_;
+  simple_vector<tlx::RingBuffer<int>>      req_slots_{n_types};
+  std::array<std::list<signal>, n_types>   signals_{};
+  std::array<std::list<callback>, n_types> callbacks_{};
 
   std::thread thread_;
 
@@ -318,7 +318,8 @@ inline void CommDispatcher<testReqs>::worker() {
   using lock     = std::unique_lock<std::mutex>;
   auto condition = [this]() { return queue_count() || terminate_; };
 
-  // TODO: what is the best sleep_interval?
+  // TODO(rkowalewski): what is the best sleep_interval?
+
   using namespace std::chrono_literals;
   constexpr auto sleep_interval = 1ms;
 
