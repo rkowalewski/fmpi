@@ -44,23 +44,23 @@ inline int isend(
       buf, static_cast<int>(count), type, target, tag, ctx.mpiComm(), req);
 }
 
-int isend_type(
-    void const*    buf,
-    std::size_t    count,
-    MPI_Datatype   type,
-    Rank           target,
-    int            tag,
-    Context const& ctx,
-    MPI_Request*   req);
+int isend(
+    void const*  buf,
+    std::size_t  count,
+    MPI_Datatype type,
+    Rank         target,
+    int          tag,
+    MPI_Comm     comm,
+    MPI_Request* req);
 
-int irecv_type(
-    void*          buf,
-    std::size_t    count,
-    MPI_Datatype   type,
-    Rank           source,
-    int            tag,
-    Context const& ctx,
-    MPI_Request*   req);
+int irecv(
+    void*        buf,
+    std::size_t  count,
+    MPI_Datatype type,
+    Rank         source,
+    int          tag,
+    MPI_Comm     comm,
+    MPI_Request* req);
 
 template <class T, class U>
 inline int sendrecv(

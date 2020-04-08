@@ -65,11 +65,12 @@ constexpr bool operator==(Ticket const& l, Ticket const& r) noexcept {
 }
 
 class Message {
- public:
   struct Envelope {
-    mpi::Comm comm;
-    mpi::Rank peer;
-    mpi::Tag  tag;
+    mpi::Comm comm{MPI_COMM_NULL};
+    mpi::Rank peer{};
+    mpi::Tag  tag{};
+
+    Envelope() = default;
 
     Envelope(mpi::Rank peer_, mpi::Tag tag_, mpi::Comm comm_)
       : comm(comm_)
@@ -79,19 +80,42 @@ class Message {
   };
 
  public:
+  Message() = default;
+
   Message(mpi::Rank peer, mpi::Tag tag, mpi::Context const& comm) noexcept
     : envelope_(peer, tag, comm.mpiComm()) {
   }
 
-  void setBuffer(void* buf, std::size_t count, MPI_Datatype type) {
+  template <class T>
+  Message(
+      Span<T>             span,
+      mpi::Rank           peer,
+      mpi::Tag            tag,
+      mpi::Context const& comm) noexcept
+    : envelope_(peer, tag, comm.mpiComm()) {
+    set_buffer(span.data(), span.size());
+  }
+
+  Message(const Message&) = delete;
+  Message& operator=(Message const&) = delete;
+
+  Message(Message&&) = default;
+  Message& operator=(Message&&) = default;
+
+  void set_buffer(void* buf, std::size_t count, MPI_Datatype type) {
     buf_   = buf;
     count_ = count;
     type_  = type;
   }
 
   template <class T>
-  void setBuffer(T* buf, std::size_t count) {
-    setBuffer(buf, count, mpi::type_mapper<T>::type());
+  void set_buffer(T* buf, std::size_t count) {
+    set_buffer(buf, count, mpi::type_mapper<T>::type());
+  }
+
+  template <class T>
+  void set_buffer(Span<T> buf) {
+    set_buffer(buf.data(), buf.size(), mpi::type_mapper<T>::type());
   }
 
   void* writable_buffer() noexcept {
@@ -105,25 +129,46 @@ class Message {
   MPI_Datatype type() const noexcept {
     return type_;
   }
+
   std::size_t count() const noexcept {
     return count_;
   }
 
-  Envelope const& envelope() const noexcept {
-    return envelope_;
+  mpi::Rank peer() const noexcept {
+    return envelope_.peer;
+  }
+
+  mpi::Comm comm() const noexcept {
+    return envelope_.comm;
+  }
+
+  mpi::Tag tag() const noexcept {
+    return envelope_.tag;
   }
 
  private:
   void*        buf_{};
   std::size_t  count_{};
   MPI_Datatype type_{};
-  Envelope     envelope_;
+  Envelope     envelope_{};
 };
 
 template <mpi::reqsome_op testReqs = mpi::testsome>
 class CommDispatcher {
   using Timer    = rtlx::Timer<>;
   using duration = typename Timer::duration;
+
+  struct Task {
+    Task() = default;
+
+    Task(Message&& m, request_type t)
+      : message(std::move(m))
+      , type(t) {
+    }
+
+    Message      message{};
+    request_type type{};
+  };
 
  public:
   struct Statistics {
@@ -150,32 +195,12 @@ class CommDispatcher {
 
   static_assert(n_types == 2, "only two request types supported for now");
 
-  /// Workload Item keeping a task, done callback and a ticket
-#if 1
-  struct alignas(kCacheLineAlignment) Task {
-    task_func     task{};
-    callback_func callback{};
-    Ticket        ticket{};
-    status        state{status::pending};
-
-    Task() = default;
-
-    Task(task_func&& f, callback_func&& c, Ticket t)
-      : task(std::move(f))
-      , callback(std::move(c))
-      , ticket(t) {
-    }
-  };
-#else
-
-#endif
-
   using task_allocator = HeapAllocator<Task, false>;
   using task_list  = std::list<Task, ContiguousPoolAllocator<Task, false>>;
   using task_queue = std::queue<Task, task_list>;
 
   using signal   = Function<int(Message&, MPI_Request&)>;
-  using callback = Function<void(Message&, MPI_Status)>;
+  using callback = Function<void(Message&, MPI_Status const&)>;
 
   //////////////////////////////
   // Thread Safe Work Sharing //
@@ -229,8 +254,7 @@ class CommDispatcher {
 
   ~CommDispatcher();
 
-  template <typename T, typename C>
-  Ticket postAsync(request_type qid, T&& task, C&& callback);
+  void postAsync(request_type qid, Message&& message);
 
   template <class F, class... Args>
   void register_signal(request_type type, F&& sig, Args&&... args);
@@ -248,9 +272,6 @@ class CommDispatcher {
   Statistics stats() const;
 
  private:
-  Ticket do_enqueue(
-      request_type type, task_func&& task, callback_func&& callback);
-
   std::size_t queue_count() const noexcept;
 
   std::size_t req_count() const noexcept;
@@ -318,28 +339,6 @@ inline void CommDispatcher<testReqs>::start_worker() {
 }
 
 template <typename mpi::reqsome_op testReqs>
-inline Ticket CommDispatcher<testReqs>::do_enqueue(
-    request_type type, task_func&& task, callback_func&& callback) {
-  Ticket ticket;
-  {
-    // 1) Acquire lock
-    std::lock_guard<std::mutex> lock(mutex_);
-
-    // 2) Push task
-    ticket = Ticket{seqCounter_++};
-
-    queues_[rtlx::to_underlying(type)].push(
-        Task{std::move(task), std::move(callback), ticket});
-
-  }  // 4) Release lock
-
-  // 3) signal
-  cv_tasks_.notify_one();
-
-  return ticket;
-}
-
-template <typename mpi::reqsome_op testReqs>
 inline void CommDispatcher<testReqs>::worker() {
   std::vector<int> new_reqs;
   new_reqs.reserve(winsz_);
@@ -349,7 +348,7 @@ inline void CommDispatcher<testReqs>::worker() {
 
   // TODO: what is the best sleep_interval?
   using namespace std::chrono_literals;
-  constexpr auto sleep_interval = 1us;
+  constexpr auto sleep_interval = 1ms;
 
   lock lk{mutex_};
 
@@ -363,8 +362,14 @@ inline void CommDispatcher<testReqs>::worker() {
       Timer tq{queue_time};
 
       if (req_count() > 0) {
+        // If we have pending requests we wait only a small time interval to
+        // check if there are new messages. Regardless whether there are new
+        // messages, this interval is short enough to progress pending
+        // requests
         cv_tasks_.wait_for(lk, sleep_interval, condition);
       } else {
+        // If there are no pending requests we wait until there are some
+        // available
         cv_tasks_.wait(lk, condition);
       }
 
@@ -382,33 +387,37 @@ inline void CommDispatcher<testReqs>::worker() {
             req_slots_[q].pop_back();
 
             pending_[slot] = std::move(task);
+
             new_reqs.emplace_back(slot);
           }
         }
       }
     }
 
-    std::size_t new_reqs_count;
+    bool progress = false;
     {
       UnlockGuard ulg{lk};
-      {
-        Timer{completion_time};
-        // 1) we first process pending requests...
-        progress_requests();
-      }
+
       {
         Timer{dispatch_time};
         // 3) execute new requests. Do this after releasing the lock.
         for (auto&& slot : new_reqs) {
-          auto* mpi_req = &mpi_reqs_[slot];
           // initiate the task
-          pending_[slot].task(mpi_req, pending_[slot].ticket);
-          auto prev = std::exchange(pending_[slot].state, status::running);
-          FMPI_ASSERT(prev == status::pending);
+          auto& task    = pending_[slot];
+          auto& signals = signals_[rtlx::to_underlying(task.type)];
+          for (auto&& sig : signals) {
+            sig(task.message, mpi_reqs_[slot]);
+          }
         }
 
-        new_reqs_count = new_reqs.size();
+        progress = !new_reqs.empty();
         new_reqs.clear();
+      }
+
+      {
+        Timer{completion_time};
+        // 1) we first process pending requests...
+        progress = progress || (progress_requests() > 0);
       }
     }
 
@@ -417,20 +426,24 @@ inline void CommDispatcher<testReqs>::worker() {
     stats_.dispatch_time += dispatch_time;
     stats_.queue_time += queue_time;
 
-    if (is_all_done()) {
+    if (is_all_done() || progress) {
       cv_finished_.notify_all();
     }
   } while (!terminate_);
 }
 
 template <mpi::reqsome_op testReqs>
-template <typename T, typename C>
-Ticket CommDispatcher<testReqs>::postAsync(
-    request_type qid, T&& task, C&& callback) {
-  return do_enqueue(
-      qid,
-      task_func{std::forward<T>(task)},
-      callback_func{std::forward<C>(callback)});
+void CommDispatcher<testReqs>::postAsync(
+    request_type qid, Message&& message) {
+  {
+    // 1) Acquire lock
+    std::lock_guard<std::mutex> lock(mutex_);
+
+    queues_[rtlx::to_underlying(qid)].push(Task{std::move(message), qid});
+  }
+
+  // 3) signal
+  cv_tasks_.notify_one();
 }
 
 template <typename mpi::reqsome_op testReqs>
@@ -479,22 +492,15 @@ inline std::size_t CommDispatcher<testReqs>::progress_requests() {
   for (auto it = &*std::begin(indices_); it < fstSent; ++it) {
     auto& processed = pending_[*it];
 
-    if (!processed.callback) {
-      continue;
-    }
-
     // we explcitly set the error field to propagate succeeded MPI calls.
     // MPI does not do that, unfortunately.
     mpi_statuses_[*it].MPI_ERROR =
         (mpi_ret == MPI_SUCCESS) ? MPI_SUCCESS : mpi_statuses_[*it].MPI_ERROR;
 
-    auto const prev = std::exchange(
-        processed.state,
-        (mpi_ret == MPI_SUCCESS) ? status::resolved : status::rejected);
-
-    FMPI_ASSERT(prev == status::running);
-
-    processed.callback(mpi_statuses_[*it], processed.ticket);
+    auto& callbacks = callbacks_[rtlx::to_underlying(processed.type)];
+    for (auto&& cb : callbacks) {
+      cb(processed.message, mpi_statuses_[*it]);
+    }
   }
 
   return nCompleted;
@@ -523,8 +529,11 @@ template <mpi::reqsome_op testReqs>
 template <class F, class... Args>
 inline void CommDispatcher<testReqs>::register_signal(
     request_type type, F&& sig, Args&&... args) {
+  auto const slot = rtlx::to_underlying(type);
+
   std::lock_guard<std::mutex> lg{mutex_};
-  signals_[type].push_back(
+
+  signals_[slot].push_back(
       signal::make(std::forward<F>(sig), std::forward<Args...>(args)...));
 }
 
@@ -532,8 +541,11 @@ template <mpi::reqsome_op testReqs>
 template <class F, class... Args>
 inline void CommDispatcher<testReqs>::register_callback(
     request_type type, F&& sig, Args&&... args) {
+  auto const slot = rtlx::to_underlying(type);
+
   std::lock_guard<std::mutex> lg{mutex_};
-  callbacks_[type].push_back(
+
+  callbacks_[slot].push_back(
       callback::make(std::forward<F>(sig), std::forward<Args...>(args)...));
 }
 

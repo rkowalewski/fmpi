@@ -98,6 +98,68 @@ inline void RingWaitsomeOverlap(
   // Dispatcher Thread
 
   fmpi::CommDispatcher<mpi::testsome> dispatcher{winsz};
+
+  dispatcher.register_signal(
+      fmpi::request_type::IRECV,
+      [&buf_alloc, blocksize](
+          fmpi::Message& message, MPI_Request & /*req*/) -> int {
+        // allocator some buffer
+        auto* buffer = buf_alloc.allocate(blocksize);
+        FMPI_ASSERT(buffer);
+
+        // add the buffer to the message
+        auto span = fmpi::make_span(buffer, blocksize);
+        FMPI_DBG(span);
+        message.set_buffer(span);
+
+        return 0;
+      });
+
+  dispatcher.register_signal(
+      fmpi::request_type::IRECV,
+      [](fmpi::Message& message, MPI_Request& req) -> int {
+        auto ret = mpi::irecv(
+            message.writable_buffer(),
+            message.count(),
+            message.type(),
+            message.peer(),
+            message.tag(),
+            message.comm(),
+            &req);
+
+        FMPI_ASSERT(ret == MPI_SUCCESS);
+
+        return ret;
+      });
+
+  dispatcher.register_signal(
+      fmpi::request_type::ISEND,
+      [](fmpi::Message& message, MPI_Request& req) -> int {
+        auto ret = mpi::isend(
+            message.readable_buffer(),
+            message.count(),
+            message.type(),
+            message.peer(),
+            message.tag(),
+            message.comm(),
+            &req);
+
+        FMPI_ASSERT(ret == MPI_SUCCESS);
+        return ret;
+      });
+
+  dispatcher.register_callback(
+      fmpi::request_type::IRECV,
+      [&ready_tasks](fmpi::Message& message, MPI_Status const& status) {
+        FMPI_ASSERT(status.MPI_ERROR == MPI_SUCCESS);
+
+        auto span = fmpi::make_span(
+            static_cast<value_type*>(message.writable_buffer()),
+            message.count());
+
+        ready_tasks.push(std::make_pair(message.peer(), span));
+      });
+
   dispatcher.start_worker();
   dispatcher.pinToCore(config.dispatcher_core);
 
@@ -108,89 +170,36 @@ inline void RingWaitsomeOverlap(
 
   auto fut_comm = fmpi::async(
       config.scheduler_core,
-      [&buf_alloc,
-       &dispatcher,
-       &blocks,
-       &ready_tasks,
+      [&dispatcher,
        &t_schedule,
        &ctx,       // const ref
        blocksize,  // const
        commAlgo,   // const
-       begin,      // const
-       n_rounds    // const
+       begin       // const
   ]() {
         timer t{t_schedule};
-        auto  enqueue_alloc =
-            [&buf_alloc, &blocks, blocksize](fmpi::Ticket ticket) {
-              // allocator some buffer
-              auto* b = buf_alloc.allocate(blocksize);
-              FMPI_DBG_STREAM("allocate p " << b);
-              auto s = fmpi::make_span(b, blocksize);
-              auto r = std::make_pair(ticket, s);
-              FMPI_DBG(r);
-              blocks.push_back(std::move(r));
-              return s;
-            };
 
-        auto dequeue = [&blocks, &ready_tasks](
-                           fmpi::Ticket ticket, mpi::Rank peer) {
-          FMPI_DBG(ticket);
-          auto it = std::find_if(
-              std::begin(blocks), std::end(blocks), [ticket](const auto& v) {
-                return v.first == ticket;
-              });
-
-          FMPI_ASSERT(it != std::end(blocks));
-
-          ready_tasks.push(std::make_pair(peer, it->second));
-          blocks.erase(it);
-        };
-
-        for (auto&& r : fmpi::range(n_rounds)) {
+        for (auto&& r : fmpi::range(commAlgo.phaseCount(ctx))) {
           auto const rpeer = commAlgo.recvRank(ctx, r);
           auto const speer = commAlgo.sendRank(ctx, r);
 
           if (rpeer != ctx.rank()) {
-            auto const rticket = dispatcher.postAsync(
-                request_type::IRECV,
-                [cb = std::move(enqueue_alloc), rpeer, &ctx](
-                    MPI_Request* req, fmpi::Ticket ticket) -> int {
-                  auto s = cb(ticket);
+            auto recv_message = fmpi::Message{rpeer, EXCH_TAG_RING, ctx};
 
-                  FMPI_DBG_STREAM(
-                      "mpi::irecv from rank " << rpeer << ", span: " << s);
-
-                  return mpi::irecv(
-                      s.data(), s.size(), rpeer, EXCH_TAG_RING, ctx, req);
-                },
-                [cb = std::move(dequeue), rpeer](
-                    MPI_Status status, Ticket ticket) {
-                  FMPI_ASSERT(status.MPI_ERROR == MPI_SUCCESS);
-                  cb(ticket, rpeer);
-                });
-
-            FMPI_DBG(rticket.id);
+            dispatcher.postAsync(
+                fmpi::request_type::IRECV, std::move(recv_message));
           }
 
           if (speer != ctx.rank()) {
-            auto sb = Span<const value_type>(
-                std::next(begin, speer * blocksize), blocksize);
-            auto const sticket = dispatcher.postAsync(
-                request_type::ISEND,
-                [&ctx, speer, sb](MPI_Request* req, Ticket) -> int {
-                  FMPI_DBG_STREAM(
-                      "mpi::isend to rank " << speer << ", span: " << sb);
+            auto send_message = fmpi::Message(
+                fmpi::make_span(
+                    std::next(begin, speer * blocksize), blocksize),
+                speer,
+                EXCH_TAG_RING,
+                ctx);
 
-                  return mpi::isend(
-                      sb.data(),
-                      sb.size(),
-                      static_cast<mpi::Rank>(speer),
-                      EXCH_TAG_RING,
-                      ctx,
-                      req);
-                },
-                Function<void(MPI_Status, Ticket)>{});
-            FMPI_DBG(sticket.id);
+            dispatcher.postAsync(
+                fmpi::request_type::ISEND, std::move(send_message));
           }
         }
       });

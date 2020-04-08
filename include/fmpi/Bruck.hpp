@@ -351,16 +351,16 @@ inline void bruck_indexed(
     {
       rtlx::TimeTrace tt{trace, COMMUNICATION};
 
-      FMPI_CHECK_MPI(mpi::irecv_type(
-          out, 1, packed, recvfrom, EXCH_TAG_BRUCK, ctx, &reqs[0]));
+      FMPI_CHECK_MPI(mpi::irecv(
+          out, 1, packed, recvfrom, EXCH_TAG_BRUCK, ctx.mpiComm(), &reqs[0]));
 
-      FMPI_CHECK_MPI(mpi::isend_type(
+      FMPI_CHECK_MPI(mpi::isend(
           tmpbuf.begin(),
           mysize,
           MPI_BYTE,
           sendto,
           EXCH_TAG_BRUCK,
-          ctx,
+          ctx.mpiComm(),
           &reqs[1]));
 
       FMPI_CHECK_MPI(mpi::waitall(reqs.begin(), reqs.end()));

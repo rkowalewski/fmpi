@@ -51,24 +51,6 @@ std::vector<int> gen_random_vec() {
 
 int run();
 
-template <
-    class ContiguousIter,
-    class Dispatcher,
-    class BufAlloc,
-    class ReadyCallback>
-void schedule_comm(
-    // source buffer
-    ContiguousIter first,
-    ContiguousIter last,
-    // MPI Context
-    mpi::Context const& ctx,
-    // length of each message
-    std::size_t blocksize,
-    Dispatcher& dispatcher,
-    // Allocator for itermediate buffer
-    BufAlloc&&      bufAlloc,
-    ReadyCallback&& ready);
-
 int main(int argc, char* argv[]) {
   // MPI_Init(&argc, &argv);
   int provided;
@@ -146,7 +128,58 @@ int run() {
       fmpi::HeapAllocator<value_type, true /*thread_safe*/>{size};
 
   // Dispatcher Thread
+  //
   fmpi::CommDispatcher dispatcher{winsz};
+  dispatcher.register_signal(
+      fmpi::request_type::IRECV,
+      [&buf_alloc](fmpi::Message& message, MPI_Request& /*req*/) {
+        // allocator some buffer
+        auto* b = buf_alloc.allocate(blocksize);
+        message.set_buffer(b, blocksize);
+
+        return 0;
+      });
+
+  dispatcher.register_signal(
+      fmpi::request_type::IRECV,
+      [](fmpi::Message& message, MPI_Request& req) -> int {
+        return MPI_Irecv(
+            message.writable_buffer(),
+            message.count(),
+            message.type(),
+            message.peer(),
+            message.tag(),
+            message.comm(),
+            &req);
+      });
+
+  dispatcher.register_signal(
+      fmpi::request_type::ISEND,
+      [](fmpi::Message& message, MPI_Request& req) -> int {
+        auto ret = MPI_Isend(
+            message.readable_buffer(),
+            message.count(),
+            message.type(),
+            message.peer(),
+            message.tag(),
+            message.comm(),
+            &req);
+
+        FMPI_ASSERT(ret == MPI_SUCCESS);
+        return ret;
+      });
+
+  dispatcher.register_callback(
+      fmpi::request_type::IRECV,
+      [&ready_tasks](fmpi::Message& message, MPI_Status const& status) {
+        FMPI_ASSERT(status.MPI_ERROR == MPI_SUCCESS);
+        auto span = fmpi::make_span(
+            static_cast<value_type*>(message.writable_buffer()),
+            message.count());
+
+        ready_tasks.push(std::make_pair(message.peer(), span));
+      });
+
   dispatcher.start_worker();
   dispatcher.pinToCore(pinning.dispatcher_core);
 
@@ -154,36 +187,27 @@ int run() {
   constexpr std::size_t n_pipelines = 2;
   boost::container::small_vector<token_data_pair, winsz * n_pipelines> blocks;
 
-  auto enqueue = [&buf_alloc, &blocks](fmpi::Ticket ticket) {
-    // allocator some buffer
-    auto* b = buf_alloc.allocate(blocksize);
-    auto  s = fmpi::make_span(b, blocksize);
-    blocks.push_back(std::make_pair(ticket, s));
-    return s;
-  };
-
-  auto dequeue = [&blocks, &ready_tasks](
-                     fmpi::Ticket ticket, mpi::Rank peer) {
-    auto it = std::find_if(
-        std::begin(blocks), std::end(blocks), [ticket](const auto& v) {
-          return v.first == ticket;
-        });
-
-    RTLX_ASSERT(it != std::end(blocks));
-
-    ready_tasks.push(std::make_pair(peer, it->second));
-    blocks.erase(it);
-  };
-
   auto f_comm = fmpi::async(
       pinning.scheduler_core,
       [first = std::begin(sbuf),
        last  = std::end(sbuf),
        &world,
-       &dispatcher,
-       enq = std::move(enqueue),
-       deq = std::move(dequeue)]() {
-        schedule_comm(first, last, world, blocksize, dispatcher, enq, deq);
+       &dispatcher]() {
+        constexpr int mpi_tag = 123;
+
+        for (auto&& peer :
+             fmpi::range(mpi::Rank(0), mpi::Rank(world.size()))) {
+          auto recv_message = fmpi::Message{peer, mpi_tag, world};
+
+          dispatcher.postAsync(
+              fmpi::request_type::IRECV, std::move(recv_message));
+
+          auto send_message = fmpi::Message(
+              fmpi::make_span(&first[peer], blocksize), peer, mpi_tag, world);
+
+          dispatcher.postAsync(
+              fmpi::request_type::ISEND, std::move(send_message));
+        }
       });
 
   auto f_comp = fmpi::async(
@@ -230,68 +254,4 @@ int run() {
   dispatcher.loop_until_done();
 
   return 0;
-}
-
-template <
-    class ContiguousIter,
-    class Dispatcher,
-    class BufAlloc,
-    class ReadyCallback>
-void schedule_comm(
-    // source buffer
-    ContiguousIter first,
-    ContiguousIter last,
-    // MPI Context
-    mpi::Context const& ctx,
-    // length of each message
-    std::size_t blocksize,
-    Dispatcher& dispatcher,
-    // Allocator for itermediate buffer
-    BufAlloc&&      bufAlloc,
-    ReadyCallback&& ready) {
-  using value_type =
-      typename std::iterator_traits<ContiguousIter>::value_type;
-
-  constexpr int mpi_tag = 0;
-
-  RTLX_ASSERT(std::next(first, ctx.size() * blocksize) == last);
-
-  FMPI_DBG(ctx.size());
-
-  for (auto&& peer : fmpi::range(mpi::Rank(0), mpi::Rank(ctx.size()))) {
-    auto rticket = dispatcher.postAsync(
-        fmpi::request_type::IRECV,
-        [cb = std::forward<BufAlloc>(bufAlloc), peer, &ctx](
-            MPI_Request* req, fmpi::Ticket ticket) -> int {
-          auto s = cb(ticket);
-          FMPI_DBG_STREAM("mpi::irecv from rank " << peer);
-
-          return mpi::irecv(s.data(), s.size(), peer, mpi_tag, ctx, req);
-        },
-        [cb = std::forward<ReadyCallback>(ready), peer](
-            MPI_Status status, fmpi::Ticket ticket) {
-          RTLX_ASSERT(status.MPI_ERROR == MPI_SUCCESS);
-          cb(ticket, peer);
-        });
-
-    auto sb = fmpi::Span<const value_type>(&first[peer], blocksize);
-
-    auto sticket = dispatcher.postAsync(
-        fmpi::request_type::ISEND,
-        [sb, peer, &ctx](MPI_Request* req, fmpi::Ticket /*unused*/) -> int {
-          return mpi::isend(
-              sb.data(),
-              sb.size(),
-              static_cast<mpi::Rank>(peer),
-              mpi_tag,
-              ctx,
-              req);
-        },
-        [](MPI_Status /*unused*/, fmpi::Ticket /*unused*/) {
-          std::cout << "callback fire for send\n";
-        });
-
-    FMPI_DBG(rticket.id);
-    FMPI_DBG(sticket.id);
-  }
 }
