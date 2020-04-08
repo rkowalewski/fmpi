@@ -92,9 +92,6 @@ inline void RingWaitsomeOverlap(
   auto ready_tasks = buffered_channel<chunk>{n_rounds};
 #endif
 
-  std::vector<std::pair<Ticket, Span<value_type>>> blocks{};
-  blocks.reserve(reqsInFlight * n_pipelines);
-
   // Dispatcher Thread
 
   fmpi::CommDispatcher<mpi::testsome> dispatcher{winsz};
@@ -108,9 +105,7 @@ inline void RingWaitsomeOverlap(
         FMPI_ASSERT(buffer);
 
         // add the buffer to the message
-        auto span = fmpi::make_span(buffer, blocksize);
-        FMPI_DBG(span);
-        message.set_buffer(span);
+        message.set_buffer(buffer, blocksize);
 
         return 0;
       });
@@ -186,7 +181,7 @@ inline void RingWaitsomeOverlap(
           if (rpeer != ctx.rank()) {
             auto recv_message = fmpi::Message{rpeer, EXCH_TAG_RING, ctx};
 
-            dispatcher.postAsync(
+            dispatcher.dispatch(
                 fmpi::request_type::IRECV, std::move(recv_message));
           }
 
@@ -198,7 +193,7 @@ inline void RingWaitsomeOverlap(
                 EXCH_TAG_RING,
                 ctx);
 
-            dispatcher.postAsync(
+            dispatcher.dispatch(
                 fmpi::request_type::ISEND, std::move(send_message));
           }
         }

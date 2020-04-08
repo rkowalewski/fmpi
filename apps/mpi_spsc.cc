@@ -183,10 +183,6 @@ int run() {
   dispatcher.start_worker();
   dispatcher.pinToCore(pinning.dispatcher_core);
 
-  using token_data_pair = std::pair<fmpi::Ticket, fmpi::Span<value_type>>;
-  constexpr std::size_t n_pipelines = 2;
-  boost::container::small_vector<token_data_pair, winsz * n_pipelines> blocks;
-
   auto f_comm = fmpi::async(
       pinning.scheduler_core,
       [first = std::begin(sbuf),
@@ -199,13 +195,13 @@ int run() {
              fmpi::range(mpi::Rank(0), mpi::Rank(world.size()))) {
           auto recv_message = fmpi::Message{peer, mpi_tag, world};
 
-          dispatcher.postAsync(
+          dispatcher.dispatch(
               fmpi::request_type::IRECV, std::move(recv_message));
 
           auto send_message = fmpi::Message(
               fmpi::make_span(&first[peer], blocksize), peer, mpi_tag, world);
 
-          dispatcher.postAsync(
+          dispatcher.dispatch(
               fmpi::request_type::ISEND, std::move(send_message));
         }
       });

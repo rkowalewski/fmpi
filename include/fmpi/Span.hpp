@@ -147,12 +147,16 @@ auto make_span(Iter begin, std::size_t count) noexcept {
       &*begin, count);
 }
 
+#if 0
 template <class T>
 std::ostream& operator<<(std::ostream& os, Span<T> const& span) {
-  os << std::string("{ 'data': ") << span.data() << std::string(", 'size': ")
+  FMPI_ASSERT(false);
+  auto p = static_cast<const void*>(span.data());
+  os << std::string("{ 'data': ") << p << std::string(", 'size': ")
      << span.size() << " }";
   return os;
 }
+#endif
 
 }  // namespace fmpi
 #endif
