@@ -83,7 +83,7 @@ struct intrusive_ptr {
     return p;
   }
 
-  operator pointer() const noexcept {
+  explicit operator pointer() const noexcept {
     return ptr_;
   }
 
@@ -313,7 +313,7 @@ struct ref_count {
     return --count_;
   }
 
-  unsigned long get() const noexcept {
+  [[nodiscard]] unsigned long get() const noexcept {
     return count_;
   }
 
@@ -330,7 +330,7 @@ struct ref_count_atomic {
     return --count_;
   }
 
-  unsigned long get() const noexcept {
+  [[nodiscard]] unsigned long get() const noexcept {
     return count_.load();
   }
 
@@ -342,10 +342,10 @@ template <class Class, class RefCount = ref_count>
 struct ref_counted {
   ref_counted() noexcept = default;
 
-  ref_counted(ref_counted const&) noexcept {
+  ref_counted(ref_counted const& /*unused*/) noexcept {
   }
 
-  ref_counted& operator=(ref_counted const&) noexcept {
+  ref_counted& operator=(ref_counted const& /*unused*/) noexcept {
     return *this;
   }
 
@@ -399,7 +399,7 @@ class stable_list {
   intrusive_ptr<link_element> head_;
   intrusive_ptr<link_element> tail_;
 
-  std::size_t elements_;
+  std::size_t elements_{};
 
  public:
   template <class U>
@@ -461,7 +461,7 @@ class stable_list {
       return *this;
     }
 
-    iterator_base operator++(int) noexcept {
+    const iterator_base operator++(int) noexcept {
       iterator_base i{*this};
       ++(*this);
       return i;
@@ -472,7 +472,7 @@ class stable_list {
       return *this;
     }
 
-    iterator_base operator--(int) noexcept {
+    const iterator_base operator--(int) noexcept {
       iterator_base i{*this};
       --(*this);
       return i;
@@ -499,7 +499,7 @@ class stable_list {
    private:
     intrusive_ptr<link_element> element_;
 
-    iterator_base(link_element* p) noexcept
+    explicit iterator_base(link_element* p) noexcept
       : element_{p} {
     }
   };
@@ -639,7 +639,7 @@ class stable_list {
     return *crbegin();
   }
 
-  bool empty() const noexcept {
+  [[nodiscard]] bool empty() const noexcept {
     return cbegin() == cend();
   }
 
@@ -780,11 +780,11 @@ class stable_list {
     }
   }
 
-  size_type size() const noexcept {
+  [[nodiscard]] size_type size() const noexcept {
     return elements_;
   }
 
-  size_type max_size() const noexcept {
+  [[nodiscard]] size_type max_size() const noexcept {
     return std::numeric_limits<size_type>::max();
   }
 

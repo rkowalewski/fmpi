@@ -4,16 +4,14 @@
 #include <fmpi/Config.hpp>
 #include <fmpi/Dispatcher.hpp>
 #include <fmpi/Span.hpp>
-
 #include <fmpi/allocator/HeapAllocator.hpp>
 #include <fmpi/alltoall/Detail.hpp>
 #include <fmpi/container/StackContainer.hpp>
 #include <fmpi/container/buffered_channel.hpp>
 #include <fmpi/detail/Async.hpp>
-
 #include <rtlx/Trace.hpp>
-
 #include <tlx/container/ring_buffer.hpp>
+#include <utility>
 
 namespace fmpi {
 namespace detail {
@@ -24,12 +22,14 @@ class NProducer {
   using value_type = typename Queue::value_type;
 
   NProducer(std::shared_ptr<Queue> channel, std::size_t n)
-    : channel_(channel)
+    : channel_(std::move(channel))
     , count_(n) {
   }
 
   bool operator()(value_type const& val) {
-    if (!count_) return false;
+    if (count_ == 0u) {
+      return false;
+    }
     channel_->push(val);
     --count_;
     return true;
@@ -46,12 +46,14 @@ class NConsumer {
   using value_type = typename Queue::value_type;
 
   NConsumer(std::shared_ptr<Queue> channel, std::size_t n)
-    : channel_(channel)
+    : channel_(std::move(channel))
     , count_(n) {
   }
 
   bool operator()(value_type& val) {
-    if (!count_) return false;
+    if (count_ == 0u) {
+      return false;
+    }
     val = channel_->value_pop();
     --count_;
     return true;
@@ -307,8 +309,7 @@ inline void RingWaitsomeOverlap(
           // merge all chunks
           auto d_last = op(chunks, d_first);
 
-          auto alloc_it =
-              std::next(std::begin(chunks), processed.size() == 0);
+          auto alloc_it = std::next(std::begin(chunks), processed.empty());
 
           for (; alloc_it != std::end(chunks); ++alloc_it) {
             FMPI_DBG_STREAM("release p " << alloc_it->first);
@@ -347,7 +348,7 @@ inline void RingWaitsomeOverlap(
 
       auto const last = op(chunks, mergeBuffer.begin());
 
-      for (auto f = std::next(std::begin(chunks), processed.size() == 0);
+      for (auto f = std::next(std::begin(chunks), processed.empty());
            f != std::prev(std::end(chunks), processed.size());
            ++f) {
         FMPI_DBG_STREAM("release p " << f->first);

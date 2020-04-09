@@ -148,7 +148,7 @@ inline void RingWaitsome(
 
   freelist_t freelist{};
   freelist->allocate(winreqs);
-  FMPI_ASSERT(freelist->size() == 0);
+  FMPI_ASSERT(freelist->empty());
 
   {
     auto r = range<std::size_t>(winreqs);

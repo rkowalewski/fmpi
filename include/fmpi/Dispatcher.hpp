@@ -246,10 +246,12 @@ class CommDispatcher {
   void dispatch(request_type qid, Message&& message);
 
   template <class F, class... Args>
-  signal_token register_signal(request_type type, F&& sig, Args&&... args);
+  signal_token register_signal(
+      request_type type, F&& callable, Args&&... args);
 
   template <class F, class... Args>
-  callback_token register_callback(request_type type, F&& cb, Args&&... args);
+  callback_token register_callback(
+      request_type type, F&& callable, Args&&... args);
 
   void loop_until_done();
 
