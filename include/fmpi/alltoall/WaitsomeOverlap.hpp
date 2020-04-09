@@ -145,7 +145,7 @@ inline void RingWaitsomeOverlap(
       std::min(required, capacity),
       std::numeric_limits<typename buffer_allocator::index_type>::max());
 
-  FMPI_ASSERT(required <= capacity);
+  //FMPI_ASSERT(required <= capacity);
 
   auto buf_alloc = buffer_allocator{
       static_cast<typename buffer_allocator::index_type>(n_buffer_nels)};

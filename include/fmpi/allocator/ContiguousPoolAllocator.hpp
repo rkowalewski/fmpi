@@ -242,7 +242,8 @@ ContiguousPoolAllocator<T, ThreadSafe>::allocate(
   assert(bufferStart());
   {
     detail::LockGuard<ThreadSafe> lock(_control->_mutex);
-    if (findContiguous(static_cast<index_type>(n))) {
+    constexpr auto max_n = std::size_t{std::numeric_limits<index_type>::max()};
+    if (n < max_n && findContiguous(static_cast<index_type>(n))) {
       _control->_freeBlockIndex -= (n - 1);
       return reinterpret_cast<pointer>(
           &_control
