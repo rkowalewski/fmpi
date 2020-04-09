@@ -62,7 +62,7 @@ class Message {
 
     Envelope() = default;
 
-    Envelope(mpi::Rank peer_, mpi::Tag tag_, mpi::Comm comm_)
+    Envelope(mpi::Rank peer_, mpi::Tag tag_, mpi::Comm comm_) noexcept
       : comm(comm_)
       , peer(peer_)
       , tag(tag_) {
@@ -89,8 +89,8 @@ class Message {
   Message(const Message&) = delete;
   Message& operator=(Message const&) = delete;
 
-  Message(Message&&) = default;
-  Message& operator=(Message&&) = default;
+  Message(Message&&) noexcept = default;
+  Message& operator=(Message&&) noexcept = default;
 
   void set_buffer(void* buf, std::size_t count, MPI_Datatype type) {
     buf_   = buf;
@@ -238,8 +238,6 @@ class CommDispatcher {
 
   std::thread thread_;
 
-  // Uniq Task ID
-  uint32_t seqCounter_{};  // counter for uniq ticket ids
  public:
   explicit CommDispatcher(std::size_t winsz);
 
@@ -252,8 +250,6 @@ class CommDispatcher {
 
   template <class F, class... Args>
   callback_token register_callback(request_type type, F&& cb, Args&&... args);
-
-  void discard_signals();
 
   void loop_until_done();
 
@@ -281,6 +277,8 @@ class CommDispatcher {
   bool is_all_done() const noexcept;
 
   void worker();
+
+  void discard_signals();
 };  // namespace fmpi
 
 template <typename mpi::reqsome_op testReqs>
@@ -529,8 +527,6 @@ CommDispatcher<testReqs>::register_callback(
 
 template <mpi::reqsome_op testReqs>
 inline void CommDispatcher<testReqs>::discard_signals() {
-  std::lock_guard<std::mutex> lk{mutex_};
-
   decltype(callbacks_) empty_cbs{};
   decltype(signals_)   empty_signals{};
 
@@ -541,6 +537,8 @@ inline void CommDispatcher<testReqs>::discard_signals() {
 template <mpi::reqsome_op testReqs>
 inline void CommDispatcher<testReqs>::reset(std::size_t winsz) {
   std::lock_guard<std::mutex> lk{mutex_};
+
+  discard_signals();
 
   FMPI_ASSERT(is_all_done());
 

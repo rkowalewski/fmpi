@@ -111,7 +111,7 @@ class Span {
   }
 
   /// Returns an iterator to the beginning of the Span
-  [[nodiscard]] const_iterator begin() const noexcept {
+  [[nodiscard]] iterator begin() const noexcept {
     return data_;
   }
 
@@ -121,7 +121,7 @@ class Span {
   }
 
   /// Returns an iterator to one past the end of the Span
-  [[nodiscard]] const_iterator end() const noexcept {
+  [[nodiscard]] iterator end() const noexcept {
     return data_ + size_;
   }
 

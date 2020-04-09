@@ -87,8 +87,8 @@ struct ContiguousPoolAllocator {
   }
 
   //------------------------- Accessors ------------------------------
-  void          setBuffer(aligned_type* buffer, index_type size);
-  pointer       address(reference x) const;
+  void    setBuffer(aligned_type* buffer, index_type size);
+  pointer address(reference x) const;
   [[nodiscard]] const_pointer address(const_reference x) const;
   [[nodiscard]] size_type     max_size() const;
   template <typename... Args>
@@ -97,19 +97,20 @@ struct ContiguousPoolAllocator {
   pointer allocate(size_type /*n*/ = 1, const_pointer /*unused*/ = nullptr);
   void    deallocate(pointer p, size_type /*n*/ = 1);
   template <typename... Args>
-  pointer    create(Args&&... args);
-  void       dispose(pointer p);
+  pointer                  create(Args&&... args);
+  void                     dispose(pointer p);
   [[nodiscard]] size_t     allocatedBlocks() const;
   [[nodiscard]] size_t     allocatedHeapBlocks() const;
   [[nodiscard]] bool       isFull() const;
   [[nodiscard]] bool       isEmpty() const;
   [[nodiscard]] index_type size() const;
-  explicit   operator bool() const;
+  explicit                 operator bool() const;
+
+  bool isManaged(pointer p);
 
  private:
   pointer    bufferStart();
   pointer    bufferEnd();
-  bool       isManaged(pointer p);
   index_type blockIndex(pointer p);
   bool       findContiguous(index_type n);
 
@@ -190,7 +191,7 @@ void ContiguousPoolAllocator<T, ThreadSafe>::setBuffer(
   _control->_size   = size;
   _control->_buffer = buffer;
 
-    delete[] _control->_freeBlocks;
+  delete[] _control->_freeBlocks;
 
   _control->_freeBlocks = new index_type[size];
   if (!_control->_freeBlocks) {
@@ -250,7 +251,7 @@ ContiguousPoolAllocator<T, ThreadSafe>::allocate(
     // Use heap allocation
     ++_control->_numHeapAllocatedBlocks;
   }
-  return (pointer) new char[sizeof(value_type) * n];
+  return static_cast<pointer>(::operator new(n * sizeof(value_type)));
 }
 
 template <typename T, bool ThreadSafe>
@@ -261,14 +262,15 @@ void ContiguousPoolAllocator<T, ThreadSafe>::deallocate(
   }
   assert(bufferStart());
   if (isManaged(p)) {
+    detail::LockGuard<ThreadSafe> lock(_control->_mutex);
     // find index of the block and return the individual blocks to the free
     // pool
-    detail::LockGuard<ThreadSafe> lock(_control->_mutex);
     for (size_type i = 0; i < n; ++i) {
       _control->_freeBlocks[++_control->_freeBlockIndex] = blockIndex(p + i);
     }
   } else {
-    delete[](char*) p;
+    ::operator delete(p);
+
     detail::LockGuard<ThreadSafe> lock(_control->_mutex);
     --_control->_numHeapAllocatedBlocks;
   }

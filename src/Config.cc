@@ -46,30 +46,29 @@ fmpi::Config::Config() {
 
   auto const ncpus = num_threads / 2;
 
-  auto const my_core         = sched_getcpu();
-  auto const domain_id       = (my_core % ncpus) / domain_size;
-  auto const is_rank_on_comm = (my_core % domain_size) == 0;
+  auto const main_core        = sched_getcpu();
+  auto const domain_id       = (main_core % ncpus) / domain_size;
+  auto const is_rank_on_comm = (main_core % domain_size) == 0;
 
   if (domain_size == 1) {
-    dispatcher_core = (my_core + 1) % num_threads;
-    scheduler_core  = (my_core + 2) % num_threads;
-    comp_core       = my_core;
+    dispatcher_core = (main_core + 1) % num_threads;
+    scheduler_core  = (main_core + 2) % num_threads;
+    comp_core       = main_core;
   } else if (is_rank_on_comm) {
     // MPI rank is on the communication core. So we dispatch on the other
     // hyperthread
-    dispatcher_core = (my_core < ncpus) ? my_core + ncpus : my_core - ncpus;
-    scheduler_core  = my_core;
-    comp_core       = my_core;
+    dispatcher_core =
+        (main_core < ncpus) ? main_core + ncpus : main_core - ncpus;
+    scheduler_core = main_core;
+    comp_core      = main_core;
     // comp_core      = scheduler_core + 1;
   } else {
     // MPI rank is somewhere in the Computation Domain, so we just take the
     // communication core.
     dispatcher_core = domain_id * domain_size;
     scheduler_core  = dispatcher_core + ncpus;
-    comp_core       = my_core;
+    comp_core       = main_core;
   }
-
-  main_core = my_core;
 }
 
 std::ostream& fmpi::operator<<(std::ostream& os, const Config& pinning) {
