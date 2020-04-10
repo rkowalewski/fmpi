@@ -11,6 +11,8 @@
 #include <queue>
 #include <thread>
 
+#include <gsl/span>
+
 #include <rtlx/Enum.hpp>
 #include <rtlx/Timer.hpp>
 
@@ -20,7 +22,6 @@
 #include <fmpi/Config.hpp>
 #include <fmpi/Debug.hpp>
 #include <fmpi/NumericRange.hpp>
-#include <fmpi/Span.hpp>
 #include <fmpi/allocator/HeapAllocator.hpp>
 #include <fmpi/common/Porting.hpp>
 #include <fmpi/concurrency/UnlockGuard.hpp>
@@ -78,7 +79,7 @@ class Message {
 
   template <class T>
   Message(
-      Span<T>             span,
+      gsl::span<T>        span,
       mpi::Rank           peer,
       mpi::Tag            tag,
       mpi::Context const& comm) noexcept
@@ -104,7 +105,7 @@ class Message {
   }
 
   template <class T>
-  void set_buffer(Span<T> buf) {
+  void set_buffer(gsl::span<T> buf) {
     set_buffer(buf.data(), buf.size(), mpi::type_mapper<T>::type());
   }
 

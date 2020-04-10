@@ -4,11 +4,12 @@
 
 #include <cstdlib>
 
+#include <gsl/span>
+
 #include <boost/container/small_vector.hpp>
 #include <boost/lockfree/spsc_queue.hpp>
 #include <fmpi/Dispatcher.hpp>
 #include <fmpi/NumericRange.hpp>
-#include <fmpi/Span.hpp>
 #include <fmpi/allocator/ContiguousPoolAllocator.hpp>
 #include <fmpi/allocator/HeapAllocator.hpp>
 #include <fmpi/container/BoundedBuffer.hpp>
@@ -118,7 +119,7 @@ int run() {
   FMPI_DBG_RANGE(std::begin(sbuf), std::end(sbuf));
 
   // Pipeline 2
-  using rank_data_pair = std::pair<mpi::Rank, fmpi::Span<value_type>>;
+  using rank_data_pair = std::pair<mpi::Rank, gsl::span<value_type>>;
 
   auto ready_tasks = fmpi::buffered_channel<rank_data_pair>{world.size()};
 
@@ -173,7 +174,7 @@ int run() {
       fmpi::request_type::IRECV,
       [&ready_tasks](fmpi::Message& message, MPI_Status const& status) {
         FMPI_ASSERT(status.MPI_ERROR == MPI_SUCCESS);
-        auto span = fmpi::make_span(
+        auto span = gsl::span(
             static_cast<value_type*>(message.writable_buffer()),
             message.count());
 
@@ -199,7 +200,7 @@ int run() {
               fmpi::request_type::IRECV, std::move(recv_message));
 
           auto send_message = fmpi::Message(
-              fmpi::make_span(&first[peer], blocksize), peer, mpi_tag, world);
+              gsl::span(&first[peer], blocksize), peer, mpi_tag, world);
 
           dispatcher.dispatch(
               fmpi::request_type::ISEND, std::move(send_message));

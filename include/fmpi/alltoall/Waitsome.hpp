@@ -5,7 +5,6 @@
 #include <numeric>
 
 #include <fmpi/Dispatcher.hpp>
-#include <fmpi/Span.hpp>
 
 #include <fmpi/allocator/HeapAllocator.hpp>
 #include <fmpi/alltoall/Detail.hpp>

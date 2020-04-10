@@ -3,7 +3,6 @@
 
 #include <fmpi/Config.hpp>
 #include <fmpi/Dispatcher.hpp>
-#include <fmpi/Span.hpp>
 #include <fmpi/allocator/HeapAllocator.hpp>
 #include <fmpi/alltoall/Detail.hpp>
 #include <fmpi/container/StackContainer.hpp>
@@ -147,7 +146,7 @@ inline void RingWaitsomeOverlap(
       std::min(required, capacity),
       std::numeric_limits<typename buffer_allocator::index_type>::max());
 
-  //FMPI_ASSERT(required <= capacity);
+  // FMPI_ASSERT(required <= capacity);
 
   auto buf_alloc = buffer_allocator{
       static_cast<typename buffer_allocator::index_type>(n_buffer_nels)};
@@ -155,7 +154,7 @@ inline void RingWaitsomeOverlap(
   FMPI_DBG(n_buffer_nels);
 
   // queue for ready tasks
-  using chunk = std::pair<mpi::Rank, Span<value_type>>;
+  using chunk = std::pair<mpi::Rank, gsl::span<value_type>>;
 #if 0
   auto received_chunks = boost::lockfree::spsc_queue<chunk>{n_rounds};
   using channel_t = boost::lockfree::spsc_queue<chunk>;
@@ -165,12 +164,12 @@ inline void RingWaitsomeOverlap(
 
   auto received_chunks = std::make_shared<channel_t>(n_rounds);
 
-  fmpi::CommDispatcher<mpi::testsome> dispatcher{winsz};
+  CommDispatcher<mpi::testsome> dispatcher{winsz};
 
   dispatcher.register_signal(
-      fmpi::request_type::IRECV,
+      request_type::IRECV,
       [&buf_alloc, blocksize](
-          fmpi::Message& message, MPI_Request & /*req*/) -> int {
+          Message& message, MPI_Request & /*req*/) -> int {
         // allocator some buffer
         auto* buffer = buf_alloc.allocate(blocksize);
         FMPI_ASSERT(buffer);
@@ -182,8 +181,7 @@ inline void RingWaitsomeOverlap(
       });
 
   dispatcher.register_signal(
-      fmpi::request_type::IRECV,
-      [](fmpi::Message& message, MPI_Request& req) -> int {
+      request_type::IRECV, [](Message& message, MPI_Request& req) -> int {
         auto ret = mpi::irecv(
             message.writable_buffer(),
             message.count(),
@@ -199,8 +197,7 @@ inline void RingWaitsomeOverlap(
       });
 
   dispatcher.register_signal(
-      fmpi::request_type::ISEND,
-      [](fmpi::Message& message, MPI_Request& req) -> int {
+      request_type::ISEND, [](Message& message, MPI_Request& req) -> int {
         auto ret = mpi::isend(
             message.readable_buffer(),
             message.count(),
@@ -215,12 +212,12 @@ inline void RingWaitsomeOverlap(
       });
 
   dispatcher.register_callback(
-      fmpi::request_type::IRECV,
+      request_type::IRECV,
       [produce = detail::NProducer{received_chunks, n_exchanges}](
-          fmpi::Message& message, MPI_Status const& status) mutable {
+          Message& message, MPI_Status const& status) mutable {
         FMPI_ASSERT(status.MPI_ERROR == MPI_SUCCESS);
 
-        auto span = fmpi::make_span(
+        auto span = gsl::span(
             static_cast<value_type*>(message.writable_buffer()),
             message.count());
 
@@ -245,26 +242,24 @@ inline void RingWaitsomeOverlap(
   {
     timer t{t_compute.schedule};
 
-    for (auto&& r : fmpi::range(commAlgo.phaseCount(ctx))) {
+    for (auto&& r : range(commAlgo.phaseCount(ctx))) {
       auto const rpeer = commAlgo.recvRank(ctx, r);
       auto const speer = commAlgo.sendRank(ctx, r);
 
       if (rpeer != ctx.rank()) {
-        auto recv_message = fmpi::Message{rpeer, EXCH_TAG_RING, ctx};
+        auto recv_message = Message{rpeer, EXCH_TAG_RING, ctx};
 
-        dispatcher.dispatch(
-            fmpi::request_type::IRECV, std::move(recv_message));
+        dispatcher.dispatch(request_type::IRECV, std::move(recv_message));
       }
 
       if (speer != ctx.rank()) {
-        auto send_message = fmpi::Message(
-            fmpi::make_span(std::next(begin, speer * blocksize), blocksize),
+        auto send_message = Message(
+            gsl::span(std::next(begin, speer * blocksize), blocksize),
             speer,
             EXCH_TAG_RING,
             ctx);
 
-        dispatcher.dispatch(
-            fmpi::request_type::ISEND, std::move(send_message));
+        dispatcher.dispatch(request_type::ISEND, std::move(send_message));
       }
     }
   }
@@ -302,7 +297,7 @@ inline void RingWaitsomeOverlap(
       chunk task{};
       while (consume(task)) {
         auto span = task.second;
-        chunks.emplace_back(span.begin(), span.end());
+        chunks.emplace_back(span.data(), span.data() + span.size());
 
         if (enough_work()) {
           timer t{t_compute.comp};
