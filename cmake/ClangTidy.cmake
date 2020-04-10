@@ -31,22 +31,14 @@ if(CMAKE_VERSION VERSION_GREATER 3.6 AND ENABLE_CLANG_TIDY MATCHES "ON")
     endif()
 
     execute_process(
-        COMMAND bash "-c" "git -C ${CMAKE_SOURCE_DIR} ls-files | grep \"\\.cc$\""
+        COMMAND bash "-c" "git -C ${CMAKE_SOURCE_DIR} ls-files | grep \"\\.cc$\" | grep -v \".*external/\""
         OUTPUT_VARIABLE TRACKED_FILES)
 
 
     string(REPLACE "\n" ";" TRACKED_FILES ${TRACKED_FILES})
 
-    #message(INFO "tracked files: ${TRACKED_FILES}")
-
-    # we cannot break multi line strings here
     list(APPEND RUN_CLANG_TIDY_BIN_ARGS
-        -clang-tidy-binary ${CLANG_TIDY_BIN}
-        "\"-header-filter=.*${CMAKE_SOURCE_DIR}/(include|libs|src|benchmark)/.*\""
-        "\"-checks=*,-hicpp-no-array-decay,-fuchsia*,-cppcoreguidelines-pro-bounds-array-to-pointer-decay,-clang-analyzer-core.NonNull*,-clang-analyzer-core.NullDereference,-clang-analyzer-core.uninitialized.Branch,-modernize-concat-nested-namespaces,-modernize-use-trailing-return-type,-modernize-use-using,-abseil-string-find-startswith\""
-        )
-
-    list(APPEND RUN_CLANG_TIDY_BIN_ARGS
+        -clang-tidy-binary=${CLANG_TIDY_BIN}
         -export-fixes fixes.yaml
         -format
         -style file)
