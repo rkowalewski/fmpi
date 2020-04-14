@@ -19,8 +19,7 @@ constexpr int EXCH_TAG_BRUCK = 110436;
 // MPI Thread Level
 constexpr auto kMpiThreadLevel = MPI_THREAD_SERIALIZED;
 
-constexpr std::size_t kContainerStackSize      = 1024 * 512;
-
+constexpr std::size_t kContainerStackSize = 1024 * 512;
 constexpr std::size_t kMaxContiguousBufferSize = 1024 * 512;
 
 void initialize(int*, char*** argv);

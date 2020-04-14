@@ -39,6 +39,7 @@ if(CMAKE_VERSION VERSION_GREATER 3.6 AND ENABLE_CLANG_TIDY MATCHES "ON")
 
     list(APPEND RUN_CLANG_TIDY_BIN_ARGS
         -clang-tidy-binary=${CLANG_TIDY_BIN}
+        "\"-header-filter=.*${CMAKE_SOURCE_DIR}/(include|libs|src|benchmark)/.*\""
         -export-fixes fixes.yaml
         -format
         -style file)

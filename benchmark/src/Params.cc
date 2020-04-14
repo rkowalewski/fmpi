@@ -17,8 +17,7 @@ namespace benchmark {
 template <class cT, class traits = std::char_traits<cT> >
 class basic_nullbuf : public std::basic_streambuf<cT, traits> {
   auto overflow(typename traits::int_type c) ->
-      typename traits::int_type override
-  {
+      typename traits::int_type override {
     return traits::not_eof(c);  // indicate success
   }
 };
@@ -28,8 +27,7 @@ class basic_onullstream : public std::basic_ostream<cT, traits> {
  public:
   basic_onullstream()
     : std::basic_ios<cT, traits>(&m_sbuf)
-    , std::basic_ostream<cT, traits>(&m_sbuf)
-  {
+    , std::basic_ostream<cT, traits>(&m_sbuf) {
     // note: the original code is missing the required this->
     this->init(&m_sbuf);
   }
@@ -41,19 +39,17 @@ class basic_onullstream : public std::basic_ostream<cT, traits> {
 using onullstream  = basic_onullstream<char>;
 using wonullstream = basic_onullstream<wchar_t>;
 
-static auto getexepath() -> std::string
-{
-  char    result[PATH_MAX];
-  ssize_t count = readlink("/proc/self/exe", result, PATH_MAX);
-  return std::string(result, (count > 0) ? count : 0);
+static auto getexepath() -> std::string {
+  std::array<char, PATH_MAX> result{};
+  ssize_t count = readlink("/proc/self/exe", result.data(), PATH_MAX);
+  return std::string(result.data(), (count > 0) ? count : 0);
 }
 
 auto process(
     int                   argc,
     char*                 argv[],
     ::mpi::Context const& mpiCtx,
-    struct Params&        params) -> bool
-{
+    struct Params&        params) -> bool {
   bool good;
 
   tlx::CmdlineParser cp;
@@ -101,8 +97,7 @@ auto process(
 
   if (mpiCtx.rank() == 0) {
     good = cp.process(argc, argv, std::cout);
-  }
-  else {
+  } else {
     onullstream os;
     good = cp.process(argc, argv, os);
   }
@@ -130,8 +125,7 @@ auto process(
       params.sizes[r] = std::min(blocksize, maxblocksize);
       blocksize *= 2;
     }
-  }
-  else {
+  } else {
     std::stringstream ss(sizes_csv);
 
     for (std::size_t i; ss >> i;) {
@@ -143,10 +137,10 @@ auto process(
   }
 
   if (good && mpiCtx.rank() == 0) {
-
     auto time = std::time(nullptr);
     std::cout << "Executable: " << getexepath() << "\n";
-    std::cout << "Time: " << std::put_time(std::gmtime(&time), "%F %T") << "\n";
+    std::cout << "Time: " << std::put_time(std::gmtime(&time), "%F %T")
+              << "\n";
     std::cout << "Git Version: " << FMPI_GIT_COMMIT << "\n";
 
     cp.print_result();
@@ -157,22 +151,19 @@ auto process(
 }
 
 static auto ltrim(std::string& str, const std::string& chars = "\t\n\v\f\r ")
-    -> std::string&
-{
+    -> std::string& {
   str.erase(0, str.find_first_not_of(chars));
   return str;
 }
 
 static auto rtrim(std::string& str, const std::string& chars = "\t\n\v\f\r ")
-    -> std::string&
-{
+    -> std::string& {
   str.erase(str.find_last_not_of(chars) + 1);
   return str;
 }
 
 static auto trim(std::string& str, const std::string& chars = "\t\n\v\f\r ")
-    -> std::string&
-{
+    -> std::string& {
   return ltrim(rtrim(str, chars), chars);
 }
 
@@ -180,15 +171,13 @@ struct string_pair : std::pair<std::string, std::string> {
   using std::pair<std::string, std::string>::pair;
 };
 
-auto operator<<(std::ostream& os, string_pair const& p) -> std::ostream&
-{
+auto operator<<(std::ostream& os, string_pair const& p) -> std::ostream& {
   os << p.first << " = " << p.second;
   return os;
 }
 
 void printBenchmarkPreamble(
-    std::ostream& os, const std::string& prefix, const char* delim)
-{
+    std::ostream& os, const std::string& prefix, const char* delim) {
   std::vector<string_pair> envs;
   std::ostringstream       oss;
   for (auto** env = environ; *env != nullptr; ++env) {

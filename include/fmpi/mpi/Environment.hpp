@@ -19,6 +19,11 @@ class Context {
   Context(const Context&) = delete;
   Context& operator=(const Context&) = delete;
 
+  Context(Context&&) = delete;
+  Context& operator=(Context&&) = delete;
+
+  ~Context() = default;
+
   [[nodiscard]] auto rank() const noexcept -> Rank;
 
   [[nodiscard]] auto size() const noexcept -> size_type;

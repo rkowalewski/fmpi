@@ -62,12 +62,13 @@ class Function<RET(ARGS...), STORAGE_SIZE> {
   // Ctors
   explicit Function(RET (*ptr)(ARGS...));  // construct with function pointer
   template <typename FUNCTOR>
-  Function(FUNCTOR&& functor);  // NOLINT
+  Function(FUNCTOR&& functor) noexcept(
+      std::is_nothrow_move_constructible_v<FUNCTOR>);  // NOLINT
   Function(const Function<RET(ARGS...)>& other) = delete;
   Function(Function<RET(ARGS...)>&& other);  // NOLINT
   Function& operator=(const Function<RET(ARGS...), STORAGE_SIZE>& other) =
       delete;
-  Function& operator=(Function<RET(ARGS...), STORAGE_SIZE>&& other);
+  Function& operator=(Function<RET(ARGS...), STORAGE_SIZE>&& other) noexcept;
   ~Function();
 
   // Methods
@@ -140,7 +141,8 @@ Function<RET(ARGS...), STORAGE_SIZE>::Function(RET (*ptr)(ARGS...))
 
 template <typename RET, typename... ARGS, std::size_t STORAGE_SIZE>
 template <typename FUNCTOR>
-Function<RET(ARGS...), STORAGE_SIZE>::Function(FUNCTOR&& functor) {
+Function<RET(ARGS...), STORAGE_SIZE>::Function(FUNCTOR&& functor) noexcept(
+    std::is_nothrow_move_constructible_v<FUNCTOR>) {
   static_assert(
       fits_inline<FUNCTOR>::value || std::is_lvalue_reference_v<FUNCTOR>);
 
@@ -155,7 +157,7 @@ Function<RET(ARGS...), STORAGE_SIZE>::Function(
 
 template <typename RET, typename... ARGS, std::size_t STORAGE_SIZE>
 Function<RET(ARGS...), STORAGE_SIZE>& Function<RET(ARGS...), STORAGE_SIZE>::
-                                      operator=(Function<RET(ARGS...), STORAGE_SIZE>&& other) {
+                                      operator=(Function<RET(ARGS...), STORAGE_SIZE>&& other) noexcept {
   if (this != &other) {
     this->~Function();  // delete current
     invoker_    = other.invoker_;

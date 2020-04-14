@@ -28,11 +28,11 @@ class TraceStore {
 
  public:
   TraceStore()                      = default;
-  TraceStore(const TraceStore &src) = delete;
-  auto operator=(const TraceStore &rhs) -> TraceStore & = delete;
+  TraceStore(const TraceStore& src) = delete;
+  auto operator=(const TraceStore& rhs) -> TraceStore& = delete;
 
-  auto traces(context_t const &ctx)
-      -> std::unordered_map<key_t, value_t> const &;
+  auto traces(context_t const& ctx)
+      -> std::unordered_map<key_t, value_t> const&;
   // void clear();
   static constexpr auto enabled() noexcept -> bool {
 #ifdef RTLX_ENABLE_TRACE
@@ -41,10 +41,10 @@ class TraceStore {
     return false;
 #endif
   }
-  void erase(context_t const &ctx);
+  void erase(context_t const& ctx);
 
   // Singleton Instance (Thread Safe)
-  static auto GetInstance() -> TraceStore &;
+  static auto GetInstance() -> TraceStore&;
 
  private:
   static std::unique_ptr<TraceStore> m_instance;
@@ -61,26 +61,31 @@ class Trace {
  public:
   explicit Trace(TraceStore::context_t ctx);
 
+  Trace(Trace&&)      = delete;
+  Trace(Trace const&) = delete;
+  Trace& operator=(Trace const&) = delete;
+  Trace& operator=(Trace&&) = delete;
+
   ~Trace();
 
   static auto enabled() noexcept -> bool;
 
-  void put(key_t const & /*key*/, int v);
+  void put(key_t const& /*key*/, int v);
 
   template <class Rep, class Period>
   void add_time(
-      key_t const &key, const std::chrono::duration<Rep, Period> &d) {
+      key_t const& key, const std::chrono::duration<Rep, Period>& d) {
     using duration = typename TraceStore::duration;
 
-    if constexpr (TraceStore::enabled()) {
-      auto &val = std::get<duration>(m_cache[key]);
+    if constexpr (TraceStore::enabled()) {  // NOLINT
+      auto& val = std::get<duration>(m_cache[key]);
       val += duration{d};
     }
   }
 
-  auto measurements() const -> std::unordered_map<key_t, value_t> const &;
+  auto measurements() const -> std::unordered_map<key_t, value_t> const&;
 
-  auto context() const noexcept -> std::string const &;
+  auto context() const noexcept -> std::string const&;
 
   void clear();
 
@@ -94,12 +99,17 @@ class TimeTrace {
   using timer = Timer<Clock>;
 
  public:
-  TimeTrace(Trace &trace, std::string value)
+  TimeTrace(Trace& trace, std::string value)
     : duration_(0)
     , timer_(duration_)
     , trace_(trace)
     , value_(std::move(value)) {
   }
+
+  TimeTrace(TimeTrace&&)      = delete;
+  TimeTrace(TimeTrace const&) = delete;
+  TimeTrace& operator=(TimeTrace const&) = delete;
+  TimeTrace& operator=(TimeTrace&&) = delete;
 
   ~TimeTrace() {
     finish();
@@ -115,7 +125,7 @@ class TimeTrace {
  private:
   typename Clock::duration duration_{};
   timer                    timer_;
-  Trace &                  trace_;
+  Trace&                   trace_;
   std::string              value_;
 };
 

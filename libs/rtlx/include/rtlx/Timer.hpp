@@ -33,6 +33,11 @@ class Timer {
     , _start(Clock::now()) {
   }
 
+  Timer(Timer&&)      = delete;
+  Timer(Timer const&) = delete;
+  Timer& operator=(Timer const&) = delete;
+  Timer& operator=(Timer&&) = delete;
+
   ~Timer() {
     finish();
   }
