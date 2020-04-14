@@ -29,16 +29,6 @@ else()
     message(STATUS "Using build type: ${CMAKE_BUILD_TYPE}")
 endif()
 
-include(CheckCXXCompilerFlag)
-check_cxx_compiler_flag(-pedantic PEDANTIC_SUPPORTED)
-
-if (NOT MSVC)
-	add_compile_options(-Wall -Wextra -Werror)
-
-    if (PEDANTIC_SUPPORTED)
-	    add_compile_options(-Werror)
-    endif()
-endif()
 
 if(NOT CMAKE_DEBUG_POSTFIX)
     set(CMAKE_DEBUG_POSTFIX d)
@@ -57,6 +47,7 @@ endif()
 option(MPI_CXX_SKIP_MPICXX "" ON)
 option(WITH_HWLOC           "Enable hwloc support" OFF)
 
+include(${CMAKE_SOURCE_DIR}/cmake/CompilerFlags.cmake)
 include(${CMAKE_SOURCE_DIR}/cmake/FindMPI.cmake)
 include(${CMAKE_SOURCE_DIR}/cmake/FindOpenMP.cmake)
 include(${CMAKE_SOURCE_DIR}/cmake/ClangTidy.cmake)
