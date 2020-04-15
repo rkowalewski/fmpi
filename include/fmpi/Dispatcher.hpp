@@ -298,9 +298,9 @@ inline CommDispatcher<testReqs>::~CommDispatcher() {
 
 template <typename mpi::reqsome_op testReqs>
 inline void CommDispatcher<testReqs>::stop_worker() {
-    std::lock_guard<std::mutex> lk{mutex_};
-    terminate_ = true;
-    cv_tasks_.notify_all();
+  std::lock_guard<std::mutex> lk{mutex_};
+  terminate_ = true;
+  cv_tasks_.notify_all();
 }
 
 template <typename mpi::reqsome_op testReqs>
@@ -369,8 +369,7 @@ inline void CommDispatcher<testReqs>::worker() {
     {
       UnlockGuard ulg{lk};
 
-      if (!new_reqs.empty())
-      {
+      if (!new_reqs.empty()) {
         Timer{dispatch_time};
         // 3) execute new requests. Do this after releasing the lock.
         for (auto&& slot : new_reqs) {

@@ -354,22 +354,22 @@ inline void RingWaitsomeOverlap(
     }
   }
 
+  // We definitely have to wait here because although all data has arrived
+  // there might still be pending tasks for other peers (e.g. sends)
   dispatcher.loop_until_done();
-#ifndef NDEBUG
-  auto const stats = dispatcher.stats();
 
+  trace.add_time("ComputeThread.schedule_time", t_compute.schedule);
+  trace.add_time("ComputeThread.queue_time", t_compute.queue);
+  trace.add_time("ComputeThread.compute_time", t_compute.comp);
+  trace.add_time("ComputeThread.total_time", t_compute.total);
+
+
+  auto const stats = dispatcher.stats();
   trace.add_time("DispatcherThread.dispatch_time", stats.dispatch_time);
   trace.add_time("DispatcherThread.queue_time", stats.queue_time);
   trace.add_time("DispatcherThread.completion_time", stats.completion_time);
   trace.put(
       "DispatcherThread.iterations", static_cast<int>(stats.iterations));
-#endif
-
-  trace.add_time("ComputeThread.queue_time", t_compute.queue);
-  trace.add_time("ComputeThread.compute_time", t_compute.comp);
-  trace.add_time("ComputeThread.total_time", t_compute.total);
-  trace.add_time("ScheduleThread", t_compute.schedule);
-
 }
 }  // namespace fmpi
 #endif

@@ -21,6 +21,8 @@
 #include <fmpi/AlltoAll.hpp>
 #include <fmpi/Bruck.hpp>
 #include <fmpi/Random.hpp>
+#include <fmpi/OpenMP.hpp>
+
 
 #include <rtlx/ScopedLambda.hpp>
 #include <rtlx/UnorderedMap.hpp>
