@@ -27,7 +27,7 @@ template <
     class OutputIt,
     class Op,
     size_t NReqs>
-void RingWaitsome(
+void ring_waitsome(
     InputIt             begin,
     OutputIt            out,
     int                 blocksize,
@@ -40,7 +40,7 @@ template <
     class OutputIt,
     class Op,
     size_t NReqs>
-inline void RingWaitsomeOverlap(
+inline void ring_waitsome_overlap(
     InputIt             begin,
     OutputIt            out,
     int                 blocksize,
@@ -53,7 +53,7 @@ template <
     class OutputIt,
     class Op,
     size_t NReqs>
-inline void RingWaitall(
+inline void ring_waitall(
     InputIt             begin,
     OutputIt            out,
     int                 blocksize,
@@ -61,7 +61,7 @@ inline void RingWaitall(
     Op&&                op);
 
 template <class InputIt, class OutputIt, class Op>
-inline void MpiAlltoAll(
+inline void mpi_alltoall(
     InputIt             begin,
     OutputIt            out,
     int                 blocksize,

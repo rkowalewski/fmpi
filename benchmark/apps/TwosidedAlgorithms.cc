@@ -173,7 +173,7 @@ int main(int argc, char* argv[]) {
       // with our own algorithms
       if (params.check) {
         correct = container(nels);
-        fmpi::MpiAlltoAll(
+        fmpi::mpi_alltoall(
             data.begin(),
             correct.begin(),
             static_cast<int>(sendcount),

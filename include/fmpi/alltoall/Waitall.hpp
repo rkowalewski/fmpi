@@ -27,7 +27,7 @@ template <
     class OutputIt,
     class Op,
     size_t NReqs = 1>
-inline void RingWaitall(
+inline void ring_waitall(
     InputIt               begin,
     OutputIt              out,
     int                   blocksize,
@@ -50,7 +50,7 @@ inline void RingWaitall(
       "running algorithm " << os.str() << ", blocksize: " << blocksize);
 
   if (nr < 3) {
-    detail::Ring_lt3(
+    detail::ring_pairwise_lt3(
         begin, out, blocksize, ctx, std::forward<Op&&>(op), trace);
     return;
   }

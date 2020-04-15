@@ -90,7 +90,7 @@ template <
     class OutputIt,
     class Op,
     size_t NReqs = 2>
-inline void RingWaitsomeOverlap(
+inline void ring_waitsome_overlap(
     InputIt             begin,
     OutputIt            out,
     int                 blocksize,
@@ -111,7 +111,7 @@ inline void RingWaitsomeOverlap(
       "running algorithm " << os.str() << ", blocksize: " << blocksize);
 
   if (nr < 3) {
-    detail::Ring_lt3(
+    detail::ring_pairwise_lt3(
         begin, out, blocksize, ctx, std::forward<Op&&>(op), trace);
     return;
   }
@@ -362,7 +362,6 @@ inline void RingWaitsomeOverlap(
   trace.add_time("ComputeThread.queue_time", t_compute.queue);
   trace.add_time("ComputeThread.compute_time", t_compute.comp);
   trace.add_time("ComputeThread.total_time", t_compute.total);
-
 
   auto const stats = dispatcher.stats();
   trace.add_time("DispatcherThread.dispatch_time", stats.dispatch_time);

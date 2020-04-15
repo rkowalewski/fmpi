@@ -13,7 +13,7 @@ namespace fmpi {
 namespace detail {
 
 template <class InputIt, class OutputIt, class Op>
-inline void Ring_lt3(
+inline void ring_pairwise_lt3(
     InputIt             begin,
     OutputIt            out,
     int                 blocksize,

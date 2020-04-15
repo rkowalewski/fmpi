@@ -17,7 +17,7 @@
 
 namespace fmpi {
 template <class InputIt, class OutputIt, class Op>
-inline void MpiAlltoAll(
+inline void mpi_alltoall(
     InputIt             begin,
     OutputIt            out,
     int                 blocksize,
