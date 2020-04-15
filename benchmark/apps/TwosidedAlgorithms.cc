@@ -122,7 +122,6 @@ int main(int argc, char* argv[]) {
   FMPI_DBG(params.niters);
 
   for (std::size_t step = 0; step < params.sizes.size(); ++step) {
-    // each process sends sencount to all other PEs
     auto const blocksize = params.sizes[step];
     RTLX_ASSERT(blocksize >= sizeof(value_t));
     RTLX_ASSERT(blocksize % sizeof(value_t) == 0);
@@ -228,10 +227,6 @@ int main(int argc, char* argv[]) {
 
         traceStore.erase(algo.first);
       }
-
-      // synchronize before advancing to the next stage
-      FMPI_DBG("Iteration Finished");
-      MPI_Barrier(world.mpiComm());
     }
   }
 

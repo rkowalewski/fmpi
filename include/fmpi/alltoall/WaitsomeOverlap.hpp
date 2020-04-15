@@ -101,7 +101,6 @@ inline void RingWaitsomeOverlap(
   using value_type = typename std::iterator_traits<InputIt>::value_type;
 
   auto const nr = ctx.size();
-  // auto const me = ctx.rank();
 
   std::ostringstream os;
   os << Schedule::NAME << "WaitsomeOverlap" << NReqs;
@@ -235,8 +234,7 @@ inline void RingWaitsomeOverlap(
     duration schedule{0};
   } t_compute;
 
-  FMPI_DBG("Sending Messages...");
-
+  FMPI_DBG("Sending Messages");
   {
     timer t{t_compute.schedule};
 
@@ -356,8 +354,8 @@ inline void RingWaitsomeOverlap(
     }
   }
 
-#ifndef NDEBUG
   dispatcher.loop_until_done();
+#ifndef NDEBUG
   auto const stats = dispatcher.stats();
 
   trace.add_time("DispatcherThread.dispatch_time", stats.dispatch_time);
@@ -371,6 +369,7 @@ inline void RingWaitsomeOverlap(
   trace.add_time("ComputeThread.compute_time", t_compute.comp);
   trace.add_time("ComputeThread.total_time", t_compute.total);
   trace.add_time("ScheduleThread", t_compute.schedule);
+
 }
 }  // namespace fmpi
 #endif

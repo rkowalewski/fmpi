@@ -293,17 +293,14 @@ inline CommDispatcher<testReqs>::CommDispatcher(std::size_t winsz)
 template <typename mpi::reqsome_op testReqs>
 inline CommDispatcher<testReqs>::~CommDispatcher() {
   stop_worker();
-
   thread_.join();
 }
 
 template <typename mpi::reqsome_op testReqs>
 inline void CommDispatcher<testReqs>::stop_worker() {
-  {
     std::lock_guard<std::mutex> lk{mutex_};
     terminate_ = true;
-  }
-  cv_tasks_.notify_all();
+    cv_tasks_.notify_all();
 }
 
 template <typename mpi::reqsome_op testReqs>
@@ -368,10 +365,11 @@ inline void CommDispatcher<testReqs>::worker() {
       }
     }
 
-    bool progress = false;
+    bool progress = !new_reqs.empty();
     {
       UnlockGuard ulg{lk};
 
+      if (!new_reqs.empty())
       {
         Timer{dispatch_time};
         // 3) execute new requests. Do this after releasing the lock.
@@ -384,14 +382,14 @@ inline void CommDispatcher<testReqs>::worker() {
           }
         }
 
-        progress = !new_reqs.empty();
         new_reqs.clear();
       }
 
       {
         Timer{completion_time};
+        auto const nCompleted = progress_requests();
         // 1) we first process pending requests...
-        progress = progress || (progress_requests() > 0);
+        progress = progress || (nCompleted > 0);
       }
     }
 
