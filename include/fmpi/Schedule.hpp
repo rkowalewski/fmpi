@@ -7,7 +7,7 @@ namespace fmpi {
 
 class FlatHandshake {
  public:
-  static constexpr const char* NAME = "Ring";
+  static constexpr auto NAME = std::string_view("Ring");
 
   static auto sendRank(::mpi::Context const& comm, uint32_t phase)
       -> ::mpi::Rank;
@@ -23,7 +23,7 @@ class FlatHandshake {
 
 class OneFactor {
  public:
-  static constexpr const char* NAME = "OneFactor";
+  static constexpr auto NAME = std::string_view("OneFactor");
 
   static auto sendRank(mpi::Context const& comm, uint32_t phase) -> mpi::Rank;
 
@@ -41,7 +41,7 @@ class OneFactor {
 
 class Linear {
  public:
-  static constexpr const char* NAME = "Linear";
+  static constexpr auto NAME = std::string_view("Linear");
 
   static auto sendRank(mpi::Context const& comm, uint32_t phase) noexcept
       -> mpi::Rank;

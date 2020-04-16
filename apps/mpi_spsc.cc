@@ -132,7 +132,7 @@ int run() {
   //
   fmpi::CommDispatcher dispatcher{winsz};
   dispatcher.register_signal(
-      fmpi::request_type::IRECV,
+      fmpi::message_type::IRECV,
       [&buf_alloc](fmpi::Message& message, MPI_Request& /*req*/) {
         // allocator some buffer
         auto* b = buf_alloc.allocate(blocksize);
@@ -142,7 +142,7 @@ int run() {
       });
 
   dispatcher.register_signal(
-      fmpi::request_type::IRECV,
+      fmpi::message_type::IRECV,
       [](fmpi::Message& message, MPI_Request& req) -> int {
         return MPI_Irecv(
             message.writable_buffer(),
@@ -155,7 +155,7 @@ int run() {
       });
 
   dispatcher.register_signal(
-      fmpi::request_type::ISEND,
+      fmpi::message_type::ISEND,
       [](fmpi::Message& message, MPI_Request& req) -> int {
         auto ret = MPI_Isend(
             message.readable_buffer(),
@@ -171,9 +171,8 @@ int run() {
       });
 
   dispatcher.register_callback(
-      fmpi::request_type::IRECV,
-      [&ready_tasks](fmpi::Message& message, MPI_Status const& status) {
-        FMPI_ASSERT(status.MPI_ERROR == MPI_SUCCESS);
+      fmpi::message_type::IRECV,
+      [&ready_tasks](fmpi::Message& message /*, MPI_Status const& status*/) {
         auto span = gsl::span(
             static_cast<value_type*>(message.writable_buffer()),
             message.count());
@@ -197,13 +196,13 @@ int run() {
           auto recv_message = fmpi::Message{peer, mpi_tag, world};
 
           dispatcher.dispatch(
-              fmpi::request_type::IRECV, std::move(recv_message));
+              fmpi::message_type::IRECV, std::move(recv_message));
 
           auto send_message = fmpi::Message(
               gsl::span(&first[peer], blocksize), peer, mpi_tag, world);
 
           dispatcher.dispatch(
-              fmpi::request_type::ISEND, std::move(send_message));
+              fmpi::message_type::ISEND, std::move(send_message));
         }
       });
 

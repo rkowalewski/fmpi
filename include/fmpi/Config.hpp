@@ -5,13 +5,14 @@
 
 #include <cstddef>
 #include <iosfwd>
+#include <string_view>
 
 namespace fmpi {
 
-constexpr const char TOTAL[]         = "Ttotal";
-constexpr const char COMPUTATION[]   = "Tcomp";
-constexpr const char COMMUNICATION[] = "Tcomm";
-constexpr const char N_COMM_ROUNDS[] = "Ncomm_rounds";
+constexpr auto TOTAL         = std::string_view{"Ttotal"};
+constexpr auto COMPUTATION   = std::string_view{"Tcomp"};
+constexpr auto COMMUNICATION = std::string_view{"Tcomm"};
+constexpr auto N_COMM_ROUNDS = std::string_view{"Ncomm_rounds"};
 
 constexpr int EXCH_TAG_RING  = 110435;
 constexpr int EXCH_TAG_BRUCK = 110436;

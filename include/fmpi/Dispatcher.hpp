@@ -47,7 +47,7 @@ enum class status
 };
 
 /// request type
-enum class request_type : uint8_t
+enum class message_type : uint8_t
 {
   IRECV = 0,
   ISEND,
@@ -87,8 +87,8 @@ class Message {
     set_buffer(span.data(), span.size());
   }
 
-  Message(const Message&) = delete;
-  Message& operator=(Message const&) = delete;
+  Message(const Message&) = default;
+  Message& operator=(Message const&) = default;
 
   Message(Message&&) noexcept = default;
   Message& operator=(Message&&) noexcept = default;
@@ -152,23 +152,26 @@ class CommDispatcher {
   struct Task {
     Task() = default;
 
-    Task(Message&& m, request_type t)
-      : message(std::move(m))
+    Task(Message m, message_type t)
+      : message(m)
       , type(t) {
     }
 
     Message      message{};
-    request_type type{};
+    message_type type{};
   };
+
+  class RequestWindow {};
 
  public:
   struct Statistics {
     // modified internally, read externally
-    std::size_t completed{};
     std::size_t iterations{};
-    duration    dispatch_time{};
-    duration    queue_time{};
-    duration    completion_time{};
+
+    duration queue_time{};
+    duration dispatch_time{};
+    duration completion_time{};
+    duration callback_time{};
   };
 
  private:
@@ -178,30 +181,36 @@ class CommDispatcher {
   using simple_vector =
       tlx::SimpleVector<_T, tlx::SimpleVectorMode::NoInitNoDestroy>;
 
-  static constexpr auto n_types = rtlx::to_underlying(request_type::SENTINEL);
+  static constexpr auto n_types = rtlx::to_underlying(message_type::SENTINEL);
 
   static_assert(n_types == 2, "only two request types supported for now");
 
-  using task_allocator = HeapAllocator<Task, false>;
+  using contiguous_heap_allocator = HeapAllocator<Task, false>;
   using task_list  = std::list<Task, ContiguousPoolAllocator<Task, false>>;
   using task_queue = std::queue<Task, task_list>;
 
   using signal        = Function<int(Message&, MPI_Request&)>;
-  using callback      = Function<void(Message&, MPI_Status const&)>;
+  using callback      = Function<void(Message&)>;
   using signal_list   = std::list<signal>;
   using callback_list = std::list<callback>;
 
   using signal_token   = typename signal_list::const_iterator;
   using callback_token = typename callback_list::const_iterator;
 
+  using req_idx_t    = simple_vector<int>;
+  using idx_ranges_t = std::array<int*, n_types>;
+
   //////////////////////////////
   // Thread Safe Work Sharing //
   //////////////////////////////
 
   // Task Lists: One for each type
-  alignas(kCacheLineAlignment) std::array<task_queue, n_types> queues_{};
+  std::array<task_queue, n_types> queues_{};
 
-  task_allocator alloc_;
+  contiguous_heap_allocator alloc_;
+
+  std::array<signal_list, n_types>   signals_{};
+  std::array<callback_list, n_types> callbacks_{};
 
   Statistics stats_{};
 
@@ -224,18 +233,15 @@ class CommDispatcher {
   // Requests in flight for each type, currently: winsz / n_types
   std::size_t reqs_in_flight_{};
   // Pending tasks: explicitly use a normal vector to default construct
-  // elements: explicitly use a normal vector to default construct elements
   tlx::SimpleVector<Task> pending_{};
   // MPI_Requests
   simple_vector<MPI_Request> mpi_reqs_{};
   // MPI_Statuses - only for receive requests
   simple_vector<MPI_Status> mpi_statuses_{};
   // indices of request slots in the sliding window
-  simple_vector<int> indices_{};
+  req_idx_t indices_{};
   // free slots for each request type
-  simple_vector<tlx::RingBuffer<int>>      req_slots_{n_types};
-  std::array<std::list<signal>, n_types>   signals_{};
-  std::array<std::list<callback>, n_types> callbacks_{};
+  simple_vector<tlx::RingBuffer<int>> req_slots_{n_types};
 
   std::thread thread_;
 
@@ -244,15 +250,15 @@ class CommDispatcher {
 
   ~CommDispatcher();
 
-  void dispatch(request_type qid, Message&& message);
+  void dispatch(message_type qid, Message message);
 
   template <class F, class... Args>
   signal_token register_signal(
-      request_type type, F&& callable, Args&&... args);
+      message_type type, F&& callable, Args&&... args);
 
   template <class F, class... Args>
   callback_token register_callback(
-      request_type type, F&& callable, Args&&... args);
+      message_type type, F&& callable, Args&&... args);
 
   void loop_until_done();
 
@@ -274,7 +280,7 @@ class CommDispatcher {
 
   [[nodiscard]] bool has_active_requests() const noexcept;
 
-  std::size_t progress_requests();
+  idx_ranges_t progress_requests();
 
   // !!! CAUTION: Never Call this without holding the mutex !!!
   bool is_all_done() const noexcept;
@@ -282,12 +288,14 @@ class CommDispatcher {
   void worker();
 
   void discard_signals();
+
+  void do_reset(std::size_t winsz);
 };  // namespace fmpi
 
 template <typename mpi::reqsome_op testReqs>
 inline CommDispatcher<testReqs>::CommDispatcher(std::size_t winsz)
-  : alloc_(task_allocator{default_task_capacity}) {
-  reset(winsz);
+  : alloc_(contiguous_heap_allocator{default_task_capacity}) {
+  do_reset(winsz);
 }
 
 template <typename mpi::reqsome_op testReqs>
@@ -298,8 +306,11 @@ inline CommDispatcher<testReqs>::~CommDispatcher() {
 
 template <typename mpi::reqsome_op testReqs>
 inline void CommDispatcher<testReqs>::stop_worker() {
-  std::lock_guard<std::mutex> lk{mutex_};
-  terminate_ = true;
+  {
+    std::lock_guard<std::mutex> lk{mutex_};
+    terminate_ = true;
+  }
+
   cv_tasks_.notify_all();
 }
 
@@ -328,6 +339,7 @@ inline void CommDispatcher<testReqs>::worker() {
     duration queue_time{};
     duration dispatch_time{};
     duration completion_time{};
+    duration callback_time{};
 
     {
       Timer tq{queue_time};
@@ -346,8 +358,9 @@ inline void CommDispatcher<testReqs>::worker() {
 
       if (queue_count() && req_capacity()) {
         for (auto&& q : range(n_types)) {
-          auto const n = std::min(req_slots_[q].size(), queues_[q].size());
-          for (auto&& unused : range(n)) {
+          auto const slots = req_slots_[q].size();
+          auto const tasks = queues_[q].size();
+          for (auto&& unused : range(std::min(slots, tasks))) {
             std::ignore = unused;
 
             auto task = std::move(queues_[q].front());
@@ -377,18 +390,49 @@ inline void CommDispatcher<testReqs>::worker() {
           auto& task    = pending_[slot];
           auto& signals = signals_[rtlx::to_underlying(task.type)];
           for (auto&& sig : signals) {
-            sig(task.message, mpi_reqs_[slot]);
+            if (sig) {
+              sig(task.message, mpi_reqs_[slot]);
+            }
           }
         }
 
         new_reqs.clear();
       }
 
+      idx_ranges_t completed;
+
       {
         Timer{completion_time};
-        auto const nCompleted = progress_requests();
-        // 1) we first process pending requests...
-        progress = progress || (nCompleted > 0);
+        completed = progress_requests();
+      }
+
+      // 1) we first process pending requests...
+      auto const nCompleted = std::distance(
+          std::begin(indices_), completed[completed.size() - 1]);
+
+      progress = progress || (nCompleted > 0);
+
+      {
+        Timer{callback_time};
+        for (auto&& type : range(n_types)) {
+          auto first = type == 0 ? std::begin(indices_) : completed[type - 1];
+          auto last  = completed[type];
+
+          FMPI_ASSERT(first <= last);
+
+          // fire callbacks
+          for (; first != last; ++first) {
+            auto& processed = pending_[*first];
+
+            for (auto&& cb : callbacks_[type]) {
+              FMPI_ASSERT(cb);
+              cb(processed.message);
+            }
+          }
+
+          // release request slots
+          std::copy(first, last, std::front_inserter(req_slots_[type]));
+        }
       }
     }
 
@@ -396,20 +440,21 @@ inline void CommDispatcher<testReqs>::worker() {
     stats_.completion_time += completion_time;
     stats_.dispatch_time += dispatch_time;
     stats_.queue_time += queue_time;
+    stats_.callback_time += callback_time;
 
     if (is_all_done() || progress) {
       cv_finished_.notify_all();
     }
   } while (!terminate_);
-}
+}  // namespace fmpi
 
 template <mpi::reqsome_op testReqs>
-void CommDispatcher<testReqs>::dispatch(request_type qid, Message&& message) {
+void CommDispatcher<testReqs>::dispatch(message_type qid, Message message) {
   {
     // 1) Acquire lock
     std::lock_guard<std::mutex> lock(mutex_);
 
-    queues_[rtlx::to_underlying(qid)].push(Task{std::move(message), qid});
+    queues_[rtlx::to_underlying(qid)].push(Task{message, qid});
   }
 
   // 3) signal
@@ -417,14 +462,16 @@ void CommDispatcher<testReqs>::dispatch(request_type qid, Message&& message) {
 }
 
 template <typename mpi::reqsome_op testReqs>
-inline std::size_t CommDispatcher<testReqs>::progress_requests() {
+inline typename CommDispatcher<testReqs>::idx_ranges_t
+CommDispatcher<testReqs>::progress_requests() {
   int* last;
 
   auto const nreqs = req_count();
   FMPI_DBG(nreqs);
 
   if (!nreqs) {
-    return 0U;
+    auto empty_ranges = idx_ranges_t{};
+    empty_ranges.fill(std::begin(indices_));
   }
 
   auto mpi_ret = testReqs(
@@ -447,33 +494,11 @@ inline std::size_t CommDispatcher<testReqs>::progress_requests() {
         return req < static_cast<int>(reqs_in_flight_);
       });
 
-  std::copy(
-      &*std::begin(indices_),
-      fstSent,
-      std::front_inserter(
-          req_slots_[rtlx::to_underlying(request_type::IRECV)]));
+  idx_ranges_t ranges{};
+  ranges[rtlx::to_underlying(message_type::IRECV)] = fstSent;
+  ranges[rtlx::to_underlying(message_type::ISEND)] = last;
 
-  std::copy(
-      fstSent,
-      last,
-      std::front_inserter(
-          req_slots_[rtlx::to_underlying(request_type::ISEND)]));
-
-  for (auto it = &*std::begin(indices_); it < fstSent; ++it) {
-    auto& processed = pending_[*it];
-
-    // we explcitly set the error field to propagate succeeded MPI calls.
-    // MPI does not do that, unfortunately.
-    mpi_statuses_[*it].MPI_ERROR =
-        (mpi_ret == MPI_SUCCESS) ? MPI_SUCCESS : mpi_statuses_[*it].MPI_ERROR;
-
-    auto& callbacks = callbacks_[rtlx::to_underlying(processed.type)];
-    for (auto&& cb : callbacks) {
-      cb(processed.message, mpi_statuses_[*it]);
-    }
-  }
-
-  return nCompleted;
+  return ranges;
 }
 
 template <mpi::reqsome_op testReqs>
@@ -499,7 +524,7 @@ template <mpi::reqsome_op testReqs>
 template <class F, class... Args>
 inline typename CommDispatcher<testReqs>::signal_token
 CommDispatcher<testReqs>::register_signal(
-    request_type type, F&& callable, Args&&... args) {
+    message_type type, F&& callable, Args&&... args) {
   auto const slot = rtlx::to_underlying(type);
 
   std::lock_guard<std::mutex> lg{mutex_};
@@ -514,7 +539,7 @@ template <mpi::reqsome_op testReqs>
 template <class F, class... Args>
 inline typename CommDispatcher<testReqs>::callback_token
 CommDispatcher<testReqs>::register_callback(
-    request_type type, F&& callable, Args&&... args) {
+    message_type type, F&& callable, Args&&... args) {
   auto const slot = rtlx::to_underlying(type);
 
   std::lock_guard<std::mutex> lg{mutex_};
@@ -527,17 +552,22 @@ CommDispatcher<testReqs>::register_callback(
 
 template <mpi::reqsome_op testReqs>
 inline void CommDispatcher<testReqs>::discard_signals() {
-  decltype(callbacks_) empty_cbs{};
-  decltype(signals_)   empty_signals{};
+  using callback_container = decltype(callbacks_);
+  using signal_container   = decltype(signals_);
 
-  std::swap(empty_cbs, callbacks_);
-  std::swap(empty_signals, signals_);
+  signals_   = signal_container{};
+  callbacks_ = callback_container{};
 }
 
 template <mpi::reqsome_op testReqs>
 inline void CommDispatcher<testReqs>::reset(std::size_t winsz) {
   std::lock_guard<std::mutex> lk{mutex_};
 
+  do_reset(winsz);
+}
+
+template <mpi::reqsome_op testReqs>
+inline void CommDispatcher<testReqs>::do_reset(std::size_t winsz) {
   discard_signals();
 
   FMPI_ASSERT(is_all_done());

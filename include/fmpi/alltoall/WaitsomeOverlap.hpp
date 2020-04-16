@@ -63,25 +63,6 @@ class NConsumer {
   std::size_t            count_;
 };
 
-#if 0
-template <class Channel>
-class Scheduler {
-  using task = typename Channel::value_type;
-
- public:
-  Scheduler(std::shared_ptr<Channel> channel)
-    : channel_(channel) {
-  }
-
-  template <class F, class OutputIterator>
-  Iterator apply(F&& f, OutputIterator dest) {
-  }
-
- private:
-  std::shared_ptr<Channel> channel_;
-};
-#endif
-
 }  // namespace detail
 
 template <
@@ -96,6 +77,21 @@ inline void ring_waitsome_overlap(
     int                 blocksize,
     mpi::Context const& ctx,
     Op&&                op) {
+  using timer    = rtlx::Timer<>;
+  using duration = typename timer::duration;
+
+  struct Times {
+    duration comm_enqueue{0};
+    // comm_dequeue in dispatcher...
+
+    // comp_enqueue in dispatcher...
+    duration comp_dequeue{0};
+    duration comp_compute{0};
+    duration idle{0};
+  };
+
+  struct Times times {};
+
   auto const& config = Config::instance();
 
   using value_type = typename std::iterator_traits<InputIt>::value_type;
@@ -116,12 +112,9 @@ inline void ring_waitsome_overlap(
     return;
   }
 
-  rtlx::TimeTrace t_comm{trace, COMMUNICATION};
-
   Schedule const commAlgo{};
 
-  // Number of Pipeline Stages
-  constexpr std::size_t n_pipelines        = 2;
+  // Each round is composed of an isend-irecv pair...
   constexpr std::size_t messages_per_round = 2;
 
   auto const n_exchanges  = ctx.size() - 1;
@@ -137,7 +130,10 @@ inline void ring_waitsome_overlap(
   FMPI_DBG(nthreads);
   FMPI_DBG(blocksize);
 
-  auto const required = winsz * blocksize * n_pipelines;
+  // Number of Pipeline Stages
+  constexpr std::size_t n_pipelines = 2;
+
+  auto const required = reqsInFlight * blocksize * n_pipelines;
   auto const capacity =
       nthreads * kMaxContiguousBufferSize / sizeof(value_type);
 
@@ -164,7 +160,7 @@ inline void ring_waitsome_overlap(
   CommDispatcher<mpi::testsome> dispatcher{winsz};
 
   dispatcher.register_signal(
-      request_type::IRECV,
+      message_type::IRECV,
       [&buf_alloc, blocksize](
           Message& message, MPI_Request & /*req*/) -> int {
         // allocator some buffer
@@ -178,7 +174,7 @@ inline void ring_waitsome_overlap(
       });
 
   dispatcher.register_signal(
-      request_type::IRECV, [](Message& message, MPI_Request& req) -> int {
+      message_type::IRECV, [](Message& message, MPI_Request& req) -> int {
         auto ret = mpi::irecv(
             message.writable_buffer(),
             message.count(),
@@ -194,7 +190,7 @@ inline void ring_waitsome_overlap(
       });
 
   dispatcher.register_signal(
-      request_type::ISEND, [](Message& message, MPI_Request& req) -> int {
+      message_type::ISEND, [](Message& message, MPI_Request& req) -> int {
         auto ret = mpi::isend(
             message.readable_buffer(),
             message.count(),
@@ -209,61 +205,55 @@ inline void ring_waitsome_overlap(
       });
 
   dispatcher.register_callback(
-      request_type::IRECV,
-      [produce = detail::NProducer{received_chunks, n_exchanges}](
-          Message& message, MPI_Status const& status) mutable {
+      message_type::IRECV,
+      [callback = detail::NProducer{
+           received_chunks,
+           n_exchanges,
+       }](Message& message /*, MPI_Status const& status*/) mutable {
+#if 0
         FMPI_ASSERT(status.MPI_ERROR == MPI_SUCCESS);
-
+        FMPI_ASSERT(status.MPI_SOURCE == message.peer());
+        FMPI_ASSERT(status.MPI_TAG == message.tag());
+#endif
         auto span = gsl::span(
             static_cast<value_type*>(message.writable_buffer()),
             message.count());
 
-        produce(std::make_pair(message.peer(), span));
+        auto ret = callback(std::make_pair(message.peer(), span));
+        FMPI_ASSERT(ret);
       });
 
   dispatcher.start_worker();
   dispatcher.pinToCore(config.dispatcher_core);
 
-  using timer    = rtlx::Timer<>;
-  using duration = typename timer::duration;
-
-  struct ComputeTime {
-    duration queue{0};
-    duration comp{0};
-    duration total{0};
-    duration schedule{0};
-  } t_compute;
-
-  FMPI_DBG("Sending Messages");
   {
-    timer t{t_compute.schedule};
+    FMPI_DBG("Sending Messages");
+
+    timer{times.comm_enqueue};
 
     for (auto&& r : range(commAlgo.phaseCount(ctx))) {
       auto const rpeer = commAlgo.recvRank(ctx, r);
       auto const speer = commAlgo.sendRank(ctx, r);
 
       if (rpeer != ctx.rank()) {
-        auto recv_message = Message{rpeer, EXCH_TAG_RING, ctx};
+        auto recv = Message{rpeer, EXCH_TAG_RING, ctx};
 
-        dispatcher.dispatch(request_type::IRECV, std::move(recv_message));
+        dispatcher.dispatch(message_type::IRECV, recv);
       }
 
       if (speer != ctx.rank()) {
-        auto send_message = Message(
-            gsl::span(std::next(begin, speer * blocksize), blocksize),
-            speer,
-            EXCH_TAG_RING,
-            ctx);
+        auto span = gsl::span(std::next(begin, speer * blocksize), blocksize);
 
-        dispatcher.dispatch(request_type::ISEND, std::move(send_message));
+        auto send = Message{span, speer, EXCH_TAG_RING, ctx};
+
+        dispatcher.dispatch(message_type::ISEND, send);
       }
     }
   }
 
-  FMPI_DBG("dispatch done...");
-
   {
-    timer t{t_compute.total};
+    FMPI_DBG("processing message arrivals...");
+
     // chunks to merge
     std::vector<std::pair<OutputIt, OutputIt>> chunks;
     std::vector<std::pair<OutputIt, OutputIt>> processed;
@@ -289,14 +279,14 @@ inline void ring_waitsome_overlap(
     auto d_first = out;
 
     {
-      timer t{t_compute.queue};
+      timer{times.comp_dequeue};
       chunk task{};
       while (consume(task)) {
         auto span = task.second;
         chunks.emplace_back(span.data(), span.data() + span.size());
 
         if (enough_work()) {
-          timer t{t_compute.comp};
+          timer{times.comp_compute};
           // merge all chunks
           auto d_last = op(chunks, d_first);
 
@@ -318,8 +308,10 @@ inline void ring_waitsome_overlap(
       }
     }
 
+    times.comp_dequeue -= times.comp_compute;
+
     {
-      timer      t{t_compute.comp};
+      timer{times.comp_compute};
       auto const nels = static_cast<std::size_t>(ctx.size()) * blocksize;
 
       using merge_buffer_t = tlx::
@@ -354,21 +346,31 @@ inline void ring_waitsome_overlap(
     }
   }
 
-  // We definitely have to wait here because although all data has arrived
-  // there might still be pending tasks for other peers (e.g. sends)
-  dispatcher.loop_until_done();
-
-  trace.add_time("ComputeThread.schedule_time", t_compute.schedule);
-  trace.add_time("ComputeThread.queue_time", t_compute.queue);
-  trace.add_time("ComputeThread.compute_time", t_compute.comp);
-  trace.add_time("ComputeThread.total_time", t_compute.total);
+  {
+    timer{times.idle};
+    // We definitely have to wait here because although all data has arrived
+    // there might still be pending tasks for other peers (e.g. sends)
+    dispatcher.loop_until_done();
+  }
 
   auto const stats = dispatcher.stats();
-  trace.add_time("DispatcherThread.dispatch_time", stats.dispatch_time);
-  trace.add_time("DispatcherThread.queue_time", stats.queue_time);
-  trace.add_time("DispatcherThread.completion_time", stats.completion_time);
-  trace.put(
-      "DispatcherThread.iterations", static_cast<int>(stats.iterations));
+
+  trace.add_time("Tcomm.enqueue", times.comm_enqueue);
+  trace.add_time("Tcomm.dequeue", stats.queue_time);
+
+  trace.add_time("Tcomp.enqueue", times.comp_dequeue);
+  trace.add_time("Tcomp.dequeue", stats.callback_time);
+
+
+  trace.add_time(COMPUTATION, times.comp_compute);
+  trace.add_time("Tcomp.idle", times.idle);
+
+  trace.add_time("Tcomm.dispatch", stats.dispatch_time);
+  trace.add_time("Tcomm.progress", stats.completion_time);
+
+
+  // other
+  trace.put("Tcomm.iterations", static_cast<int>(stats.iterations));
 }
 }  // namespace fmpi
 #endif

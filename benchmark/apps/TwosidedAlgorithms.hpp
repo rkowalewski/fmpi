@@ -193,7 +193,7 @@ auto algorithm_list(std::string const& pattern, mpi::Context const& ctx)
                          Callback,
                          16>),
                  std::make_pair(
-                     "RingWaitsome_overlap4",
+                     "RingWaitsomeOverlap4",
                      fmpi::ring_waitsome_overlap<
                          fmpi::FlatHandshake,
                          RandomAccessIterator1,
@@ -201,7 +201,7 @@ auto algorithm_list(std::string const& pattern, mpi::Context const& ctx)
                          Callback,
                          4>),
                  std::make_pair(
-                     "RingWaitsome_overlap8",
+                     "RingWaitsomeOverlap8",
                      fmpi::ring_waitsome_overlap<
                          fmpi::FlatHandshake,
                          RandomAccessIterator1,
@@ -209,7 +209,7 @@ auto algorithm_list(std::string const& pattern, mpi::Context const& ctx)
                          Callback,
                          8>),
                  std::make_pair(
-                     "RingWaitsome_overlap16",
+                     "RingWaitsomeOverlap16",
                      fmpi::ring_waitsome_overlap<
                          fmpi::FlatHandshake,
                          RandomAccessIterator1,
@@ -217,7 +217,7 @@ auto algorithm_list(std::string const& pattern, mpi::Context const& ctx)
                          Callback,
                          16>),
                  std::make_pair(
-                     "OneFactorWaitsome_overlap4",
+                     "OneFactorWaitsomeOverlap4",
                      fmpi::ring_waitsome_overlap<
                          fmpi::OneFactor,
                          RandomAccessIterator1,
@@ -225,7 +225,7 @@ auto algorithm_list(std::string const& pattern, mpi::Context const& ctx)
                          Callback,
                          4>),
                  std::make_pair(
-                     "OneFactorWaitsome_overlap8",
+                     "OneFactorWaitsomeOverlap8",
                      fmpi::ring_waitsome_overlap<
                          fmpi::OneFactor,
                          RandomAccessIterator1,
@@ -233,7 +233,7 @@ auto algorithm_list(std::string const& pattern, mpi::Context const& ctx)
                          Callback,
                          8>),
                  std::make_pair(
-                     "OneFactorWaitsome_overlap16",
+                     "OneFactorWaitsomeOverlap16",
                      fmpi::ring_waitsome_overlap<
                          fmpi::OneFactor,
                          RandomAccessIterator1,

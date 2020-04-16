@@ -44,12 +44,9 @@ class TraceStore {
   void erase(context_t const& ctx);
 
   // Singleton Instance (Thread Safe)
-  static auto GetInstance() -> TraceStore&;
+  static auto instance() -> TraceStore&;
 
  private:
-  static std::unique_ptr<TraceStore> m_instance;
-  static std::once_flag              m_onceFlag;
-
   std::unordered_map<context_t, std::unordered_map<key_t, value_t>> m_traces;
 };
 
@@ -70,15 +67,15 @@ class Trace {
 
   static auto enabled() noexcept -> bool;
 
-  void put(key_t const& /*key*/, int v);
+  void put(std::string_view, int v);
 
   template <class Rep, class Period>
   void add_time(
-      key_t const& key, const std::chrono::duration<Rep, Period>& d) {
+      std::string_view key, const std::chrono::duration<Rep, Period>& d) {
     using duration = typename TraceStore::duration;
 
     if constexpr (TraceStore::enabled()) {  // NOLINT
-      auto& val = std::get<duration>(m_cache[key]);
+      auto& val = std::get<duration>(m_cache[key_t{key}]);
       val += duration{d};
     }
   }
@@ -99,11 +96,11 @@ class TimeTrace {
   using timer = Timer<Clock>;
 
  public:
-  TimeTrace(Trace& trace, std::string value)
+  TimeTrace(Trace& trace, std::string_view key)
     : duration_(0)
     , timer_(duration_)
     , trace_(trace)
-    , value_(std::move(value)) {
+    , key_(std::string{key}) {
   }
 
   TimeTrace(TimeTrace&&)      = delete;
@@ -116,17 +113,15 @@ class TimeTrace {
   }
 
   void finish() {
-    if (!timer_.done()) {
-      timer_.finish();
-      trace_.add_time(value_, duration_);
-    }
+    timer_.finish();
+    trace_.add_time(key_, duration_);
   }
 
  private:
   typename Clock::duration duration_{};
   timer                    timer_;
   Trace&                   trace_;
-  std::string              value_;
+  std::string              key_;
 };
 
 }  // namespace rtlx

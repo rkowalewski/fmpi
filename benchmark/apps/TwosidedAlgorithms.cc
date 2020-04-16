@@ -20,9 +20,8 @@
 
 #include <fmpi/AlltoAll.hpp>
 #include <fmpi/Bruck.hpp>
-#include <fmpi/Random.hpp>
 #include <fmpi/OpenMP.hpp>
-
+#include <fmpi/Random.hpp>
 
 #include <rtlx/ScopedLambda.hpp>
 #include <rtlx/UnorderedMap.hpp>
@@ -212,7 +211,7 @@ int main(int argc, char* argv[]) {
               out.begin(), out.end(), correct.begin(), world, algo.first);
         }
 
-        auto& traceStore = rtlx::TraceStore::GetInstance();
+        auto& traceStore = rtlx::TraceStore::instance();
 
         if (it >= nwarmup) {
           m.algorithm = algo.first;
@@ -220,7 +219,8 @@ int main(int argc, char* argv[]) {
 
           auto traces = traceStore.traces(algo.first);
 
-          write_csv_line(std::cout, m, std::make_pair(fmpi::TOTAL, total));
+          write_csv_line(
+              std::cout, m, std::make_pair(std::string{fmpi::TOTAL}, total));
 
           for (auto&& entry : traces) {
             write_csv_line(std::cout, m, entry);
