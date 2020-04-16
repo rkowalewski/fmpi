@@ -40,19 +40,6 @@ template <
     class OutputIt,
     class Op,
     size_t NReqs>
-inline void ring_waitsome_overlap(
-    InputIt             begin,
-    OutputIt            out,
-    int                 blocksize,
-    mpi::Context const& ctx,
-    Op&&                op);
-
-template <
-    class Schedule,
-    class InputIt,
-    class OutputIt,
-    class Op,
-    size_t NReqs>
 inline void ring_waitall(
     InputIt             begin,
     OutputIt            out,

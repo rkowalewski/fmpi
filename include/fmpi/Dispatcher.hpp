@@ -327,7 +327,7 @@ inline void CommDispatcher<testReqs>::worker() {
   new_reqs.reserve(winsz_);
 
   using lock     = std::unique_lock<std::mutex>;
-  auto condition = [this]() { return queue_count() || terminate_; };
+  auto condition = [this]() { return queue_count() || terminate_ || req_count(); };
 
   // TODO(rkowalewski): what is the best sleep_interval?
 
@@ -458,6 +458,7 @@ CommDispatcher<testReqs>::progress_requests() {
   if (!nreqs) {
     auto empty_ranges = idx_ranges_t{};
     empty_ranges.fill(std::begin(indices_));
+    return empty_ranges;
   }
 
   auto mpi_ret = testReqs(
@@ -474,19 +475,17 @@ CommDispatcher<testReqs>::progress_requests() {
   FMPI_DBG(nCompleted);
 
   idx_ranges_t ranges{};
-  for (auto&& type : range(n_types - 1)) {
-    auto first = type == 0 ? std::begin(indices_) : ranges[type - 1];
+  for (auto&& type : range(n_types)) {
+    auto first = (type == 0) ? std::begin(indices_) : ranges[type - 1];
 
     auto const limit = static_cast<int>(reqs_in_flight_ * (type + 1));
 
-    ranges[type] = std::partition(
+    ranges[type] = (type == n_types - 1) ? last : std::partition(
         first, last, [limit](auto const& req) { return req < limit; });
 
     // release request slots
     std::copy(first, ranges[type], std::front_inserter(req_slots_[type]));
   }
-
-  ranges[n_types - 1] = last;
 
   return ranges;
 }

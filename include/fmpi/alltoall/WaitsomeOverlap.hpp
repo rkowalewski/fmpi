@@ -41,6 +41,8 @@ class NProducer {
 
 template <class Queue>
 class NConsumer {
+  using timer    = rtlx::Timer<>;
+  using duration = typename timer::duration;
  public:
   using value_type = typename Queue::value_type;
 
@@ -50,6 +52,7 @@ class NConsumer {
   }
 
   bool operator()(value_type& val) {
+    timer{time_};
     if (count_ == 0u) {
       return false;
     }
@@ -58,9 +61,14 @@ class NConsumer {
     return true;
   }
 
+  duration time() const noexcept {
+    return time_;
+  }
+
  private:
-  std::shared_ptr<Queue> channel_;
-  std::size_t            count_;
+  std::shared_ptr<Queue> channel_{};
+  std::size_t            count_{};
+  duration               time_{0};
 };
 
 }  // namespace detail
@@ -86,6 +94,7 @@ inline void ring_waitsome_overlap(
 
     // comp_enqueue in dispatcher...
     duration comp_dequeue{0};
+
     duration comp_compute{0};
     duration idle{0};
   };
@@ -258,8 +267,6 @@ inline void ring_waitsome_overlap(
     std::vector<std::pair<OutputIt, OutputIt>> chunks;
     std::vector<std::pair<OutputIt, OutputIt>> processed;
 
-    auto consume = detail::NConsumer{received_chunks, n_exchanges};
-
     chunks.reserve(ctx.size());
     // local task
     chunks.emplace_back(
@@ -279,9 +286,10 @@ inline void ring_waitsome_overlap(
     auto d_first = out;
 
     {
-      timer{times.comp_dequeue};
+      auto consumer = detail::NConsumer{received_chunks, n_exchanges};
+
       chunk task{};
-      while (consume(task)) {
+      while (consumer(task)) {
         auto span = task.second;
         chunks.emplace_back(span.data(), span.data() + span.size());
 
@@ -306,9 +314,9 @@ inline void ring_waitsome_overlap(
           // TODO(rkowalewski): merge processed chunks
         }
       }
+      times.comp_dequeue = consumer.time();
     }
 
-    times.comp_dequeue -= times.comp_compute;
 
     {
       timer{times.comp_compute};
@@ -344,6 +352,7 @@ inline void ring_waitsome_overlap(
 
       std::move(mergeBuffer.begin(), mergeBuffer.end(), out);
     }
+
   }
 
   {
@@ -358,8 +367,8 @@ inline void ring_waitsome_overlap(
   trace.add_time("Tcomm.enqueue", times.comm_enqueue);
   trace.add_time("Tcomm.dequeue", stats.queue_time);
 
-  trace.add_time("Tcomp.enqueue", times.comp_dequeue);
-  trace.add_time("Tcomp.dequeue", stats.callback_time);
+  trace.add_time("Tcomp.enqueue", stats.callback_time);
+  trace.add_time("Tcomp.dequeue", times.comp_dequeue);
 
 
   trace.add_time(COMPUTATION, times.comp_compute);
