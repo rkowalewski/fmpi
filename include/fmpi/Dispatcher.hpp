@@ -330,7 +330,7 @@ inline void CommDispatcher<testReqs>::worker() {
   // TODO(rkowalewski): what is the best sleep_interval?
 
   using namespace std::chrono_literals;
-  constexpr auto sleep_interval = 1ms;
+  constexpr auto sleep_interval = 1us;
 
   lock lk{mutex_};
 
