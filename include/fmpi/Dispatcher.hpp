@@ -290,6 +290,8 @@ class CommDispatcher {
   void discard_signals();
 
   void do_reset(std::size_t winsz);
+
+  void trigger_callbacks(idx_ranges_t ranges);
 };  // namespace fmpi
 
 template <typename mpi::reqsome_op testReqs>
@@ -399,40 +401,24 @@ inline void CommDispatcher<testReqs>::worker() {
         new_reqs.clear();
       }
 
-      idx_ranges_t completed;
+      idx_ranges_t reqs_done;
 
       {
         Timer{completion_time};
-        completed = progress_requests();
+        reqs_done = progress_requests();
       }
-
-      // 1) we first process pending requests...
-      auto const nCompleted = std::distance(
-          std::begin(indices_), completed[completed.size() - 1]);
-
-      progress = progress || (nCompleted > 0);
 
       {
         Timer{callback_time};
-        for (auto&& type : range(n_types)) {
-          auto first = type == 0 ? std::begin(indices_) : completed[type - 1];
-          auto last  = completed[type];
 
-          FMPI_ASSERT(first <= last);
+        auto const nCompleted = std::distance(
+            std::begin(indices_), reqs_done[reqs_done.size() - 1]);
 
-          // fire callbacks
-          for (; first != last; ++first) {
-            auto& processed = pending_[*first];
-
-            for (auto&& cb : callbacks_[type]) {
-              FMPI_ASSERT(cb);
-              cb(processed.message);
-            }
-          }
-
-          // release request slots
-          std::copy(first, last, std::front_inserter(req_slots_[type]));
+        if (nCompleted) {
+          trigger_callbacks(reqs_done);
         }
+
+        progress = progress || (nCompleted > 0);
       }
     }
 
@@ -487,18 +473,43 @@ CommDispatcher<testReqs>::progress_requests() {
 
   FMPI_DBG(nCompleted);
 
-  // left half of reqs array array are receives
-  // right half sends
-  auto* fstSent =
-      std::partition(&*std::begin(indices_), last, [this](auto const& req) {
-        return req < static_cast<int>(reqs_in_flight_);
-      });
-
   idx_ranges_t ranges{};
-  ranges[rtlx::to_underlying(message_type::IRECV)] = fstSent;
-  ranges[rtlx::to_underlying(message_type::ISEND)] = last;
+  for (auto&& type : range(n_types - 1)) {
+    auto first = type == 0 ? std::begin(indices_) : ranges[type - 1];
+
+    auto const limit = static_cast<int>(reqs_in_flight_ * (type + 1));
+
+    ranges[type] = std::partition(
+        first, last, [limit](auto const& req) { return req < limit; });
+
+    // release request slots
+    std::copy(first, ranges[type], std::front_inserter(req_slots_[type]));
+  }
+
+  ranges[n_types - 1] = last;
 
   return ranges;
+}
+
+template <typename mpi::reqsome_op testReqs>
+inline void CommDispatcher<testReqs>::trigger_callbacks(
+    idx_ranges_t completed) {
+  for (auto&& type : range(n_types)) {
+    auto first = type == 0 ? std::begin(indices_) : completed[type - 1];
+    auto last  = completed[type];
+
+    FMPI_ASSERT(first <= last);
+
+    // fire callbacks
+    for (; first != last; ++first) {
+      auto& processed = pending_[*first];
+
+      for (auto&& cb : callbacks_[type]) {
+        FMPI_ASSERT(cb);
+        cb(processed.message);
+      }
+    }
+  }
 }
 
 template <mpi::reqsome_op testReqs>
