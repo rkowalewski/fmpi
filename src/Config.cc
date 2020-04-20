@@ -38,7 +38,7 @@ fmpi::Config::Config() {
     }
   }
 
-  num_threads = get_num_threads();
+  num_threads = std::thread::hardware_concurrency();
 
   if (num_threads < 4) {
     throw std::runtime_error("4 Threads at least required");
@@ -46,7 +46,7 @@ fmpi::Config::Config() {
 
   auto const ncpus = num_threads / 2;
 
-  auto const main_core        = sched_getcpu();
+  auto const main_core       = sched_getcpu();
   auto const domain_id       = (main_core % ncpus) / domain_size;
   auto const is_rank_on_comm = (main_core % domain_size) == 0;
 

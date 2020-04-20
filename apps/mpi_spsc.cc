@@ -198,13 +198,16 @@ int run() {
 
         for (auto&& peer :
              fmpi::range(mpi::Rank(0), mpi::Rank(world.size()))) {
-          auto recv_message = fmpi::Message{peer, mpi_tag, world};
+          auto recv_message = fmpi::Message{peer, mpi_tag, world.mpiComm()};
 
           channel->enqueue(
               fmpi::CommTask{fmpi::message_type::IRECV, recv_message});
 
           auto send_message = fmpi::Message(
-              gsl::span(&first[peer], blocksize), peer, mpi_tag, world);
+              gsl::span(&*std::next(first, peer * blocksize), blocksize),
+              peer,
+              mpi_tag,
+              world.mpiComm());
 
           channel->enqueue(
               fmpi::CommTask{fmpi::message_type::ISEND, send_message});
@@ -241,10 +244,6 @@ int run() {
   }
 
   FMPI_ASSERT(ret == rbuf.end());
-
-  // auto const pending_tasks = dispatcher.pendingTasks();
-  // FMPI_ASSERT(pending_tasks.first == 0 && pending_tasks.second == 0);
-  // FMPI_ASSERT(pending_tasks.first == 0 && pending_tasks.second == 0);
 
   if (!std::equal(std::begin(rbuf), std::end(rbuf), std::begin(expect))) {
     throw std::runtime_error("invalid result");

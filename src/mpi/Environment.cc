@@ -20,18 +20,6 @@ Context::Context(MPI_Comm comm)
   m_rank = Rank{rank};
 }
 
-auto Context::rank() const noexcept -> Rank {
-  return m_rank;
-}
-
-auto Context::size() const noexcept -> Context::size_type {
-  return m_size;
-}
-
-auto Context::mpiComm() const noexcept -> MPI_Comm {
-  return m_comm;
-}
-
 auto splitSharedComm(Context const& baseComm) -> Context {
   MPI_Comm sharedComm;
   // split world into shared memory communicator

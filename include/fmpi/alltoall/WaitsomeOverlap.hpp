@@ -183,14 +183,14 @@ inline void ring_waitsome_overlap(
   dispatcher.pinToCore(config.dispatcher_core);
 
   {
-    FMPI_DBG("Sending Messages");
+    FMPI_DBG("Sending essages");
 
     for (auto&& r : range(commAlgo.phaseCount(ctx))) {
       auto const rpeer = commAlgo.recvRank(ctx, r);
       auto const speer = commAlgo.sendRank(ctx, r);
 
       if (rpeer != ctx.rank()) {
-        auto recv = Message{rpeer, EXCH_TAG_RING, ctx};
+        auto recv = Message{rpeer, EXCH_TAG_RING, ctx.mpiComm()};
 
         comm_channel->enqueue(CommTask{message_type::IRECV, recv});
       }
@@ -198,7 +198,7 @@ inline void ring_waitsome_overlap(
       if (speer != ctx.rank()) {
         auto span = gsl::span(std::next(begin, speer * blocksize), blocksize);
 
-        auto send = Message{span, speer, EXCH_TAG_RING, ctx};
+        auto send = Message{span, speer, EXCH_TAG_RING, ctx.mpiComm()};
 
         comm_channel->enqueue(CommTask{message_type::ISEND, send});
       }

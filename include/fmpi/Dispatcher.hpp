@@ -73,17 +73,17 @@ class Message {
  public:
   Message() = default;
 
-  Message(mpi::Rank peer, mpi::Tag tag, mpi::Context const& comm) noexcept
-    : envelope_(peer, tag, comm.mpiComm()) {
+  Message(mpi::Rank peer, mpi::Tag tag, mpi::Comm const& comm) noexcept
+    : envelope_(peer, tag, comm) {
   }
 
   template <class T>
   Message(
-      gsl::span<T>        span,
-      mpi::Rank           peer,
-      mpi::Tag            tag,
-      mpi::Context const& comm) noexcept
-    : envelope_(peer, tag, comm.mpiComm()) {
+      gsl::span<T>     span,
+      mpi::Rank        peer,
+      mpi::Tag         tag,
+      mpi::Comm const& comm) noexcept
+    : envelope_(peer, tag, comm) {
     set_buffer(span);
   }
 
