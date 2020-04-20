@@ -127,7 +127,7 @@ class NConsumer {
     return true;
   }
 
-  duration time() const noexcept {
+  [[nodiscard]] duration time() const noexcept {
     return time_;
   }
 

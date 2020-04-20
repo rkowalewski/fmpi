@@ -26,7 +26,7 @@ class Rank {
   // Postfix Decrement
   constexpr Rank operator--(int) const noexcept;
 
-  constexpr int mpi_rank() const noexcept;
+  [[nodiscard]] constexpr int mpi_rank() const noexcept;
 
  private:
   int m_rank{MPI_PROC_NULL};

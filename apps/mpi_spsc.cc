@@ -201,13 +201,13 @@ int run() {
           auto recv_message = fmpi::Message{peer, mpi_tag, world};
 
           channel->enqueue(fmpi::CommTask{fmpi::message_type::IRECV,
-                                          std::move(recv_message)});
+                                          recv_message});
 
           auto send_message = fmpi::Message(
               gsl::span(&first[peer], blocksize), peer, mpi_tag, world);
 
           channel->enqueue(fmpi::CommTask{fmpi::message_type::ISEND,
-                                          std::move(send_message)});
+                                          send_message});
         }
       });
 

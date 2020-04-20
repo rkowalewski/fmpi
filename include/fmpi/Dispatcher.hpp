@@ -468,9 +468,9 @@ inline void CommDispatcher<testReqs>::worker() {
       auto const nslots   = req_slots_[req_type].size();
 
       if (!nslots) {
-        backlog_[req_type].push(std::move(task));
+        backlog_[req_type].push(task);
       } else {
-        do_dispatch(std::move(task));
+        do_dispatch(task);
       }
     }
 
@@ -526,7 +526,7 @@ void CommDispatcher<testReqs>::do_dispatch(CommTask task) {
     sig(task.message, mpi_reqs_[slot]);
   }
 
-  pending_[slot] = std::move(task);
+  pending_[slot] = task;
 }
 
 template <typename mpi::reqsome_op testReqs>
