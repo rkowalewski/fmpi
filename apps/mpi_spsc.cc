@@ -128,9 +128,14 @@ int run() {
   auto buf_alloc =
       fmpi::HeapAllocator<value_type, true /*thread_safe*/>{size};
 
+  auto const nreqs = 2 * world.size();
+
+  using comm_channel = typename fmpi::CommChannel;
+  auto channel       = std::make_shared<comm_channel>(nreqs);
+
   // Dispatcher Thread
-  //
-  fmpi::CommDispatcher dispatcher{winsz};
+  fmpi::CommDispatcher dispatcher{channel, winsz};
+
   dispatcher.register_signal(
       fmpi::message_type::IRECV,
       [&buf_alloc](fmpi::Message& message, MPI_Request& /*req*/) {
@@ -185,24 +190,24 @@ int run() {
 
   auto f_comm = fmpi::async(
       pinning.scheduler_core,
-      [first = std::begin(sbuf),
-       last  = std::end(sbuf),
-       &world,
-       &dispatcher]() {
+      [first   = std::begin(sbuf),
+       last    = std::end(sbuf),
+       channel = std::move(channel),
+       &world]() {
         constexpr int mpi_tag = 123;
 
         for (auto&& peer :
              fmpi::range(mpi::Rank(0), mpi::Rank(world.size()))) {
           auto recv_message = fmpi::Message{peer, mpi_tag, world};
 
-          dispatcher.dispatch(
-              fmpi::message_type::IRECV, std::move(recv_message));
+          channel->enqueue(fmpi::CommTask{fmpi::message_type::IRECV,
+                                          std::move(recv_message)});
 
           auto send_message = fmpi::Message(
               gsl::span(&first[peer], blocksize), peer, mpi_tag, world);
 
-          dispatcher.dispatch(
-              fmpi::message_type::ISEND, std::move(send_message));
+          channel->enqueue(fmpi::CommTask{fmpi::message_type::ISEND,
+                                          std::move(send_message)});
         }
       });
 
@@ -244,8 +249,6 @@ int run() {
   if (!std::equal(std::begin(rbuf), std::end(rbuf), std::begin(expect))) {
     throw std::runtime_error("invalid result");
   }
-
-  std::cout << "success...\n";
 
   dispatcher.loop_until_done();
 

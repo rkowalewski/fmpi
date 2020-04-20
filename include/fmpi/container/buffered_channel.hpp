@@ -19,13 +19,10 @@
 #include <stdexcept>
 #include <type_traits>
 
-#include <boost/assert.hpp>
-#include <boost/config.hpp>
-#include <boost/fiber/detail/config.hpp>
-
 #include <tlx/math.hpp>
 
 #include <fmpi/Config.hpp>
+#include <fmpi/Debug.hpp>
 
 namespace fmpi {
 
@@ -209,7 +206,7 @@ class buffered_channel {
         }
         not_full_cnd_.wait(lk, [this] { return is_closed() || !is_full_(); });
       } else {
-        BOOST_ASSERT(channel_op_status::closed == status);
+        FMPI_ASSERT(channel_op_status::closed == status);
         return status;
       }
     }
@@ -231,7 +228,7 @@ class buffered_channel {
         std::unique_lock<std::mutex> lk{mtx_};
         ++waiting_consumer_;
         if (is_closed()) {
-          throw std::runtime_error{"boost fiber: channel is closed"};
+          throw std::runtime_error{"channel is closed"};
         }
         if (!is_empty_()) {
           continue;
@@ -240,8 +237,45 @@ class buffered_channel {
             lk, [this]() { return is_closed() || !is_empty_(); });
         --waiting_consumer_;
       } else {
-        BOOST_ASSERT(channel_op_status::closed == status);
-        throw std::runtime_error{"boost fiber: channel is closed"};
+        FMPI_ASSERT(channel_op_status::closed == status);
+        throw std::runtime_error{"channel is closed"};
+      }
+    }
+  }
+
+  template <class Rep, class Period>
+  bool pop(
+      value_type&                               result,
+      const std::chrono::duration<Rep, Period>& rel_time) {
+    for (;;) {
+      slot*             s{nullptr};
+      std::size_t       idx{0};
+      channel_op_status status{try_value_pop_(s, idx)};
+      if (channel_op_status::success == status) {
+        result = std::move(
+            *reinterpret_cast<value_type*>(std::addressof(s->storage)));
+        s->cycle.store(idx + capacity_, std::memory_order_release);
+        not_full_cnd_.notify_one();
+        return true;
+      }
+      if (channel_op_status::empty == status) {
+        std::unique_lock<std::mutex> lk{mtx_};
+        ++waiting_consumer_;
+        if (is_closed()) {
+          throw std::runtime_error{"channel is closed"};
+        }
+        if (!is_empty_()) {
+          continue;
+        }
+        not_empty_cnd_.wait_for(
+            lk, rel_time, [this]() { return is_closed() || !is_empty_(); });
+        --waiting_consumer_;
+        if (is_empty_()) {
+          return false;
+        }
+      } else {
+        FMPI_ASSERT(channel_op_status::closed == status);
+        throw std::runtime_error{"channel is closed"};
       }
     }
   }

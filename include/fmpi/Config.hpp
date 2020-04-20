@@ -7,6 +7,18 @@
 #include <iosfwd>
 #include <string_view>
 
+#ifndef __cpp_lib_hardware_interference_size
+namespace std {
+
+//  mimic: std::hardware_constructive_interference_size, C++17
+constexpr std::size_t hardware_constructive_interference_size = 64;
+
+//  mimic: std::hardware_destructive_interference_size, C++17
+constexpr std::size_t hardware_destructive_interference_size = 128;
+
+}  // namespace std
+#endif
+
 namespace fmpi {
 
 constexpr auto TOTAL         = std::string_view{"Ttotal"};
@@ -53,13 +65,7 @@ using max_align_v_ = max_align_t_<
 constexpr std::size_t max_align_v = detail::max_align_v_::value;
 struct alignas(max_align_v) max_align_t {};
 
-//  mimic: std::hardware_constructive_interference_size, C++17
-constexpr std::size_t hardware_constructive_interference_size = 64;
-
-//  mimic: std::hardware_destructive_interference_size, C++17
-constexpr std::size_t hardware_destructive_interference_size = 128;
-
-static_assert(hardware_destructive_interference_size >= max_align_v);
+static_assert(std::hardware_destructive_interference_size >= max_align_v);
 
 // MPI Thread Level
 constexpr auto kMpiThreadLevel = MPI_THREAD_SERIALIZED;
@@ -68,10 +74,10 @@ constexpr std::size_t kContainerStackSize      = 1024 * 512;
 constexpr std::size_t kMaxContiguousBufferSize = 1024 * 512;
 
 constexpr std::size_t kCacheLineAlignment =
-    hardware_destructive_interference_size;
+    std::hardware_destructive_interference_size;
 
 constexpr std::size_t kCacheLineSize =
-    hardware_constructive_interference_size;
+    std::hardware_constructive_interference_size;
 
 void initialize(int*, char*** argv);
 void finalize();

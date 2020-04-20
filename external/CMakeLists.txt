@@ -2,6 +2,7 @@ add_subdirectory(tlx)
 add_subdirectory(libmorton)
 add_subdirectory(dbg-macro)
 add_subdirectory(GSL)
+#add_subdirectory(SPSCQueue)
 
 add_subdirectory(google/benchmark)
 
