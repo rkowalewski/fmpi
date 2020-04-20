@@ -24,11 +24,11 @@ class Context {
 
   ~Context() = default;
 
-  [[nodiscard]] auto rank() const noexcept -> Rank;
+  [[nodiscard]] Rank rank() const noexcept;
 
-  [[nodiscard]] auto size() const noexcept -> size_type;
+  [[nodiscard]] size_type size() const noexcept;
 
-  [[nodiscard]] auto mpiComm() const noexcept -> MPI_Comm;
+  [[nodiscard]] MPI_Comm mpiComm() const noexcept;
 
   static Context& world();
 

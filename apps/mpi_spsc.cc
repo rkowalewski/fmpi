@@ -130,7 +130,7 @@ int run() {
 
   auto const nreqs = 2 * world.size();
 
-  using comm_channel = typename fmpi::CommChannel;
+  using comm_channel = typename fmpi::SPSCNChannel<fmpi::CommTask>;
   auto channel       = std::make_shared<comm_channel>(nreqs);
 
   // Dispatcher Thread
@@ -141,7 +141,7 @@ int run() {
       [&buf_alloc](fmpi::Message& message, MPI_Request& /*req*/) {
         // allocator some buffer
         auto* b = buf_alloc.allocate(blocksize);
-        message.set_buffer(b, blocksize);
+        message.set_buffer(gsl::span(b, blocksize));
 
         return 0;
       });
@@ -200,14 +200,14 @@ int run() {
              fmpi::range(mpi::Rank(0), mpi::Rank(world.size()))) {
           auto recv_message = fmpi::Message{peer, mpi_tag, world};
 
-          channel->enqueue(fmpi::CommTask{fmpi::message_type::IRECV,
-                                          recv_message});
+          channel->enqueue(
+              fmpi::CommTask{fmpi::message_type::IRECV, recv_message});
 
           auto send_message = fmpi::Message(
               gsl::span(&first[peer], blocksize), peer, mpi_tag, world);
 
-          channel->enqueue(fmpi::CommTask{fmpi::message_type::ISEND,
-                                          send_message});
+          channel->enqueue(
+              fmpi::CommTask{fmpi::message_type::ISEND, send_message});
         }
       });
 

@@ -20,13 +20,13 @@ class Rank {
   // Prefix Increment
   constexpr Rank operator++() noexcept;
   // Postfix Increment
-  constexpr Rank operator++(int) const noexcept;
+  constexpr Rank operator++(int) noexcept;
   // Prefix Decrement
   constexpr Rank operator--() noexcept;
   // Postfix Decrement
-  constexpr Rank operator--(int) const noexcept;
+  constexpr Rank operator--(int) noexcept;
 
-  [[nodiscard]] constexpr int mpi_rank() const noexcept;
+  [[nodiscard]] constexpr int mpiRank() const noexcept;
 
  private:
   int m_rank{MPI_PROC_NULL};
@@ -43,16 +43,23 @@ constexpr bool operator>(Rank const& lhs, Rank const& rhs) noexcept;
 constexpr bool operator<(Rank const& lhs, Rank const& rhs) noexcept;
 
 auto operator<<(std::ostream& os, Rank const& p) -> std::ostream&;
+}  // namespace mpi
+
+//////////////////////////////////////////////////////
+// Implementation ////////////////////////////////////
+//////////////////////////////////////////////////////
+
+namespace mpi {
 
 constexpr Rank::Rank(int32_t rank) noexcept
   : m_rank(rank) {
 }
 
 constexpr Rank::operator int32_t() const noexcept {
-  return mpi_rank();
+  return mpiRank();
 }
 
-constexpr int Rank::mpi_rank() const noexcept {
+constexpr int Rank::mpiRank() const noexcept {
   return m_rank;
 }
 
@@ -65,13 +72,25 @@ constexpr Rank Rank::operator++() noexcept {
   return *this;
 }
 
-constexpr Rank Rank::operator++(int) const noexcept {
+constexpr Rank Rank::operator++(int) noexcept {
   auto tmp = *this;
-  return ++tmp;
+  ++m_rank;
+  return tmp;
+}
+
+constexpr Rank Rank::operator--() noexcept {
+  --m_rank;
+  return *this;
+}
+
+constexpr Rank Rank::operator--(int) noexcept {
+  auto tmp = *this;
+  --m_rank;
+  return tmp;
 }
 
 constexpr bool operator==(Rank const& lhs, Rank const& rhs) noexcept {
-  return lhs.mpi_rank() == rhs.mpi_rank();
+  return lhs.mpiRank() == rhs.mpiRank();
 }
 
 constexpr bool operator!=(Rank const& lhs, Rank const& rhs) noexcept {
@@ -79,7 +98,7 @@ constexpr bool operator!=(Rank const& lhs, Rank const& rhs) noexcept {
 }
 
 constexpr bool operator<(Rank const& lhs, Rank const& rhs) noexcept {
-  return lhs.mpi_rank() < rhs.mpi_rank();
+  return lhs.mpiRank() < rhs.mpiRank();
 }
 
 constexpr bool operator>(Rank const& lhs, Rank const& rhs) noexcept {
@@ -87,25 +106,25 @@ constexpr bool operator>(Rank const& lhs, Rank const& rhs) noexcept {
 }
 
 constexpr Rank operator+(Rank const& lhs, Rank const& rhs) noexcept {
-  return Rank{lhs.mpi_rank() + rhs.mpi_rank()};
+  return Rank{lhs.mpiRank() + rhs.mpiRank()};
 }
 
 constexpr Rank operator-(Rank const& lhs, Rank const& rhs) noexcept {
-  return Rank{lhs.mpi_rank() - rhs.mpi_rank()};
+  return Rank{lhs.mpiRank() - rhs.mpiRank()};
 }
 
 constexpr Rank operator^(Rank const& lhs, Rank const& rhs) RTLX_NOEXCEPT {
-  RTLX_ASSERT(lhs.mpi_rank() >= 0);
-  RTLX_ASSERT(rhs.mpi_rank() >= 0);
+  RTLX_ASSERT(lhs.mpiRank() >= 0);
+  RTLX_ASSERT(rhs.mpiRank() >= 0);
 
-  auto xor_res = static_cast<unsigned>(lhs.mpi_rank()) ^
-                 static_cast<unsigned>(rhs.mpi_rank());
+  auto xor_res = static_cast<unsigned>(lhs.mpiRank()) ^
+                 static_cast<unsigned>(rhs.mpiRank());
 
   return Rank{static_cast<int>(xor_res)};
 }
 
 constexpr Rank operator%(Rank const& lhs, Rank const& rhs) noexcept {
-  return Rank{lhs.mpi_rank() % rhs.mpi_rank()};
+  return Rank{lhs.mpiRank() % rhs.mpiRank()};
 }
 
 }  // namespace mpi
@@ -117,4 +136,5 @@ struct is_signed<mpi::Rank> : std::true_type {};
 template <>
 struct is_integral<mpi::Rank> : std::true_type {};
 }  // namespace std
+
 #endif

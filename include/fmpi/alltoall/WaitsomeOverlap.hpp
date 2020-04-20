@@ -13,131 +13,6 @@
 #include <utility>
 
 namespace fmpi {
-namespace detail {
-
-template <class Channel, class T = typename Channel::value_type>
-class Producer {
- public:
-  using channel    = Channel;
-  using value_type = T;
-
-  Producer() = default;
-
-  Producer(std::shared_ptr<channel> chan) noexcept
-    : channel_(std::move(chan)) {
-  }
-
-  void push(value_type const& val) {
-    channel_->push(val);
-  }
-
- private:
-  std::shared_ptr<channel> channel_;
-};
-
-template <class Channel, class T = typename Channel::value_type>
-class Consumer {
- public:
-  using channel    = Channel;
-  using value_type = T;
-
-  Consumer() = default;
-
-  Consumer(std::shared_ptr<channel> chan) noexcept
-    : channel_(std::move(chan)) {
-  }
-
-  void pop(value_type& val) {
-    FMPI_ASSERT(channel_->front());
-    val = std::move(*(channel_->front()));
-    channel_->pop();
-  }
-
- private:
-  std::shared_ptr<channel> channel_;
-};
-
-template <class T>
-class Consumer<buffered_channel<T>> {
- public:
-  using value_type = T;
-  using channel    = buffered_channel<value_type>;
-
-  Consumer() = default;
-
-  Consumer(std::shared_ptr<channel> chan) noexcept
-    : channel_(std::move(chan)) {
-  }
-
-  void pop(value_type& val) {
-    val = channel_->value_pop();
-  }
-
- private:
-  std::shared_ptr<channel> channel_;
-};
-
-template <class Channel>
-class NProducer {
-  using producer = Producer<Channel>;
-
- public:
-  using value_type = typename Channel::value_type;
-
-  NProducer(std::shared_ptr<Channel> channel, std::size_t n) noexcept
-    : channel_(std::move(channel))
-    , count_(n) {
-  }
-
-  bool operator()(value_type const& val) {
-    if (count_ == 0u) {
-      return false;
-    }
-    channel_.push(val);
-    --count_;
-    return true;
-  }
-
- private:
-  producer    channel_;
-  std::size_t count_;
-};
-
-template <class Channel>
-class NConsumer {
-  using timer    = rtlx::Timer<>;
-  using duration = typename timer::duration;
-  using consumer = Consumer<Channel>;
-
- public:
-  using value_type = typename Channel::value_type;
-
-  NConsumer(std::shared_ptr<Channel> channel, std::size_t n) noexcept
-    : channel_(std::move(channel))
-    , count_(n) {
-  }
-
-  bool operator()(value_type& val) {
-    timer{time_};
-    if (count_ == 0u) {
-      return false;
-    }
-    channel_.pop(val);
-    --count_;
-    return true;
-  }
-
-  [[nodiscard]] duration time() const noexcept {
-    return time_;
-  }
-
- private:
-  consumer    channel_{};
-  std::size_t count_{};
-  duration    time_{0};
-};
-
-}  // namespace detail
 
 template <
     class Schedule,
@@ -155,11 +30,13 @@ inline void ring_waitsome_overlap(
   using duration = typename timer::duration;
 
   struct Times {
+#if 0
     duration comm_enqueue{0};
     // comm_dequeue in dispatcher...
 
     // comp_enqueue in dispatcher...
     duration comp_dequeue{0};
+#endif
 
     duration comp_compute{0};
     duration idle{0};
@@ -193,6 +70,7 @@ inline void ring_waitsome_overlap(
   constexpr std::size_t messages_per_round = 2;
 
   auto const n_exchanges  = ctx.size() - 1;
+  auto const n_messages   = n_exchanges * messages_per_round;
   auto const n_rounds     = commAlgo.phaseCount(ctx);
   auto const reqsInFlight = std::min(std::size_t(n_rounds), NReqs);
   auto const winsz        = reqsInFlight * messages_per_round;
@@ -224,18 +102,19 @@ inline void ring_waitsome_overlap(
   // queue for ready tasks
   using chunk = std::pair<mpi::Rank, gsl::span<value_type>>;
 #if 0
-  auto received_chunks = boost::lockfree::spsc_queue<chunk>{n_rounds};
-  using channel_t = boost::lockfree::spsc_queue<chunk>;
+  //auto data_channel = boost::lockfree::spsc_queue<chunk>{n_rounds};
 #else
-  using channel_t = buffered_channel<chunk>;
+  using channel_t = SPSCNChannel<chunk>;
 #endif
 
-  auto received_chunks = std::make_shared<channel_t>(n_rounds);
+  using dispatcher_t = CommDispatcher<mpi::testsome>;
 
   auto comm_channel =
-      std::make_shared<CommChannel>(n_exchanges * messages_per_round);
+      std::make_shared<typename dispatcher_t::channel>(n_messages);
 
-  auto dispatcher = CommDispatcher<mpi::testsome>{comm_channel, winsz};
+  auto data_channel = std::make_shared<channel_t>(n_exchanges);
+
+  auto dispatcher = dispatcher_t{comm_channel, winsz};
 
   dispatcher.register_signal(
       message_type::IRECV,
@@ -246,7 +125,7 @@ inline void ring_waitsome_overlap(
         FMPI_ASSERT(buffer);
 
         // add the buffer to the message
-        message.set_buffer(buffer, blocksize);
+        message.set_buffer(gsl::span(buffer, blocksize));
 
         return 0;
       });
@@ -284,10 +163,8 @@ inline void ring_waitsome_overlap(
 
   dispatcher.register_callback(
       message_type::IRECV,
-      [callback = detail::NProducer{
-           received_chunks,
-           n_exchanges,
-       }](Message& message /*, MPI_Status const& status*/) mutable {
+      [data_channel](
+          Message& message /*, MPI_Status const& status*/) mutable {
 #if 0
         FMPI_ASSERT(status.MPI_ERROR == MPI_SUCCESS);
         FMPI_ASSERT(status.MPI_SOURCE == message.peer());
@@ -297,7 +174,8 @@ inline void ring_waitsome_overlap(
             static_cast<value_type*>(message.writable_buffer()),
             message.count());
 
-        auto ret = callback(std::make_pair(message.peer(), span));
+        auto ret =
+            data_channel->enqueue(std::make_pair(message.peer(), span));
         FMPI_ASSERT(ret);
       });
 
@@ -306,8 +184,6 @@ inline void ring_waitsome_overlap(
 
   {
     FMPI_DBG("Sending Messages");
-
-    timer{times.comm_enqueue};
 
     for (auto&& r : range(commAlgo.phaseCount(ctx))) {
       auto const rpeer = commAlgo.recvRank(ctx, r);
@@ -355,10 +231,8 @@ inline void ring_waitsome_overlap(
     auto d_first = out;
 
     {
-      auto consumer = detail::NConsumer{received_chunks, n_exchanges};
-
       chunk task{};
-      while (consumer(task)) {
+      while (data_channel->wait_dequeue(task)) {
         auto span = task.second;
         chunks.emplace_back(span.data(), span.data() + span.size());
 
@@ -383,7 +257,6 @@ inline void ring_waitsome_overlap(
           // TODO(rkowalewski): merge processed chunks
         }
       }
-      times.comp_dequeue = consumer.time();
     }
 
     {
@@ -431,11 +304,14 @@ inline void ring_waitsome_overlap(
 
   auto const stats = dispatcher.stats();
 
-  trace.add_time("Tcomm.enqueue", times.comm_enqueue);
-  trace.add_time("Tcomm.dequeue", stats.queue_time);
+  auto const recv_stats = data_channel->statistics();
+  auto const comm_stats = comm_channel->statistics();
 
-  trace.add_time("Tcomp.enqueue", stats.callback_time);
-  trace.add_time("Tcomp.dequeue", times.comp_dequeue);
+  trace.add_time("Tcomm.enqueue", comm_stats.enqueue_time);
+  trace.add_time("Tcomm.dequeue", comm_stats.dequeue_time);
+
+  trace.add_time("Tcomp.enqueue", recv_stats.enqueue_time);
+  trace.add_time("Tcomp.dequeue", recv_stats.dequeue_time);
 
   trace.add_time(COMPUTATION, times.comp_compute);
   trace.add_time("Tcomp.idle", times.idle);

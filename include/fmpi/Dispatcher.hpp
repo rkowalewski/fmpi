@@ -84,7 +84,7 @@ class Message {
       mpi::Tag            tag,
       mpi::Context const& comm) noexcept
     : envelope_(peer, tag, comm.mpiComm()) {
-    set_buffer(span.data(), span.size());
+    set_buffer(span);
   }
 
   Message(const Message&) = default;
@@ -97,11 +97,6 @@ class Message {
     buf_   = buf;
     count_ = count;
     type_  = type;
-  }
-
-  template <class T>
-  void set_buffer(T* buf, std::size_t count) {
-    set_buffer(buf, count, mpi::type_mapper<T>::type());
   }
 
   template <class T>
@@ -188,7 +183,8 @@ int dispatch_waitall(
 
 }  // namespace detail
 
-class CommChannel {
+template <class T>
+class SPSCNChannel {
   using timer = rtlx::Timer<>;
 
   using duration = std::chrono::microseconds;
@@ -196,42 +192,53 @@ class CommChannel {
   using timer_duration = typename timer::duration;
 
  public:
-  using value_type = CommTask;
+  struct Stats {
+    // producer
+    alignas(std::hardware_destructive_interference_size)
+        timer_duration enqueue_time{0};
+    // consumer
+    alignas(std::hardware_destructive_interference_size)
+        timer_duration dequeue_time{0};
+  };
+
+ public:
+  using value_type = T;
   using channel    = buffered_channel<value_type>;
 
-  CommChannel() = default;
+  SPSCNChannel() = default;
 
-  CommChannel(std::size_t n) noexcept
+  SPSCNChannel(std::size_t n) noexcept
     : channel_(n)
     , count_(n) {
-    FMPI_DBG("< CommChannel(chan, n)");
+    FMPI_DBG("< SPSCNChannel(chan, n)");
     FMPI_DBG(task_count());
   }
 
-  CommChannel(CommChannel const&) = delete;
-  CommChannel& operator=(CommChannel const&) = delete;
+  SPSCNChannel(SPSCNChannel const&) = delete;
+  SPSCNChannel& operator=(SPSCNChannel const&) = delete;
 
   bool wait_dequeue(value_type& val) {
-    timer{time_};
+    timer{stats_.dequeue_time};
     if (done()) {
       return false;
     }
     val = channel_.value_pop();
-    count_ -= 1;
+    count_.fetch_sub(1, std::memory_order_relaxed);
     return true;
   }
 
   bool wait_dequeue(value_type& val, duration const& timeout) {
-    timer{time_};
+    timer{stats_.dequeue_time};
     if (done()) {
       return false;
     }
     auto const ret = channel_.pop(val, timeout);
-    count_ -= ret;
+    count_.fetch_sub(ret, std::memory_order_relaxed);
     return ret;
   }
 
-  bool enqueue(CommTask task) {
+  bool enqueue(value_type const& task) {
+    timer{stats_.enqueue_time};
     auto status = channel_.push(task);
     auto ret    = status == channel_op_status::success;
     FMPI_ASSERT(ret);
@@ -247,21 +254,17 @@ class CommChannel {
   }
 
   std::size_t task_count() const noexcept {
-    return count_.load(std::memory_order_acquire);
-    // return count_;
+    return count_.load(std::memory_order_relaxed);
   }
 
-  timer_duration time() const noexcept {
-    return time_;
+  Stats statistics() const noexcept {
+    return stats_;
   }
 
  private:
-  channel        channel_{0};
-  timer_duration time_{};
-  // prevent false sharing because producer may check count while the consumer
-  // only changes time
-  alignas(std::hardware_destructive_interference_size)
-      std::atomic<std::size_t> count_{0};
+  channel                  channel_{0};
+  std::atomic<std::size_t> count_{0};
+  Stats                    stats_{};
 };
 
 template <mpi::reqsome_op testReqs = mpi::testsome>
@@ -273,12 +276,12 @@ class CommDispatcher {
   struct Statistics {
     // modified internally, read externally
     std::size_t iterations{};
-
-    duration queue_time{};
-    duration dispatch_time{};
-    duration completion_time{};
-    duration callback_time{};
+    std::size_t high_watermark{};
+    duration    dispatch_time{};
+    duration    completion_time{};
   };
+
+  using channel = SPSCNChannel<CommTask>;
 
  private:
   static constexpr uint16_t default_task_capacity = 1000;
@@ -311,7 +314,7 @@ class CommDispatcher {
   // Thread Safe Work Sharing //
   //////////////////////////////
 
-  std::shared_ptr<CommChannel> task_channel_{};
+  std::shared_ptr<channel> task_channel_{};
 
   // Task Lists: One for each type
   std::array<task_queue, n_types> backlog_{};
@@ -358,8 +361,7 @@ class CommDispatcher {
   std::thread thread_;
 
  public:
-  explicit CommDispatcher(
-      std::shared_ptr<CommChannel> chan, std::size_t winsz);
+  explicit CommDispatcher(std::shared_ptr<channel> chan, std::size_t winsz);
 
   ~CommDispatcher();
 
@@ -391,11 +393,13 @@ class CommDispatcher {
 
   [[nodiscard]] bool has_active_requests() const noexcept;
 
-  idx_ranges_t progress_requests(bool force = false);
-
   void worker();
 
   void do_dispatch(CommTask task);
+
+  void do_progress(bool force = false);
+
+  idx_ranges_t progress_network(bool force = false);
 
   void discard_signals();
 
@@ -406,7 +410,7 @@ class CommDispatcher {
 
 template <typename mpi::reqsome_op testReqs>
 inline CommDispatcher<testReqs>::CommDispatcher(
-    std::shared_ptr<CommChannel> chan, std::size_t winsz)
+    std::shared_ptr<channel> chan, std::size_t winsz)
   : task_channel_(std::move(chan))
   , alloc_(contiguous_heap_allocator{default_task_capacity}) {
   do_reset(winsz);
@@ -418,18 +422,6 @@ inline CommDispatcher<testReqs>::~CommDispatcher() {
   thread_.join();
 }
 
-#if 0
-template <typename mpi::reqsome_op testReqs>
-inline void CommDispatcher<testReqs>::stop_worker() {
-  {
-    std::lock_guard<std::mutex> lk{mutex_};
-    terminate_ = true;
-  }
-
-  cv_tasks_.notify_all();
-}
-#endif
-
 template <typename mpi::reqsome_op testReqs>
 inline void CommDispatcher<testReqs>::start_worker() {
   thread_ = std::thread([this]() { worker(); });
@@ -439,22 +431,37 @@ template <typename mpi::reqsome_op testReqs>
 inline void CommDispatcher<testReqs>::worker() {
   constexpr auto sleep_interval = std::chrono::microseconds(1);
 
-  while (queue_count() || !task_channel_->done()) {
-    // try to serve from caches
-    for (auto&& req_type : range(n_types)) {
-      auto const nslots = req_slots_[req_type].size();
-      auto const ntasks = backlog_[req_type].size();
-      for (auto&& unused : range(std::min(nslots, ntasks))) {
-        std::ignore = unused;
-        do_dispatch(backlog_[req_type].front());
-        backlog_[req_type].pop();
-      }
+  struct HasTasks {
+    std::pair<std::size_t, bool> task_count;
+
+    constexpr HasTasks() = default;
+
+    constexpr HasTasks(std::size_t first, bool second) noexcept
+      : task_count(std::make_pair(first, second)) {
     }
 
-    FMPI_DBG(queue_count());
-    FMPI_DBG(task_channel_->task_count());
-    FMPI_DBG(req_capacity());
+    constexpr operator bool() const noexcept {
+      return task_count.first || task_count.second;
+    }
+  };
 
+  while (auto const tasks = HasTasks{queue_count(), !task_channel_->done()}) {
+    auto n_backlog = tasks.task_count.first;
+    if (n_backlog) {
+      // try to serve from caches
+      for (auto&& req_type : range(n_types)) {
+        auto const nslots = req_slots_[req_type].size();
+        auto const ntasks = backlog_[req_type].size();
+        for (auto&& unused : range(std::min(nslots, ntasks))) {
+          std::ignore = unused;
+          Timer{stats_.dispatch_time};
+          auto& list = backlog_[req_type];
+          do_dispatch(list.front());
+          list.pop();
+        }
+      }
+      stats_.high_watermark = std::max(stats_.high_watermark, n_backlog);
+    }
     while (req_capacity()) {
       CommTask task{};
       // if we fail, there are two reasons...
@@ -470,37 +477,18 @@ inline void CommDispatcher<testReqs>::worker() {
       if (!nslots) {
         backlog_[req_type].push(task);
       } else {
+        Timer{stats_.dispatch_time};
         do_dispatch(task);
       }
     }
 
-    auto const reqs_done = progress_requests();
-
-    auto const nCompleted =
-        std::distance(std::begin(indices_), reqs_done[reqs_done.size() - 1]);
-
-    if (nCompleted) {
-      trigger_callbacks(reqs_done);
-    }
+    do_progress();
   }
 
-  constexpr auto force     = true;
-  auto const     reqs_done = progress_requests(force);
-
-  auto const nCompleted =
-      std::distance(std::begin(indices_), reqs_done[reqs_done.size() - 1]);
-
-  if (nCompleted) {
-    trigger_callbacks(reqs_done);
+  {
+    constexpr auto force_progress = true;
+    do_progress(force_progress);
   }
-
-#if 0
-  stats_.iterations++;
-  stats_.completion_time += completion_time;
-  stats_.dispatch_time += dispatch_time;
-  stats_.queue_time += queue_time;
-  stats_.callback_time += callback_time;
-#endif
 
   {
     std::lock_guard<std::mutex> lk{mutex_};
@@ -530,13 +518,25 @@ void CommDispatcher<testReqs>::do_dispatch(CommTask task) {
 }
 
 template <typename mpi::reqsome_op testReqs>
+void CommDispatcher<testReqs>::do_progress(bool force) {
+  auto       timer     = Timer{stats_.completion_time};
+  auto const reqs_done = progress_network(force);
+
+  auto const nCompleted =
+      std::distance(std::begin(indices_), reqs_done[reqs_done.size() - 1]);
+
+  timer.finish();
+  if (nCompleted) {
+    trigger_callbacks(reqs_done);
+  }
+}
+
+template <typename mpi::reqsome_op testReqs>
 inline typename CommDispatcher<testReqs>::idx_ranges_t
-CommDispatcher<testReqs>::progress_requests(bool force) {
+CommDispatcher<testReqs>::progress_network(bool force) {
   int* last;
 
   auto const nreqs = req_count();
-  FMPI_DBG(nreqs);
-  FMPI_DBG(force);
 
   if (!nreqs) {
     auto empty_ranges = idx_ranges_t{};
@@ -610,7 +610,6 @@ inline void CommDispatcher<testReqs>::pinToCore(int coreId) {
 template <mpi::reqsome_op testReqs>
 typename CommDispatcher<testReqs>::Statistics
 CommDispatcher<testReqs>::stats() const {
-  std::lock_guard<std::mutex>(this->mutex_);
   return stats_;
 }
 

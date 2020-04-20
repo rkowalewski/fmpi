@@ -270,9 +270,11 @@ class buffered_channel {
         not_empty_cnd_.wait_for(
             lk, rel_time, [this]() { return is_closed() || !is_empty_(); });
         --waiting_consumer_;
+
         if (is_empty_()) {
           return false;
         }
+        // if it is closed then the next iteration throws an exception...
       } else {
         FMPI_ASSERT(channel_op_status::closed == status);
         throw std::runtime_error{"channel is closed"};

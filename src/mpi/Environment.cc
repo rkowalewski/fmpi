@@ -52,6 +52,7 @@ Context& Context::world() {
   return ctx;
 }
 
+
 bool is_thread_main() {
   int flag;
   FMPI_CHECK_MPI(MPI_Is_thread_main(&flag));
