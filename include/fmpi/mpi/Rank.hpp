@@ -12,29 +12,102 @@ namespace mpi {
 
 class Rank {
  public:
-  Rank() = default;
-  explicit Rank(int rank) noexcept;
-           operator int() const noexcept;  // NOLINT
-  explicit operator bool() const noexcept;
+  constexpr Rank() = default;
+  constexpr explicit Rank(int rank) noexcept;
+  constexpr          operator int() const noexcept;  // NOLINT
+  constexpr explicit operator bool() const noexcept;
 
-  auto operator++() -> Rank&;
-  auto operator++(int) const -> const Rank;
+  // Prefix Increment
+  constexpr Rank operator++() noexcept;
+  // Postfix Increment
+  constexpr Rank operator++(int) const noexcept;
+  // Prefix Decrement
+  constexpr Rank operator--() noexcept;
+  // Postfix Decrement
+  constexpr Rank operator--(int) const noexcept;
+
+  constexpr int mpi_rank() const noexcept;
 
  private:
   int m_rank{MPI_PROC_NULL};
 };
 
-auto operator+(Rank const& lhs, Rank const& rhs) noexcept -> Rank;
-auto operator-(Rank const& lhs, Rank const& rhs) noexcept -> Rank;
-auto operator^(Rank const& lhs, Rank const& rhs) RTLX_NOEXCEPT -> Rank;
-auto operator%(Rank const& lhs, Rank const& rhs) noexcept -> Rank;
+constexpr Rank operator+(Rank const& lhs, Rank const& rhs) noexcept;
+constexpr Rank operator-(Rank const& lhs, Rank const& rhs) noexcept;
+constexpr Rank operator^(Rank const& lhs, Rank const& rhs) RTLX_NOEXCEPT;
+constexpr Rank operator%(Rank const& lhs, Rank const& rhs) noexcept;
 
-auto operator==(Rank const& lhs, Rank const& rhs) noexcept -> bool;
-auto operator!=(Rank const& lhs, Rank const& rhs) noexcept -> bool;
-auto operator>(Rank const& lhs, Rank const& rhs) noexcept -> bool;
-auto operator<(Rank const& lhs, Rank const& rhs) noexcept -> bool;
+constexpr bool operator==(Rank const& lhs, Rank const& rhs) noexcept;
+constexpr bool operator!=(Rank const& lhs, Rank const& rhs) noexcept;
+constexpr bool operator>(Rank const& lhs, Rank const& rhs) noexcept;
+constexpr bool operator<(Rank const& lhs, Rank const& rhs) noexcept;
 
 auto operator<<(std::ostream& os, Rank const& p) -> std::ostream&;
+
+constexpr Rank::Rank(int32_t rank) noexcept
+  : m_rank(rank) {
+}
+
+constexpr Rank::operator int32_t() const noexcept {
+  return mpi_rank();
+}
+
+constexpr int Rank::mpi_rank() const noexcept {
+  return m_rank;
+}
+
+constexpr Rank::operator bool() const noexcept {
+  return m_rank != MPI_PROC_NULL && m_rank >= 0;
+}
+
+constexpr Rank Rank::operator++() noexcept {
+  ++m_rank;
+  return *this;
+}
+
+constexpr Rank Rank::operator++(int) const noexcept {
+  auto tmp = *this;
+  return ++tmp;
+}
+
+constexpr bool operator==(Rank const& lhs, Rank const& rhs) noexcept {
+  return lhs.mpi_rank() == rhs.mpi_rank();
+}
+
+constexpr bool operator!=(Rank const& lhs, Rank const& rhs) noexcept {
+  return !(lhs == rhs);
+}
+
+constexpr bool operator<(Rank const& lhs, Rank const& rhs) noexcept {
+  return lhs.mpi_rank() < rhs.mpi_rank();
+}
+
+constexpr bool operator>(Rank const& lhs, Rank const& rhs) noexcept {
+  return !(lhs < rhs) && !(lhs == rhs);
+}
+
+constexpr Rank operator+(Rank const& lhs, Rank const& rhs) noexcept {
+  return Rank{lhs.mpi_rank() + rhs.mpi_rank()};
+}
+
+constexpr Rank operator-(Rank const& lhs, Rank const& rhs) noexcept {
+  return Rank{lhs.mpi_rank() - rhs.mpi_rank()};
+}
+
+constexpr Rank operator^(Rank const& lhs, Rank const& rhs) RTLX_NOEXCEPT {
+  RTLX_ASSERT(lhs.mpi_rank() >= 0);
+  RTLX_ASSERT(rhs.mpi_rank() >= 0);
+
+  auto xor_res = static_cast<unsigned>(lhs.mpi_rank()) ^
+                 static_cast<unsigned>(rhs.mpi_rank());
+
+  return Rank{static_cast<int>(xor_res)};
+}
+
+constexpr Rank operator%(Rank const& lhs, Rank const& rhs) noexcept {
+  return Rank{lhs.mpi_rank() % rhs.mpi_rank()};
+}
+
 }  // namespace mpi
 
 namespace std {
