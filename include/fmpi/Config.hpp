@@ -86,8 +86,8 @@ void finalize();
 struct Config {
   int main_core{};
   int dispatcher_core{};
-  int scheduler_core{};
-  int comp_core{};
+  //int scheduler_core{};
+  //int comp_core{};
   int domain_size{};
   int num_threads{};
 

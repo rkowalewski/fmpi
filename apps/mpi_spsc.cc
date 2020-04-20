@@ -189,7 +189,7 @@ int run() {
   dispatcher.pinToCore(pinning.dispatcher_core);
 
   auto f_comm = fmpi::async(
-      pinning.scheduler_core,
+      0 /*unused*/,
       [first   = std::begin(sbuf),
        last    = std::end(sbuf),
        channel = std::move(channel),
@@ -215,7 +215,7 @@ int run() {
       });
 
   auto f_comp = fmpi::async(
-      pinning.comp_core,
+      0 /*unused*/,
       [&ready_tasks, &rbuf, &buf_alloc, ntasks = world.size()]() -> iterator {
         auto n = ntasks;
         while ((n--) != 0u) {

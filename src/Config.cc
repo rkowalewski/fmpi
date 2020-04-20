@@ -38,44 +38,44 @@ fmpi::Config::Config() {
     }
   }
 
-  num_threads = std::thread::hardware_concurrency();
+  num_threads = get_num_threads();
 
   if (num_threads < 4) {
     throw std::runtime_error("4 Threads at least required");
   }
 
-  auto const ncpus = num_threads / 2;
+  auto const ncpus =
+      static_cast<int>(std::thread::hardware_concurrency()) / 2;
 
-  auto const main_core       = sched_getcpu();
+  main_core                  = sched_getcpu();
   auto const domain_id       = (main_core % ncpus) / domain_size;
   auto const is_rank_on_comm = (main_core % domain_size) == 0;
 
   if (domain_size == 1) {
     dispatcher_core = (main_core + 1) % num_threads;
-    scheduler_core  = (main_core + 2) % num_threads;
-    comp_core       = main_core;
+    // scheduler_core  = (main_core + 2) % num_threads;
+    // comp_core       = main_core;
   } else if (is_rank_on_comm) {
     // MPI rank is on the communication core. So we dispatch on the other
     // hyperthread
     dispatcher_core =
         (main_core < ncpus) ? main_core + ncpus : main_core - ncpus;
-    scheduler_core = main_core;
-    comp_core      = main_core;
-    // comp_core      = scheduler_core + 1;
+    // scheduler_core = main_core;
+    // comp_core      = main_core;
   } else {
     // MPI rank is somewhere in the Computation Domain, so we just take the
     // communication core.
     dispatcher_core = domain_id * domain_size;
-    scheduler_core  = dispatcher_core + ncpus;
-    comp_core       = main_core;
+    // scheduler_core  = dispatcher_core + ncpus;
+    // comp_core       = main_core;
   }
 }
 
 std::ostream& fmpi::operator<<(std::ostream& os, const Config& pinning) {
   os << "{ rank: " << pinning.main_core;
-  os << ", scheduler: " << pinning.scheduler_core;
   os << ", dispatcher: " << pinning.dispatcher_core;
-  os << ", comp: " << pinning.comp_core;
+  // os << ", scheduler: " << pinning.scheduler_core;
+  // os << ", comp: " << pinning.comp_core;
   os << " }";
   return os;
 }
@@ -89,10 +89,12 @@ void fmpi::print_config(std::ostream& os) {
      << "Main Core: " << config.main_core << "\n";
   os << "  " << std::setw(width) << std::left << std::setw(5) << " "
      << "Dispatcher Core: " << config.dispatcher_core << "\n";
+#if 0
   os << "  " << std::setw(width) << std::left << std::setw(5) << " "
      << "Scheduler Core: " << config.scheduler_core << "\n";
   os << "  " << std::setw(width) << std::left << std::setw(5) << " "
      << "Computation Core: " << config.comp_core << "\n";
+#endif
 
   auto const nthreads = config.num_threads;
 #ifdef _OPENMP
