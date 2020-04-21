@@ -302,7 +302,7 @@ inline void ring_waitsome_overlap(
     dispatcher.loop_until_done();
   }
 
-  auto const stats = dispatcher.stats();
+  auto const dispatcher_stats = dispatcher.stats();
 
   auto const recv_stats = data_channel->statistics();
   auto const comm_stats = comm_channel->statistics();
@@ -316,11 +316,13 @@ inline void ring_waitsome_overlap(
   trace.add_time(COMPUTATION, times.comp_compute);
   trace.add_time("Tcomp.idle", times.idle);
 
-  trace.add_time("Tcomm.dispatch", stats.dispatch_time);
-  trace.add_time("Tcomm.progress", stats.completion_time);
+  trace.add_time("Tcomm.dispatch", dispatcher_stats.dispatch_time);
+  trace.add_time("Tcomm.progress", dispatcher_stats.completion_time);
+  trace.add_time("Tcomm.total", dispatcher_stats.total_time);
 
   // other
-  trace.put("Tcomm.iterations", static_cast<int>(stats.iterations));
+  trace.put(
+      "Tcomm.iterations", static_cast<int>(dispatcher_stats.iterations));
 }
 }  // namespace fmpi
 #endif

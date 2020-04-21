@@ -209,7 +209,8 @@ class SPSCNChannel {
 
   SPSCNChannel(std::size_t n) noexcept
     : channel_(n)
-    , count_(n) {
+    , count_(n)
+    , high_watermark_(n) {
     FMPI_DBG("< SPSCNChannel(chan, n)");
     FMPI_DBG(task_count());
   }
@@ -261,10 +262,15 @@ class SPSCNChannel {
     return stats_;
   }
 
+  std::size_t high_watermark() const noexcept {
+    return high_watermark_;
+  }
+
  private:
   channel                  channel_{0};
   std::atomic<std::size_t> count_{0};
   Stats                    stats_{};
+  std::size_t const        high_watermark_{};
 };
 
 template <mpi::reqsome_op testReqs = mpi::testsome>
@@ -277,8 +283,9 @@ class CommDispatcher {
     // modified internally, read externally
     std::size_t iterations{};
     std::size_t high_watermark{};
-    duration    dispatch_time{};
-    duration    completion_time{};
+    duration    dispatch_time{0};
+    duration    completion_time{0};
+    duration    total_time{0};
   };
 
   using channel = SPSCNChannel<CommTask>;
@@ -445,6 +452,8 @@ inline void CommDispatcher<testReqs>::worker() {
     }
   };
 
+  Timer t_total{stats_.total_time};
+
   while (auto const tasks = HasTasks{queue_count(), !task_channel_->done()}) {
     auto n_backlog = tasks.task_count.first;
     if (n_backlog) {
@@ -497,6 +506,8 @@ inline void CommDispatcher<testReqs>::worker() {
     FMPI_ASSERT(was_busy);
   }
 
+  t_total.finish();
+
   cv_finished_.notify_all();
 }
 
@@ -543,6 +554,8 @@ CommDispatcher<testReqs>::progress_network(bool force) {
     empty_ranges.fill(std::begin(indices_));
     return empty_ranges;
   }
+
+  stats_.iterations++;
 
   auto op = force ? detail::dispatch_waitall : testReqs;
 
