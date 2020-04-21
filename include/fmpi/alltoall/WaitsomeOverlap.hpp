@@ -40,6 +40,8 @@ inline void ring_waitsome_overlap(
 
     duration comp_compute{0};
     duration idle{0};
+    duration dispatch{0};
+    duration receive{0};
   };
 
   struct Times times {};
@@ -184,6 +186,7 @@ inline void ring_waitsome_overlap(
 
   {
     FMPI_DBG("Sending essages");
+    timer{times.dispatch};
 
     for (auto&& r : range(commAlgo.phaseCount(ctx))) {
       auto const rpeer = commAlgo.recvRank(ctx, r);
@@ -207,6 +210,8 @@ inline void ring_waitsome_overlap(
 
   {
     FMPI_DBG("processing message arrivals...");
+
+    timer{times.receive};
 
     // chunks to merge
     std::vector<std::pair<OutputIt, OutputIt>> chunks;
@@ -313,12 +318,15 @@ inline void ring_waitsome_overlap(
   trace.add_time("Tcomp.enqueue", recv_stats.enqueue_time);
   trace.add_time("Tcomp.dequeue", recv_stats.dequeue_time);
 
-  trace.add_time(COMPUTATION, times.comp_compute);
+  trace.add_time("Tcomp.comp", times.comp_compute);
   trace.add_time("Tcomp.idle", times.idle);
 
   trace.add_time("Tcomm.dispatch", dispatcher_stats.dispatch_time);
   trace.add_time("Tcomm.progress", dispatcher_stats.completion_time);
   trace.add_time("Tcomm.total", dispatcher_stats.total_time);
+
+  trace.add_time("Tdispatch", times.dispatch);
+  trace.add_time("Treceive", times.receive);
 
   // other
   trace.put(

@@ -105,6 +105,8 @@ void fmpi::print_config(std::ostream& os) {
 #endif
 
   os << "  " << std::setw(width) << std::left << std::setw(5) << " "
+     << "Domain size: " << config.domain_size << "\n";
+  os << "  " << std::setw(width) << std::left << std::setw(5) << " "
      << "Threads: " << nthreads << "\n";
   os << "  " << std::setw(width) << std::left << std::setw(5) << " "
      << "Places: " << nplaces;
