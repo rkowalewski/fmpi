@@ -9,6 +9,8 @@
 #include <fmpi/Debug.hpp>
 #include <fmpi/common/Porting.hpp>
 
+#include <fmpi/concurrency/CacheLocality.hpp>
+
 fmpi::Config const& fmpi::Config::instance() {
   static fmpi::Config config{};
   return config;
@@ -44,8 +46,7 @@ fmpi::Config::Config() {
     throw std::runtime_error("4 Threads at least required");
   }
 
-  auto const ncpus =
-      static_cast<int>(std::thread::hardware_concurrency()) / 2;
+  auto const ncpus = folly::CacheLocality::system().numCpus / 2;
 
   main_core                  = sched_getcpu();
   auto const domain_id       = (main_core % ncpus) / domain_size;

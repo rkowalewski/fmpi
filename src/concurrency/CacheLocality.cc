@@ -17,6 +17,7 @@
 #include <unistd.h>
 
 #include <fstream>
+#include <memory>
 
 #include <fmpi/concurrency/CacheLocality.hpp>
 
@@ -49,7 +50,7 @@ static CacheLocality getSystemLocalityInfo() {
 
 template <>
 const CacheLocality& CacheLocality::system<std::atomic>() {
-  static auto* cache = new CacheLocality(getSystemLocalityInfo());
+  static auto cache = std::make_unique<CacheLocality>(getSystemLocalityInfo());
   return *cache;
 }
 

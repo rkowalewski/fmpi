@@ -7,8 +7,9 @@
 #include <sstream>
 #include <vector>
 
-int main(int argc, char** argv)
-{
+#include <fmpi/concurrency/CacheLocality.hpp>
+
+int main(int argc, char** argv) {
   // MPI_Init(&argc, &argv);
   int provided;
   MPI_Init_thread(&argc, &argv, MPI_THREAD_FUNNELED, &provided);
@@ -29,13 +30,14 @@ int main(int argc, char** argv)
   printf("omp_get_num_places: %d\n", nplaces);
 
   std::vector<int> myprocs;
-  for(int i = 0; i < nplaces; ++i) {
+  for (int i = 0; i < nplaces; ++i) {
     int nprocs = omp_get_place_num_procs(i);
     myprocs.resize(nprocs);
     omp_get_place_proc_ids(i, myprocs.data());
     std::ostringstream os;
     os << "rank: " << me << ", place num: " << i << ", places: {";
-    std::copy(myprocs.begin(), myprocs.end(), std::ostream_iterator<int>(os, ", "));
+    std::copy(
+        myprocs.begin(), myprocs.end(), std::ostream_iterator<int>(os, ", "));
     os << "}\n";
     std::cout << os.str();
   }
@@ -61,6 +63,26 @@ int main(int argc, char** argv)
   std::cout << os.str();
 
   MPI_Finalize();
+
+  {
+    auto& sys = folly::CacheLocality::system<>();
+
+    std::ostringstream os1;
+
+    os1 << "numCpus= " << sys.numCpus << "\n";
+    os1 << "numCachesByLevel= \n";
+    for (std::size_t i = 0; i < sys.numCachesByLevel.size(); ++i) {
+      os1 << "  [" << i << "]= " << sys.numCachesByLevel[i] << "\n";
+    }
+    os1 << "localityIndexByCpu= \n";
+    for (std::size_t i = 0; i < sys.localityIndexByCpu.size(); ++i) {
+      os1 << "  [" << i << "]= " << sys.localityIndexByCpu[i] << "\n";
+    }
+
+    if (me == 0) {
+      std::cout << os1.str();
+    }
+  }
 
   return 0;
 }

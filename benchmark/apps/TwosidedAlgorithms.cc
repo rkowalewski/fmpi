@@ -274,23 +274,3 @@ void write_csv_line(
   os << myos.str();
 }
 
-#if 0
-  auto& sys = folly::CacheLocality::system<>();
-
-  std::ostringstream os1;
-
-  os1 << "numCpus= " << sys.numCpus << "\n";
-  os1 << "numCachesByLevel= \n";
-  for (std::size_t i = 0; i < sys.numCachesByLevel.size(); ++i) {
-    os1 << "  [" << i << "]= " << sys.numCachesByLevel[i] << "\n";
-  }
-  os1 << "localityIndexByCpu= \n";
-  for (std::size_t i = 0; i < sys.localityIndexByCpu.size(); ++i) {
-    os1 << "  [" << i << "]= " << sys.localityIndexByCpu[i] << "\n";
-  }
-
-  if (me == 0) {
-    std::cout << os1.str();
-  }
-  return 0;
-#endif

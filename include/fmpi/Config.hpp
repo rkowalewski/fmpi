@@ -84,12 +84,12 @@ void finalize();
 
 // Only allowed as singleton object
 struct Config {
-  int main_core{};
-  int dispatcher_core{};
-  //int scheduler_core{};
-  //int comp_core{};
-  int domain_size{};
-  int num_threads{};
+  uint32_t main_core{};
+  uint32_t dispatcher_core{};
+  // uint32_t scheduler_core{};
+  // uint32_t comp_core{};
+  uint32_t domain_size{};
+  uint32_t num_threads{};
 
   static Config const& instance();
 
