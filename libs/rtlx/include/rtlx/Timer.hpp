@@ -24,6 +24,10 @@ template <class Clock = ChooseClockType::type>
 class Timer {
   using timepoint = typename Clock::time_point;
 
+  static_assert(
+      std::is_same<typename Clock::duration, std::chrono::nanoseconds>::value,
+      "inprecise clock");
+
  public:
   using duration = typename Clock::duration;
 
@@ -49,7 +53,8 @@ class Timer {
 
     _stop = Clock::now();
 
-    _mark += _stop - _start;
+    _mark += std::chrono::duration_cast<duration>(_stop - _start);
+
     _done = true;
   }
   [[nodiscard]] bool done() const noexcept {

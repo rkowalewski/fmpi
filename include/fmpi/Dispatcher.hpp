@@ -281,9 +281,10 @@ class CommDispatcher {
  public:
   struct Statistics {
     // modified internally, read externally
-    std::size_t iterations{};
     std::size_t high_watermark{};
+    std::size_t iterations{};
     duration    dispatch_time{0};
+    duration    callback_time{0};
     duration    completion_time{0};
     duration    total_time{0};
   };
@@ -383,7 +384,6 @@ class CommDispatcher {
   void loop_until_done();
 
   void start_worker();
-  void stop_worker();
 
   void reset(std::size_t winsz);
 
@@ -463,8 +463,7 @@ inline void CommDispatcher<testReqs>::worker() {
         auto const ntasks = backlog_[req_type].size();
         for (auto&& unused : range(std::min(nslots, ntasks))) {
           std::ignore = unused;
-          Timer{stats_.dispatch_time};
-          auto& list = backlog_[req_type];
+          auto& list  = backlog_[req_type];
           do_dispatch(list.front());
           list.pop();
         }
@@ -486,7 +485,6 @@ inline void CommDispatcher<testReqs>::worker() {
       if (!nslots) {
         backlog_[req_type].push(task);
       } else {
-        Timer{stats_.dispatch_time};
         do_dispatch(task);
       }
     }
@@ -513,6 +511,8 @@ inline void CommDispatcher<testReqs>::worker() {
 
 template <typename mpi::reqsome_op testReqs>
 void CommDispatcher<testReqs>::do_dispatch(CommTask task) {
+  Timer{stats_.dispatch_time};
+
   auto const req_type = rtlx::to_underlying(task.type);
 
   FMPI_ASSERT(req_slots_[req_type].size());
@@ -530,13 +530,11 @@ void CommDispatcher<testReqs>::do_dispatch(CommTask task) {
 
 template <typename mpi::reqsome_op testReqs>
 void CommDispatcher<testReqs>::do_progress(bool force) {
-  auto       timer     = Timer{stats_.completion_time};
   auto const reqs_done = progress_network(force);
 
   auto const nCompleted =
       std::distance(std::begin(indices_), reqs_done[reqs_done.size() - 1]);
 
-  timer.finish();
   if (nCompleted) {
     trigger_callbacks(reqs_done);
   }
@@ -545,7 +543,7 @@ void CommDispatcher<testReqs>::do_progress(bool force) {
 template <typename mpi::reqsome_op testReqs>
 inline typename CommDispatcher<testReqs>::idx_ranges_t
 CommDispatcher<testReqs>::progress_network(bool force) {
-  int* last;
+  Timer{stats_.completion_time};
 
   auto const nreqs = req_count();
 
@@ -559,6 +557,7 @@ CommDispatcher<testReqs>::progress_network(bool force) {
 
   auto op = force ? detail::dispatch_waitall : testReqs;
 
+  int* last;
   auto mpi_ret =
       op(&*std::begin(mpi_reqs_),
          &*std::end(mpi_reqs_),
@@ -596,6 +595,7 @@ CommDispatcher<testReqs>::progress_network(bool force) {
 template <typename mpi::reqsome_op testReqs>
 inline void CommDispatcher<testReqs>::trigger_callbacks(
     idx_ranges_t completed) {
+  Timer{stats_.callback_time};
   for (auto&& type : range(n_types)) {
     auto first = type == 0 ? std::begin(indices_) : completed[type - 1];
     auto last  = completed[type];

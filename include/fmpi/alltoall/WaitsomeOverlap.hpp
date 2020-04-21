@@ -14,6 +14,47 @@
 
 namespace fmpi {
 
+namespace detail {
+
+template <class Timer>
+class TimeTrace {
+  using duration = typename Timer::duration;
+
+  std::string name_;
+  rtlx::Trace trace_;
+
+ public:
+  duration initialize{0};
+  duration dispatch{0};
+  duration receive{0};
+  duration shutdown{0};
+  duration compute{0};
+  duration idle{0};
+
+  TimeTrace(std::string name)
+    : name_(std::move(name))
+    , trace_(name_) {
+  }
+
+  ~TimeTrace() {
+    trace_.add_time("Tmain.initialize", initialize);
+    trace_.add_time("Tmain.dispatch", dispatch);
+    trace_.add_time("Tmain.receive", receive);
+    trace_.add_time("Tmain.shutdown", shutdown);
+    trace_.add_time("Tmain.compute", compute);
+    trace_.add_time("Tmain.idle", idle);
+  }
+
+  std::string_view name() const noexcept {
+    return name_;
+  }
+
+  rtlx::Trace& trace() noexcept {
+    return trace_;
+  }
+};
+}  // namespace detail
+
 template <
     class Schedule,
     class InputIt,
@@ -26,25 +67,9 @@ inline void ring_waitsome_overlap(
     int                 blocksize,
     mpi::Context const& ctx,
     Op&&                op) {
-  using timer    = rtlx::Timer<>;
-  using duration = typename timer::duration;
+  using timer = rtlx::Timer<>;
 
-  struct Times {
-#if 0
-    duration comm_enqueue{0};
-    // comm_dequeue in dispatcher...
-
-    // comp_enqueue in dispatcher...
-    duration comp_dequeue{0};
-#endif
-
-    duration comp_compute{0};
-    duration idle{0};
-    duration dispatch{0};
-    duration receive{0};
-  };
-
-  struct Times times {};
+  constexpr auto algorithm_name = std::string_view("WaitsomeOverlap");
 
   auto const& config = Config::instance();
 
@@ -52,19 +77,20 @@ inline void ring_waitsome_overlap(
 
   auto const nr = ctx.size();
 
-  std::ostringstream os;
-  os << Schedule::NAME << "WaitsomeOverlap" << NReqs;
-
-  auto trace = rtlx::Trace{os.str()};
+  auto trace = detail::TimeTrace<timer>{std::string{Schedule::NAME} +
+                                        std::string{algorithm_name} +
+                                        std::to_string(NReqs)};
 
   FMPI_DBG_STREAM(
-      "running algorithm " << os.str() << ", blocksize: " << blocksize);
+      "running algorithm " << trace.name() << ", blocksize: " << blocksize);
 
   if (nr < 3) {
     detail::ring_pairwise_lt3(
-        begin, out, blocksize, ctx, std::forward<Op&&>(op), trace);
+        begin, out, blocksize, ctx, std::forward<Op&&>(op), trace.trace());
     return;
   }
+
+  timer t_init{trace.initialize};
 
   Schedule const commAlgo{};
 
@@ -184,9 +210,11 @@ inline void ring_waitsome_overlap(
   dispatcher.start_worker();
   dispatcher.pinToCore(config.dispatcher_core);
 
+  t_init.finish();
+
   {
     FMPI_DBG("Sending essages");
-    timer{times.dispatch};
+    timer{trace.dispatch};
 
     for (auto&& r : range(commAlgo.phaseCount(ctx))) {
       auto const rpeer = commAlgo.recvRank(ctx, r);
@@ -211,7 +239,7 @@ inline void ring_waitsome_overlap(
   {
     FMPI_DBG("processing message arrivals...");
 
-    timer{times.receive};
+    timer{trace.receive};
 
     // chunks to merge
     std::vector<std::pair<OutputIt, OutputIt>> chunks;
@@ -242,7 +270,7 @@ inline void ring_waitsome_overlap(
         chunks.emplace_back(span.data(), span.data() + span.size());
 
         if (enough_work()) {
-          timer{times.comp_compute};
+          timer{trace.compute};
           // merge all chunks
           auto d_last = op(chunks, d_first);
 
@@ -265,7 +293,7 @@ inline void ring_waitsome_overlap(
     }
 
     {
-      timer{times.comp_compute};
+      timer{trace.compute};
       auto const nels = static_cast<std::size_t>(ctx.size()) * blocksize;
 
       using merge_buffer_t = tlx::
@@ -301,35 +329,32 @@ inline void ring_waitsome_overlap(
   }
 
   {
-    timer{times.idle};
+    timer{trace.idle};
     // We definitely have to wait here because although all data has arrived
     // there might still be pending tasks for other peers (e.g. sends)
     dispatcher.loop_until_done();
   }
+
+  timer t_shutdown{trace.shutdown};
 
   auto const dispatcher_stats = dispatcher.stats();
 
   auto const recv_stats = data_channel->statistics();
   auto const comm_stats = comm_channel->statistics();
 
-  trace.add_time("Tcomm.enqueue", comm_stats.enqueue_time);
-  trace.add_time("Tcomm.dequeue", comm_stats.dequeue_time);
+  trace.trace().add_time("Tcomm.enqueue", comm_stats.enqueue_time);
+  trace.trace().add_time("Tcomm.dequeue", comm_stats.dequeue_time);
 
-  trace.add_time("Tcomp.enqueue", recv_stats.enqueue_time);
-  trace.add_time("Tcomp.dequeue", recv_stats.dequeue_time);
+  trace.trace().add_time("Tcomp.enqueue", recv_stats.enqueue_time);
+  trace.trace().add_time("Tcomp.dequeue", recv_stats.dequeue_time);
 
-  trace.add_time("Tcomp.comp", times.comp_compute);
-  trace.add_time("Tcomp.idle", times.idle);
+  trace.trace().add_time("Tcomm.dispatch", dispatcher_stats.dispatch_time);
+  trace.trace().add_time("Tcomm.progress", dispatcher_stats.completion_time);
+  trace.trace().add_time("Tcomm.callback", dispatcher_stats.callback_time);
+  trace.trace().add_time("Tcomm.total", dispatcher_stats.total_time);
 
-  trace.add_time("Tcomm.dispatch", dispatcher_stats.dispatch_time);
-  trace.add_time("Tcomm.progress", dispatcher_stats.completion_time);
-  trace.add_time("Tcomm.total", dispatcher_stats.total_time);
-
-  trace.add_time("Tdispatch", times.dispatch);
-  trace.add_time("Treceive", times.receive);
-
-  // other
-  trace.put(
+  // ot()her
+  trace.trace().put(
       "Tcomm.iterations", static_cast<int>(dispatcher_stats.iterations));
 }
 }  // namespace fmpi
