@@ -16,6 +16,14 @@ struct type_mapper {
       "MPI always requires trivially copyable types");
 
   static_assert(
+      !std::is_reference<T>::value,
+      "We cannot map a reference type to a MPI type");
+
+  static_assert(
+      !std::is_const<T>::value,
+      "We cannot map a const type to a MPI type");
+
+  static_assert(
       !std::is_arithmetic<T>::value,
       "arithmetic types can be perfectly matched to MPI Types");
 

@@ -61,9 +61,10 @@ class Message {
     mpi::Rank peer{};
     mpi::Tag  tag{};
 
-    Envelope() = default;
+    constexpr Envelope() = default;
 
-    Envelope(mpi::Rank peer_, mpi::Tag tag_, mpi::Comm comm_) noexcept
+    constexpr Envelope(
+        mpi::Rank peer_, mpi::Tag tag_, mpi::Comm comm_) noexcept
       : comm(comm_)
       , peer(peer_)
       , tag(tag_) {
@@ -71,64 +72,68 @@ class Message {
   };
 
  public:
-  Message() = default;
+  constexpr Message() = default;
 
-  Message(mpi::Rank peer, mpi::Tag tag, mpi::Comm const& comm) noexcept
+  constexpr Message(
+      mpi::Rank peer, mpi::Tag tag, mpi::Comm const& comm) noexcept
     : envelope_(peer, tag, comm) {
   }
 
   template <class T>
-  Message(
+  constexpr Message(
       gsl::span<T>     span,
       mpi::Rank        peer,
       mpi::Tag         tag,
       mpi::Comm const& comm) noexcept
-    : envelope_(peer, tag, comm) {
+    : buf_(span.data())
+    , count_(span.size())
+    , type_(mpi::type_mapper<T>::type())
+    , envelope_(peer, tag, comm) {
     set_buffer(span);
   }
 
-  Message(const Message&) = default;
-  Message& operator=(Message const&) = default;
+  constexpr Message(const Message&) = default;
+  constexpr Message& operator=(Message const&) = default;
 
-  Message(Message&&) noexcept = default;
-  Message& operator=(Message&&) noexcept = default;
+  constexpr Message(Message&&) noexcept = default;
+  constexpr Message& operator=(Message&&) noexcept = default;
 
-  void set_buffer(void* buf, std::size_t count, MPI_Datatype type) {
+  constexpr void set_buffer(void* buf, std::size_t count, MPI_Datatype type) {
     buf_   = buf;
     count_ = count;
     type_  = type;
   }
 
   template <class T>
-  void set_buffer(gsl::span<T> buf) {
+  constexpr void set_buffer(gsl::span<T> buf) {
     set_buffer(buf.data(), buf.size(), mpi::type_mapper<T>::type());
   }
 
-  void* writable_buffer() noexcept {
+  constexpr void* writable_buffer() noexcept {
     return buf_;
   }
 
-  [[nodiscard]] const void* readable_buffer() const noexcept {
+  [[nodiscard]] constexpr const void* readable_buffer() const noexcept {
     return buf_;
   }
 
-  [[nodiscard]] MPI_Datatype type() const noexcept {
+  [[nodiscard]] constexpr MPI_Datatype type() const noexcept {
     return type_;
   }
 
-  [[nodiscard]] std::size_t count() const noexcept {
+  [[nodiscard]] constexpr std::size_t count() const noexcept {
     return count_;
   }
 
-  [[nodiscard]] mpi::Rank peer() const noexcept {
+  [[nodiscard]] constexpr mpi::Rank peer() const noexcept {
     return envelope_.peer;
   }
 
-  [[nodiscard]] mpi::Comm comm() const noexcept {
+  [[nodiscard]] constexpr mpi::Comm comm() const noexcept {
     return envelope_.comm;
   }
 
-  [[nodiscard]] mpi::Tag tag() const noexcept {
+  [[nodiscard]] constexpr mpi::Tag tag() const noexcept {
     return envelope_.tag;
   }
 
@@ -139,10 +144,12 @@ class Message {
   Envelope     envelope_{};
 };
 
-struct CommTask {
-  CommTask() = default;
+//class RecvMessage : public Message {};
 
-  CommTask(message_type t, Message m)
+struct CommTask {
+  constexpr CommTask() = default;
+
+  constexpr CommTask(message_type t, Message m)
     : message(m)
     , type(t) {
   }

@@ -17,6 +17,8 @@
 #include <tlx/math/integer_log2.hpp>
 #include <tlx/simple_vector.hpp>
 
+#include <fmpi/alltoall/Detail.hpp>
+
 namespace fmpi {
 
 namespace detail {
@@ -411,37 +413,14 @@ inline void bruck_interleave(
   auto const                nels = nr * blocksize;
   detail::buffer_t<value_t> buffer{nels};
 
+  auto trace = rtlx::Trace{"Bruck_interleave"};
+
   if (nr < 3) {
-    chunks.emplace_back(
-        std::make_pair(begin + me * blocksize, begin + (me + 1) * blocksize));
-
-    if (nr == 1) {
-      op(chunks, out);
-      return;
-    }
-
-    auto other = static_cast<mpi::Rank>(1 - me);
-
-    FMPI_CHECK_MPI(mpi::sendrecv(
-        begin + other * blocksize,
-        blocksize,
-        other,
-        EXCH_TAG_BRUCK,
-        out + other * blocksize,
-        blocksize,
-        other,
-        EXCH_TAG_BRUCK,
-        ctx));
-
-    chunks.emplace_back(std::make_pair(
-        out + other * blocksize, out + (other + 1) * blocksize));
-
-    op(chunks, buffer.begin());
-    std::move(buffer.begin(), buffer.end(), out);
+    detail::ring_pairwise_lt3(
+        begin, out, blocksize, ctx, std::forward<Op&&>(op), trace);
     return;
   }
 
-  auto trace = rtlx::Trace{"Bruck_interleave"};
 
   // Phase 1: Process i rotates local elements by i blocks to the left in a
   // cyclic manner.
