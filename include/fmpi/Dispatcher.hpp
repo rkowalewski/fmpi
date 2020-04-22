@@ -278,6 +278,32 @@ class CommDispatcher {
   using Timer    = rtlx::Timer<>;
   using duration = typename Timer::duration;
 
+  static constexpr auto n_types = rtlx::to_underlying(message_type::SENTINEL);
+  static_assert(n_types == 2, "only two request types supported for now");
+
+  class TaskQueue;
+
+  template <class T>
+  struct ContiguousList {
+    using allocator = HeapAllocator<T, false>;
+    using container = std::list<T, ContiguousPoolAllocator<T, false>>;
+  };
+
+  template <class _T>
+  using simple_vector =
+      tlx::SimpleVector<_T, tlx::SimpleVectorMode::NoInitNoDestroy>;
+
+  using signal        = Function<int(Message&, MPI_Request&)>;
+  using callback      = Function<void(Message&)>;
+  using signal_list   = std::list<signal>;
+  using callback_list = std::list<callback>;
+
+  using signal_token   = typename signal_list::const_iterator;
+  using callback_token = typename callback_list::const_iterator;
+
+  using req_idx_t    = simple_vector<int>;
+  using idx_ranges_t = std::array<int*, n_types>;
+
  public:
   struct Statistics {
     // modified internally, read externally
@@ -292,42 +318,11 @@ class CommDispatcher {
   using channel = SPSCNChannel<CommTask>;
 
  private:
-  static constexpr uint16_t default_task_capacity = 1000;
-
-  template <class _T>
-  using simple_vector =
-      tlx::SimpleVector<_T, tlx::SimpleVectorMode::NoInitNoDestroy>;
-
-  static constexpr auto n_types = rtlx::to_underlying(message_type::SENTINEL);
-
-  static_assert(n_types == 2, "only two request types supported for now");
-
-  using contiguous_heap_allocator = HeapAllocator<CommTask, false>;
-  using task_list =
-      std::list<CommTask, ContiguousPoolAllocator<CommTask, false>>;
-  using task_queue = std::queue<CommTask, task_list>;
-
-  using signal        = Function<int(Message&, MPI_Request&)>;
-  using callback      = Function<void(Message&)>;
-  using signal_list   = std::list<signal>;
-  using callback_list = std::list<callback>;
-
-  using signal_token   = typename signal_list::const_iterator;
-  using callback_token = typename callback_list::const_iterator;
-
-  using req_idx_t    = simple_vector<int>;
-  using idx_ranges_t = std::array<int*, n_types>;
-
   //////////////////////////////
   // Thread Safe Work Sharing //
   //////////////////////////////
 
   std::shared_ptr<channel> task_channel_{};
-
-  // Task Lists: One for each type
-  std::array<task_queue, n_types> backlog_{};
-
-  contiguous_heap_allocator alloc_;
 
   std::array<signal_list, n_types>   signals_{};
   std::array<callback_list, n_types> callbacks_{};
@@ -353,6 +348,9 @@ class CommDispatcher {
 
   // Window Size
   std::size_t winsz_{};
+
+  // Task Cache
+  TaskQueue backlog_{};
   // Requests in flight for each type, currently: winsz / n_types
   std::size_t reqs_in_flight_{};
   // Pending tasks: explicitly use a normal vector to default construct
@@ -392,8 +390,6 @@ class CommDispatcher {
   Statistics stats() const;
 
  private:
-  std::size_t queue_count() const noexcept;
-
   std::size_t req_count() const noexcept;
 
   std::size_t req_capacity() const noexcept;
@@ -413,13 +409,71 @@ class CommDispatcher {
   void do_reset(std::size_t winsz);
 
   void trigger_callbacks(idx_ranges_t ranges);
+
+  class TaskQueue {
+    using value_type      = CommTask;
+    using contiguous_list = ContiguousList<value_type>;
+    using allocator       = typename contiguous_list::allocator;
+    using list            = typename contiguous_list::container;
+
+    using task_queue = std::queue<value_type, list>;
+
+    using reference       = typename task_queue::reference;
+    using const_reference = typename task_queue::const_reference;
+
+    static constexpr uint16_t default_task_capacity = 1000;
+
+   public:
+    TaskQueue() {
+      for (auto&& i : range(lists_.size())) {
+        lists_[i] = std::move(task_queue{alloc_});
+      }
+    }
+
+    std::size_t size() const noexcept {
+      return std::accumulate(
+          std::begin(lists_),
+          std::end(lists_),
+          0U,
+          [](auto acc, auto const& queue) { return acc + queue.size(); });
+    }
+
+    std::size_t size(message_type type) const noexcept {
+      return lists_[rtlx::to_underlying(type)].size();
+    }
+
+    void push(value_type const& task) {
+      return lists_[rtlx::to_underlying(task.type)].push(task);
+    }
+
+    void push(value_type&& task) {
+      return lists_[rtlx::to_underlying(task.type)].emplace(task);
+    }
+
+    void pop(message_type type) {
+      return lists_[rtlx::to_underlying(type)].pop();
+    }
+
+    reference front(message_type type) {
+      return lists_[rtlx::to_underlying(type)].front();
+    }
+
+    const_reference front(message_type type) const {
+      return lists_[rtlx::to_underlying(type)].front();
+    }
+
+   private:
+    allocator alloc_{default_task_capacity};
+
+    // Task Lists: One for each type
+    std::array<task_queue, n_types> lists_{};
+  };
 };  // namespace fmpi
 
 template <typename mpi::reqsome_op testReqs>
 inline CommDispatcher<testReqs>::CommDispatcher(
     std::shared_ptr<channel> chan, std::size_t winsz)
-  : task_channel_(std::move(chan))
-  , alloc_(contiguous_heap_allocator{default_task_capacity}) {
+  : task_channel_(std::move(chan)) {
   do_reset(winsz);
 }
 
@@ -454,18 +508,19 @@ inline void CommDispatcher<testReqs>::worker() {
 
   Timer t_total{stats_.total_time};
 
-  while (auto const tasks = HasTasks{queue_count(), !task_channel_->done()}) {
+  while (auto const tasks =
+             HasTasks{backlog_.size(), !task_channel_->done()}) {
     auto n_backlog = tasks.task_count.first;
     if (n_backlog) {
       // try to serve from caches
-      for (auto&& req_type : range(n_types)) {
-        auto const nslots = req_slots_[req_type].size();
-        auto const ntasks = backlog_[req_type].size();
+      for (auto&& type : range(n_types)) {
+        auto const nslots   = req_slots_[type].size();
+        auto const req_type = static_cast<message_type>(type);
+        auto const ntasks   = backlog_.size(req_type);
         for (auto&& unused : range(std::min(nslots, ntasks))) {
           std::ignore = unused;
-          auto& list  = backlog_[req_type];
-          do_dispatch(list.front());
-          list.pop();
+          do_dispatch(backlog_.front(req_type));
+          backlog_.pop(req_type);
         }
       }
       stats_.high_watermark = std::max(stats_.high_watermark, n_backlog);
@@ -483,7 +538,7 @@ inline void CommDispatcher<testReqs>::worker() {
       auto const nslots   = req_slots_[req_type].size();
 
       if (!nslots) {
-        backlog_[req_type].push(task);
+        backlog_.push(task);
       } else {
         do_dispatch(task);
       }
@@ -684,10 +739,6 @@ inline void CommDispatcher<testReqs>::do_reset(std::size_t winsz) {
   mpi_statuses_.resize(winsz_);
   indices_.resize(winsz_);
 
-  for (auto&& i : range(backlog_.size())) {
-    backlog_[i] = std::move(task_queue{alloc_});
-  }
-
   std::uninitialized_fill(
       std::begin(mpi_reqs_), std::end(mpi_reqs_), MPI_REQUEST_NULL);
 
@@ -704,15 +755,6 @@ inline void CommDispatcher<testReqs>::do_reset(std::size_t winsz) {
   }
 
   FMPI_ASSERT((winsz_ % n_types) == 0);
-}
-
-template <mpi::reqsome_op testReqs>
-inline std::size_t CommDispatcher<testReqs>::queue_count() const noexcept {
-  return std::accumulate(
-      std::begin(backlog_),
-      std::end(backlog_),
-      0U,
-      [](auto acc, auto const& queue) { return acc + queue.size(); });
 }
 
 template <mpi::reqsome_op testReqs>
