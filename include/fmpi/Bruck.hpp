@@ -3,18 +3,16 @@
 
 #include <mpi.h>
 
-#include <numeric>
-
 #include <fmpi/Constants.hpp>
+#include <fmpi/Function.hpp>
 #include <fmpi/Math.hpp>
-
+#include <fmpi/Message.hpp>
+#include <fmpi/NumericRange.hpp>
 #include <fmpi/alltoall/Detail.hpp>
-
+#include <fmpi/common/SimpleDispatcher.hpp>
 #include <fmpi/mpi/Algorithm.hpp>
 #include <fmpi/mpi/Environment.hpp>
 #include <fmpi/mpi/Request.hpp>
-
-#include <fmpi/NumericRange.hpp>
 
 #include <tlx/math/integer_log2.hpp>
 #include <tlx/simple_vector.hpp>
@@ -59,8 +57,6 @@ constexpr auto Tunpack = std::string_view("Tunpack");
 
 template <class T>
 using buffer_t = tlx::SimpleVector<T, tlx::SimpleVectorMode::Normal>;
-
-class Dispatcher {};
 
 }  // namespace detail
 
@@ -464,6 +460,8 @@ inline void bruck_interleave(
   merged.reserve(nr);
   merged.push_back(0);
 
+  auto dispatcher = SimpleDispatcher{};
+
   for (auto&& r : range(niter)) {
     auto const j = static_cast<mpi::Rank>(one << r);
 
@@ -472,9 +470,6 @@ inline void bruck_interleave(
     mpi::Rank recvfrom;
 
     mpi::Rank sendto;
-
-    auto reqs =
-        std::array<MPI_Request, 2>{MPI_REQUEST_NULL, MPI_REQUEST_NULL};
 
     // We send to (r + j)
     std::tie(recvfrom, sendto) = std::make_pair(
@@ -510,45 +505,42 @@ inline void bruck_interleave(
     FMPI_DBG("send_buffer");
     FMPI_DBG_RANGE(sendbuf, sendbuf + blocksize * blocks.size());
 
-    {
-      rtlx::TimeTrace tt{trace, kCommunicationTime};
+    rtlx::TimeTrace tt{trace, kCommunicationTime};
 
-      FMPI_CHECK_MPI(mpi::irecv(
-          recvbuf,
-          blocksize * blocks.size(),
-          recvfrom,
-          kTagBruck,
-          ctx,
-          &reqs[1]));
+    auto recv = Message(
+        gsl::span<value_t>(recvbuf, blocksize * blocks.size()),
+        recvfrom,
+        kTagBruck,
+        ctx.mpiComm());
 
-      FMPI_CHECK_MPI(mpi::isend(
-          sendbuf,
-          blocksize * blocks.size(),
-          sendto,
-          kTagBruck,
-          ctx,
-          &reqs[0]));
-    }
+    auto send = Message(
+        gsl::span<value_t>(sendbuf, blocksize * blocks.size()),
+        sendto,
+        kTagBruck,
+        ctx.mpiComm());
+
+    auto future = dispatcher.dispatch(std::make_pair(send, recv));
+
+    tt.finish();
 
     if (r > 0) {
-      {
-        rtlx::TimeTrace tt{trace, kComputationTime};
-        // merge chunks of last iteration...
-        // auto const op_first = (r == 1) ? 0 : (one << (r - 1)) * blocksize;
-        auto const op_first = merged.back();
-        FMPI_DBG(op_first);
-        FMPI_DBG(chunks.size());
-        op(chunks, std::next(buffer.begin(), op_first));
-        merged.push_back(merged.back() + chunks.size() * blocksize);
-        chunks.clear();
-        FMPI_DBG("merge_buffer");
-        FMPI_DBG_RANGE(buffer.begin(), buffer.end());
-      }
+      rtlx::TimeTrace tt{trace, kComputationTime};
+      // merge chunks of last iteration...
+      // auto const op_first = (r == 1) ? 0 : (one << (r - 1)) * blocksize;
+      auto const op_first = merged.back();
+      FMPI_DBG(op_first);
+      FMPI_DBG(chunks.size());
+      op(chunks, std::next(buffer.begin(), op_first));
+      merged.push_back(merged.back() + chunks.size() * blocksize);
+      chunks.clear();
+      FMPI_DBG("merge_buffer");
+      FMPI_DBG_RANGE(buffer.begin(), buffer.end());
     }
 
     {
       rtlx::TimeTrace tt{trace, kCommunicationTime};
-      FMPI_CHECK_MPI(mpi::waitall(reqs.begin(), reqs.end()));
+      auto const      success = future.get();
+      FMPI_CHECK_MPI(success);
 
       FMPI_DBG("recv_buffer");
       FMPI_DBG_RANGE(recvbuf, recvbuf + blocksize * blocks.size());

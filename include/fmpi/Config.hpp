@@ -8,9 +8,6 @@
 
 namespace fmpi {
 
-void initialize(int*, char*** argv);
-void finalize();
-
 // Only allowed as singleton object
 struct Config {
   uint32_t main_core{};

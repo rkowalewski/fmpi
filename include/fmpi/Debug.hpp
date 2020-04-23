@@ -163,12 +163,12 @@ auto operator<<(std::ostream& os, std::pair<F, T> const& p) -> std::ostream& {
   }())  // NOLINT
 #endif
 
-#define FMPI_CHECK_MPI(expr)                                          \
-  do {                                                                \
-    auto success = (expr);                                            \
-    static_assert(                                                    \
-        std::is_same<decltype(success), int>::value, "invalid type"); \
-    FMPI_ASSERT(success == MPI_SUCCESS);                              \
+#define FMPI_CHECK_MPI(expr)                                           \
+  do {                                                                 \
+    auto success_ = (expr);                                            \
+    static_assert(                                                     \
+        std::is_same<decltype(success_), int>::value, "invalid type"); \
+    FMPI_ASSERT(success_ == MPI_SUCCESS);                              \
   } while (0)
 
 #endif

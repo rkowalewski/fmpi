@@ -8,22 +8,34 @@
 
 namespace fmpi {
 
+namespace detail {
+
+class MessageBase {
+  constexpr MessageBase() = default;
+
+  constexpr MessageBase(const MessageBase&) = default;
+  constexpr MessageBase& operator=(MessageBase const&) = default;
+
+  constexpr MessageBase(MessageBase&&) noexcept = default;
+  constexpr MessageBase& operator=(MessageBase&&) noexcept = default;
+};
+}  // namespace detail
+
+struct Envelope {
+  mpi::Comm comm{MPI_COMM_NULL};
+  mpi::Rank peer{};
+  mpi::Tag  tag{};
+
+  constexpr Envelope() = default;
+
+  constexpr Envelope(mpi::Rank peer_, mpi::Tag tag_, mpi::Comm comm_) noexcept
+    : comm(comm_)
+    , peer(peer_)
+    , tag(tag_) {
+  }
+};
+
 class Message {
-  struct Envelope {
-    mpi::Comm comm{MPI_COMM_NULL};
-    mpi::Rank peer{};
-    mpi::Tag  tag{};
-
-    constexpr Envelope() = default;
-
-    constexpr Envelope(
-        mpi::Rank peer_, mpi::Tag tag_, mpi::Comm comm_) noexcept
-      : comm(comm_)
-      , peer(peer_)
-      , tag(tag_) {
-    }
-  };
-
  public:
   constexpr Message() = default;
 
@@ -91,11 +103,18 @@ class Message {
   }
 
  private:
-  void*        buf_{};
-  std::size_t  count_{};
-  MPI_Datatype type_{};
   Envelope     envelope_{};
+  MPI_Datatype type_{};
+  std::size_t  count_{};
+  void*        buf_{};
 };
+
+static_assert(sizeof(Envelope) == 12);
+static_assert(sizeof(MPI_Datatype) == 4);
+static_assert(alignof(Message) == 8);
+static_assert(sizeof(Message) == 32);
+
+class Isend {};
 }  // namespace fmpi
 
 #endif

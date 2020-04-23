@@ -2,9 +2,12 @@
 #define FMPI_COMMON_PORTING_HPP
 
 #include <cstddef>
+#include <new>
 #include <thread>
+#include <utility>
 
-#ifndef __cpp_lib_hardware_interference_size
+#if __cplusplus < 201703L || !(defined(__cpp_lib_hardware_interference_size))
+
 namespace std {
 
 //  mimic: std::hardware_constructive_interference_size, C++17
@@ -14,7 +17,6 @@ constexpr std::size_t hardware_constructive_interference_size = 64;
 constexpr std::size_t hardware_destructive_interference_size = 128;
 
 }  // namespace std
-
 #endif
 
 namespace fmpi {
@@ -55,11 +57,12 @@ using max_align_v_ = max_align_t_<
 constexpr std::size_t max_align_v = detail::max_align_v_::value;
 struct alignas(max_align_v) max_align_t {};
 
-static_assert(std::hardware_destructive_interference_size >= max_align_v);
-
 int  get_num_threads();
 bool pinThreadToCore(std::thread& thread, int core_id);
 
 }  // namespace fmpi
+
+static_assert(
+    std::hardware_destructive_interference_size >= fmpi::max_align_v);
 
 #endif

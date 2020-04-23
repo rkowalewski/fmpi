@@ -8,6 +8,8 @@
 
 namespace mpi {
 
+static MPI_Comm comm_world;
+
 Context::Context(MPI_Comm comm)
   : m_comm(comm) {
   int sz;
@@ -35,11 +37,10 @@ auto splitSharedComm(Context const& baseComm) -> Context {
   return Context{sharedComm};
 }
 
-Context& Context::world() {
-  static Context ctx{MPI_COMM_WORLD};
+Context const& Context::world() {
+  static Context ctx{comm_world};
   return ctx;
 }
-
 
 bool is_thread_main() {
   int flag;
@@ -51,12 +52,17 @@ bool initialize(int* argc, char*** argv, ThreadLevel level) {
   auto const required = rtlx::to_underlying(level);
   int        provided;
 
-  auto const success = MPI_Init_thread(argc, argv, required, &provided);
+  auto const init = MPI_Init_thread(argc, argv, required, &provided);
 
-  return success == MPI_SUCCESS && required <= provided;
+  auto const dup = MPI_Comm_dup(MPI_COMM_WORLD, &comm_world);
+
+  auto const success = init == MPI_SUCCESS && dup == MPI_SUCCESS;
+
+  return success && required <= provided;
 }
 
 void finalize() {
+  RTLX_ASSERT_RETURNS(MPI_Comm_free(&comm_world), MPI_SUCCESS);
   RTLX_ASSERT_RETURNS(MPI_Finalize(), MPI_SUCCESS);
 }
 }  // namespace mpi

@@ -40,7 +40,7 @@ class Context {
     return m_comm;
   }
 
-  static Context& world();
+  static Context const& world();
 
  private:
   size_type m_size{};
