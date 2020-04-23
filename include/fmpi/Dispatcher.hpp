@@ -257,11 +257,11 @@ class SPSCNChannel {
     return ret;
   }
 
-  bool done() const noexcept {
+  [[nodiscard]] bool done() const noexcept {
     return task_count() == 0u;
   }
 
-  std::size_t task_count() const noexcept {
+  [[nodiscard]] std::size_t task_count() const noexcept {
     return count_.load(std::memory_order_acquire);
   }
 
@@ -270,7 +270,7 @@ class SPSCNChannel {
     return stats_;
   }
 
-  std::size_t high_watermark() const noexcept {
+  [[nodiscard]] std::size_t high_watermark() const noexcept {
     return high_watermark_;
   }
 
@@ -451,7 +451,7 @@ class CommDispatcher {
       }
     }
 
-    std::size_t size() const noexcept {
+    [[nodiscard]] std::size_t size() const noexcept {
       return std::accumulate(
           std::begin(lists_),
           std::end(lists_),
@@ -459,7 +459,7 @@ class CommDispatcher {
           [](auto acc, auto const& queue) { return acc + queue.size(); });
     }
 
-    std::size_t size(message_type type) const noexcept {
+    [[nodiscard]] std::size_t size(message_type type) const noexcept {
       return lists_[rtlx::to_underlying(type)].size();
     }
 
@@ -479,7 +479,7 @@ class CommDispatcher {
       return lists_[rtlx::to_underlying(type)].front();
     }
 
-    const_reference front(message_type type) const {
+    [[nodiscard]] const_reference front(message_type type) const {
       return lists_[rtlx::to_underlying(type)].front();
     }
 
