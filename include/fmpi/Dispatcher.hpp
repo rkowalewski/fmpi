@@ -52,7 +52,7 @@ enum class message_type : uint8_t
   IRECV = 0,
   ISEND,
 
-  SENTINEL
+  INVALID
 };
 
 class Message {
@@ -144,7 +144,7 @@ class Message {
   Envelope     envelope_{};
 };
 
-//class RecvMessage : public Message {};
+// class RecvMessage : public Message {};
 
 struct CommTask {
   constexpr CommTask() = default;
@@ -200,12 +200,12 @@ class SPSCNChannel {
 
  public:
   struct Stats {
-    // producer
-    alignas(std::hardware_destructive_interference_size)
-        timer_duration enqueue_time{0};
     // consumer
     alignas(std::hardware_destructive_interference_size)
         timer_duration dequeue_time{0};
+    // producer
+    alignas(std::hardware_destructive_interference_size)
+        timer_duration enqueue_time{0};
   };
 
  public:
@@ -216,8 +216,8 @@ class SPSCNChannel {
 
   SPSCNChannel(std::size_t n) noexcept
     : channel_(n)
-    , count_(n)
-    , high_watermark_(n) {
+    , high_watermark_(n)
+    , count_(n) {
     FMPI_DBG("< SPSCNChannel(chan, n)");
     FMPI_DBG(task_count());
   }
@@ -227,34 +227,34 @@ class SPSCNChannel {
 
   bool wait_dequeue(value_type& val) {
     timer{stats_.dequeue_time};
-    if (done()) {
+    if (!count_.load(std::memory_order_relaxed)) {
       return false;
     }
     val = channel_.value_pop();
-    count_.fetch_sub(1, std::memory_order_relaxed);
+    count_.fetch_sub(1, std::memory_order_release);
     return true;
   }
 
   bool wait_dequeue(value_type& val, duration const& timeout) {
     timer{stats_.dequeue_time};
-    if (done()) {
+    if (!count_.load(std::memory_order_relaxed)) {
       return false;
     }
     auto const ret = channel_.pop(val, timeout);
-    count_.fetch_sub(ret, std::memory_order_relaxed);
+    count_.fetch_sub(ret, std::memory_order_release);
     return ret;
   }
 
   bool enqueue(value_type const& task) {
     timer{stats_.enqueue_time};
-    auto status = channel_.push(task);
-    auto ret    = status == channel_op_status::success;
-    FMPI_ASSERT(ret);
-    return ret;
-  }
+    auto const status = channel_.push(task);
+    auto const ret    = status == channel_op_status::success;
 
-  void close() {
-    channel_.close();
+    if ((nproduced_ += ret) == high_watermark_) {
+      channel_.close();
+    }
+
+    return ret;
   }
 
   bool done() const noexcept {
@@ -262,10 +262,11 @@ class SPSCNChannel {
   }
 
   std::size_t task_count() const noexcept {
-    return count_.load(std::memory_order_relaxed);
+    return count_.load(std::memory_order_acquire);
   }
 
   Stats statistics() const noexcept {
+    FMPI_ASSERT(done());
     return stats_;
   }
 
@@ -274,10 +275,23 @@ class SPSCNChannel {
   }
 
  private:
-  channel                  channel_{0};
-  std::atomic<std::size_t> count_{0};
-  Stats                    stats_{};
-  std::size_t const        high_watermark_{};
+  channel channel_{0};
+
+  // two separate write cachelines
+  // L1: consumer
+  // L2: producer
+  Stats stats_{};
+
+  // private access in producer
+  std::size_t nproduced_{0};
+
+  // shared read cacheline
+  alignas(std::hardware_destructive_interference_size) std::size_t const
+      high_watermark_{0};
+
+  // shared write cacheline
+  alignas(std::hardware_destructive_interference_size)
+      std::atomic<std::size_t> count_{0};
 };
 
 template <mpi::reqsome_op testReqs = mpi::testsome>
@@ -285,7 +299,7 @@ class CommDispatcher {
   using Timer    = rtlx::Timer<>;
   using duration = typename Timer::duration;
 
-  static constexpr auto n_types = rtlx::to_underlying(message_type::SENTINEL);
+  static constexpr auto n_types = rtlx::to_underlying(message_type::INVALID);
   static_assert(n_types == 2, "only two request types supported for now");
 
   class TaskQueue;
@@ -353,11 +367,11 @@ class CommDispatcher {
   // Sliding Window Worker Thread //
   //////////////////////////////////
 
-  // Window Size
-  std::size_t winsz_{};
-
   // Task Cache
   TaskQueue backlog_{};
+
+  // Window Size
+  std::size_t winsz_{};
   // Requests in flight for each type, currently: winsz / n_types
   std::size_t reqs_in_flight_{};
   // Pending tasks: explicitly use a normal vector to default construct

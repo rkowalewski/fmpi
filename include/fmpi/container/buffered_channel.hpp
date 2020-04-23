@@ -37,6 +37,11 @@ enum class channel_op_status
 
 template <typename T>
 class buffered_channel {
+  static constexpr std::size_t cacheline_length =
+      std::hardware_constructive_interference_size;
+  static constexpr std::size_t cache_alignment =
+      std::hardware_destructive_interference_size;
+
  public:
   typedef T value_type;
 
@@ -44,7 +49,7 @@ class buffered_channel {
   typedef
       typename std::aligned_storage<sizeof(T), alignof(T)>::type storage_type;
 
-  struct alignas(kCacheLineAlignment) slot {
+  struct alignas(cache_alignment) slot {
     std::atomic<std::size_t> cycle{0};
     storage_type             storage{};
 
@@ -52,18 +57,18 @@ class buffered_channel {
   };
 
   // procuder cacheline
-  alignas(kCacheLineAlignment) std::atomic<std::size_t> producer_idx_{0};
+  alignas(cache_alignment) std::atomic<std::size_t> producer_idx_{0};
   // consumer cacheline
-  alignas(kCacheLineAlignment) std::atomic<std::size_t> consumer_idx_{0};
+  alignas(cache_alignment) std::atomic<std::size_t> consumer_idx_{0};
   // shared write cacheline
-  alignas(kCacheLineAlignment) std::atomic_bool closed_{false};
+  alignas(cache_alignment) std::atomic_bool closed_{false};
   mutable std::mutex      mtx_{};
   std::condition_variable not_full_cnd_{};
   std::condition_variable not_empty_cnd_{};
   // shared read cacheline
-  alignas(kCacheLineAlignment) slot* slots_{nullptr};
+  alignas(cache_alignment) slot* slots_{nullptr};
   std::size_t capacity_;
-  char        pad_[kCacheLineSize]{};
+  char        pad_[cacheline_length]{};
   std::size_t waiting_consumer_{0};
 
   bool is_full_() {

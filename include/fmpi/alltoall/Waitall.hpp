@@ -4,6 +4,7 @@
 #include <sstream>
 
 #include <fmpi/Debug.hpp>
+#include <fmpi/NumericRange.hpp>
 #include <fmpi/Schedule.hpp>
 #include <fmpi/alltoall/Detail.hpp>
 #include <fmpi/mpi/Environment.hpp>

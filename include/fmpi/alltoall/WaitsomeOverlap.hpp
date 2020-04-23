@@ -53,6 +53,7 @@ class TimeTrace {
     return trace_;
   }
 };
+
 }  // namespace detail
 
 template <
@@ -142,9 +143,9 @@ inline void ring_waitsome_overlap(
 
   auto data_channel = std::make_shared<channel_t>(n_exchanges);
 
-  auto dispatcher = dispatcher_t{comm_channel, winsz};
+  auto comm_dispatcher = dispatcher_t{comm_channel, winsz};
 
-  dispatcher.register_signal(
+  comm_dispatcher.register_signal(
       message_type::IRECV,
       [&buf_alloc, blocksize](
           Message& message, MPI_Request & /*req*/) -> int {
@@ -158,7 +159,7 @@ inline void ring_waitsome_overlap(
         return 0;
       });
 
-  dispatcher.register_signal(
+  comm_dispatcher.register_signal(
       message_type::IRECV, [](Message& message, MPI_Request& req) -> int {
         auto ret = mpi::irecv(
             message.writable_buffer(),
@@ -174,7 +175,7 @@ inline void ring_waitsome_overlap(
         return ret;
       });
 
-  dispatcher.register_signal(
+  comm_dispatcher.register_signal(
       message_type::ISEND, [](Message& message, MPI_Request& req) -> int {
         auto ret = mpi::isend(
             message.readable_buffer(),
@@ -189,7 +190,7 @@ inline void ring_waitsome_overlap(
         return ret;
       });
 
-  dispatcher.register_callback(
+  comm_dispatcher.register_callback(
       message_type::IRECV,
       [data_channel](
           Message& message /*, MPI_Status const& status*/) mutable {
@@ -207,8 +208,8 @@ inline void ring_waitsome_overlap(
         FMPI_ASSERT(ret);
       });
 
-  dispatcher.start_worker();
-  dispatcher.pinToCore(config.dispatcher_core);
+  comm_dispatcher.start_worker();
+  comm_dispatcher.pinToCore(config.dispatcher_core);
 
   t_init.finish();
 
@@ -332,12 +333,12 @@ inline void ring_waitsome_overlap(
     timer{trace.idle};
     // We definitely have to wait here because although all data has arrived
     // there might still be pending tasks for other peers (e.g. sends)
-    dispatcher.loop_until_done();
+    comm_dispatcher.loop_until_done();
   }
 
   timer t_shutdown{trace.shutdown};
 
-  auto const dispatcher_stats = dispatcher.stats();
+  auto const dispatcher_stats = comm_dispatcher.stats();
 
   auto const recv_stats = data_channel->statistics();
   auto const comm_stats = comm_channel->statistics();
@@ -353,7 +354,6 @@ inline void ring_waitsome_overlap(
   trace.trace().add_time("Tcomm.callback", dispatcher_stats.callback_time);
   trace.trace().add_time("Tcomm.total", dispatcher_stats.total_time);
 
-  // ot()her
   trace.trace().put(
       "Tcomm.iterations", static_cast<int>(dispatcher_stats.iterations));
 }
