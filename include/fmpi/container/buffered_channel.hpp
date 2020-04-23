@@ -37,10 +37,8 @@ enum class channel_op_status
 
 template <typename T>
 class buffered_channel {
-  static constexpr std::size_t cacheline_length =
-      std::hardware_constructive_interference_size;
-  static constexpr std::size_t cache_alignment =
-      std::hardware_destructive_interference_size;
+  static constexpr std::size_t cacheline_length = kCacheLineSize;
+  static constexpr std::size_t cache_alignment  = kCacheAlignment;
 
  public:
   typedef T value_type;

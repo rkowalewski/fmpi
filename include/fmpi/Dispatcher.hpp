@@ -102,11 +102,9 @@ class SPSCNChannel {
  public:
   struct Stats {
     // consumer
-    alignas(std::hardware_destructive_interference_size)
-        timer_duration dequeue_time{0};
+    alignas(kCacheAlignment) timer_duration dequeue_time{0};
     // producer
-    alignas(std::hardware_destructive_interference_size)
-        timer_duration enqueue_time{0};
+    alignas(kCacheAlignment) timer_duration enqueue_time{0};
   };
 
  public:
@@ -187,12 +185,10 @@ class SPSCNChannel {
   std::size_t nproduced_{0};
 
   // shared read cacheline
-  alignas(std::hardware_destructive_interference_size) std::size_t const
-      high_watermark_{0};
+  alignas(kCacheAlignment) std::size_t const high_watermark_{0};
 
   // shared write cacheline
-  alignas(std::hardware_destructive_interference_size)
-      std::atomic<std::size_t> count_{0};
+  alignas(kCacheAlignment) std::atomic<std::size_t> count_{0};
 };
 
 template <mpi::reqsome_op testReqs = mpi::testsome>

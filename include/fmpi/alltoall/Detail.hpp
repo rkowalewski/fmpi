@@ -34,7 +34,7 @@ inline void ring_pairwise_lt3(
       std::make_pair(begin + me * blocksize, begin + (me + 1) * blocksize));
 
   if (ctx.size() == 1) {
-    rtlx::TimeTrace tt(trace, COMPUTATION);
+    rtlx::TimeTrace tt(trace, kComputationTime);
     op(chunks, out);
     return;
   }
@@ -42,21 +42,21 @@ inline void ring_pairwise_lt3(
   auto other = static_cast<mpi::Rank>(1 - me);
 
   {
-    rtlx::TimeTrace tt(trace, COMMUNICATION);
+    rtlx::TimeTrace tt(trace, kCommunicationTime);
     FMPI_CHECK_MPI(mpi::sendrecv(
         begin + other * blocksize,
         blocksize,
         other,
-        EXCH_TAG_BRUCK,
+        kTagBruck,
         out + other * blocksize,
         blocksize,
         other,
-        EXCH_TAG_BRUCK,
+        kTagBruck,
         ctx));
   }
 
   {
-    rtlx::TimeTrace tt(trace, COMPUTATION);
+    rtlx::TimeTrace tt(trace, kComputationTime);
 
     chunks.emplace_back(std::make_pair(
         out + other * blocksize, out + (other + 1) * blocksize));
@@ -66,7 +66,7 @@ inline void ring_pairwise_lt3(
     std::move(buffer.begin(), buffer.end(), out);
   }
 
-  trace.put(N_COMM_ROUNDS, 1);
+  trace.put(kCommRounds, 1);
 }
 }  // namespace detail
 }  // namespace fmpi

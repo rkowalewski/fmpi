@@ -32,7 +32,7 @@ inline void mpi_alltoall(
   std::unique_ptr<value_type[]> rbuf;
 
   {
-    rtlx::TimeTrace tt(trace, COMMUNICATION);
+    rtlx::TimeTrace tt(trace, kCommunicationTime);
 
     rbuf = std::unique_ptr<value_type[]>(new value_type[nr * blocksize]);
 
@@ -41,7 +41,7 @@ inline void mpi_alltoall(
   }
 
   {
-    rtlx::TimeTrace tt(trace, COMPUTATION);
+    rtlx::TimeTrace tt(trace, kComputationTime);
 
     std::vector<std::pair<InputIt, InputIt>> chunks;
     chunks.reserve(nr);

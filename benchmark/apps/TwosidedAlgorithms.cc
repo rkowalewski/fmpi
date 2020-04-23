@@ -220,7 +220,9 @@ int main(int argc, char* argv[]) {
           auto traces = traceStore.traces(algo.first);
 
           write_csv_line(
-              std::cout, m, std::make_pair(std::string{fmpi::TOTAL}, total));
+              std::cout,
+              m,
+              std::make_pair(std::string{fmpi::kTotalTime}, total));
 
           for (auto&& entry : traces) {
             write_csv_line(std::cout, m, entry);

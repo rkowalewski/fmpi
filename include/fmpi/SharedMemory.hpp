@@ -42,7 +42,7 @@ inline void all2allMortonZSource(
   }
 
   auto trace = rtlx::TimeTrace{me, s};
-  trace.tick(COMMUNICATION);
+  trace.tick(kCommunicationTime);
 
   RTLX_ASSERT(isPow2(static_cast<unsigned>(nr)));
 
@@ -101,13 +101,13 @@ inline void all2allMortonZSource(
   std::vector<std::pair<iterator, iterator>> chunks(nr / ystride);
   simple_vector                              rbuf(nr * blocksize);
 
-  trace.tock(COMMUNICATION);
+  trace.tock(kCommunicationTime);
 
   std::size_t firstChunk = me * nr;
   std::size_t lastChunk  = firstChunk + nr;
 
   for (std::size_t morton = firstChunk; morton < lastChunk; ++morton) {
-    trace.tick(COMMUNICATION);
+    trace.tick(kCommunicationTime);
     morton_coords_t coords{};
     libmorton::morton2D_64_decode(morton, coords.second, coords.first);
 
@@ -136,7 +136,7 @@ inline void all2allMortonZSource(
     // std::memcpy(dstAddr, srcAddr, blocksize * sizeof(value_type));
     std::copy(srcAddr, srcAddr + blocksize, buf);
 
-    trace.tock(COMMUNICATION);
+    trace.tock(kCommunicationTime);
 
     if (row == ymask) {
       auto range = fmpi::range<unsigned>(row - ymask, row + 1);
@@ -161,7 +161,7 @@ inline void all2allMortonZSource(
       op(chunks, dstAddr);
       trace.tock(MERGE);
 
-      trace.tick(COMMUNICATION);
+      trace.tick(kCommunicationTime);
       if (static_cast<mpi::rank_t>(dstRank) != me) {
         FMPI_DBG_STREAM(
             "point (" << srcRank << "," << srcOffset
@@ -171,16 +171,16 @@ inline void all2allMortonZSource(
             MPI_Send(&sflag, 0, MPI_BYTE, dstRank, notify_tag, ctx.mpiComm()),
             MPI_SUCCESS);
       }
-      trace.tock(COMMUNICATION);
+      trace.tock(kCommunicationTime);
     }
   }
 
-  trace.tick(COMMUNICATION);
+  trace.tick(kCommunicationTime);
 
   RTLX_ASSERT_RETURNS(
       MPI_Waitall(nreq, &reqs[0], MPI_STATUSES_IGNORE), MPI_SUCCESS);
 
-  trace.tock(COMMUNICATION);
+  trace.tock(kCommunicationTime);
 
   trace.tick(MERGE);
 
@@ -238,7 +238,7 @@ inline void all2allMortonZDest(
   }
 
   auto trace = rtlx::TimeTrace{me, s};
-  trace.tick(COMMUNICATION);
+  trace.tick(kCommunicationTime);
 
   RTLX_ASSERT(isPow2(static_cast<unsigned>(nr)));
 
@@ -303,10 +303,10 @@ inline void all2allMortonZDest(
   auto const firstX = coords.second;
   auto const firstY = coords.first;
 
-  trace.tock(COMMUNICATION);
+  trace.tock(kCommunicationTime);
 
   for (std::size_t morton = firstChunk; morton < lastChunk; ++morton) {
-    trace.tick(COMMUNICATION);
+    trace.tick(kCommunicationTime);
     libmorton::morton2D_64_decode(morton, coords.second, coords.first);
 
     unsigned_rank_t srcRank, dstRank;
@@ -333,7 +333,7 @@ inline void all2allMortonZDest(
 
     std::copy(srcAddr, srcAddr + blocksize, buf);
 
-    trace.tock(COMMUNICATION);
+    trace.tock(kCommunicationTime);
   }
 
   std::vector<std::pair<iterator, iterator>> chunks(
@@ -367,22 +367,22 @@ inline void all2allMortonZDest(
     trace.tock(MERGE);
 
     if (static_cast<mpi::rank_t>(dstRank) != me) {
-      trace.tick(COMMUNICATION);
+      trace.tick(kCommunicationTime);
       FMPI_DBG_STREAM("notify rank: " << dstRank);
 
       RTLX_ASSERT_RETURNS(
           MPI_Send(&sflag, 0, MPI_BYTE, dstRank, notify_tag, ctx.mpiComm()),
           MPI_SUCCESS);
-      trace.tock(COMMUNICATION);
+      trace.tock(kCommunicationTime);
     }
   }
 
-  trace.tick(COMMUNICATION);
+  trace.tick(kCommunicationTime);
 
   RTLX_ASSERT_RETURNS(
       MPI_Waitall(nreq, &reqs[0], MPI_STATUSES_IGNORE), MPI_SUCCESS);
 
-  trace.tock(COMMUNICATION);
+  trace.tock(kCommunicationTime);
 
   trace.tick(MERGE);
 
@@ -432,7 +432,7 @@ inline void all2allNaive(
 
   auto trace = rtlx::TimeTrace{me, "All2AllNaive"};
 
-  trace.tick(COMMUNICATION);
+  trace.tick(kCommunicationTime);
 
   for (mpi::rank_t i = 0; i < nr; ++i) {
     auto srcAddr = std::next(from.base(i), me * blocksize);
@@ -441,7 +441,7 @@ inline void all2allNaive(
     std::copy(srcAddr, std::next(srcAddr, blocksize), dstAddr);
   }
 
-  trace.tock(COMMUNICATION);
+  trace.tock(kCommunicationTime);
 
   trace.tick(MERGE);
 

@@ -127,7 +127,7 @@ inline void ring_waitsome(
     return;
   }
 
-  rtlx::TimeTrace t_prepare{trace, COMMUNICATION};
+  rtlx::TimeTrace t_prepare{trace, kCommunicationTime};
 
   constexpr auto winreqs = 2 * NReqs;
 
@@ -208,7 +208,7 @@ inline void ring_waitsome(
 
     auto const nels = std::distance(chunk.first, chunk.second);
     return mpi::irecv(
-        &*chunk.first, nels, peer, EXCH_TAG_RING, ctx, &reqs[reqIdx]);
+        &*chunk.first, nels, peer, kTagRing, ctx, &reqs[reqIdx]);
   };
 
   auto sschedule = [&ctx](auto phase) {
@@ -226,7 +226,7 @@ inline void ring_waitsome(
 
     auto const nels = std::distance(chunk.first, chunk.second);
     return mpi::isend(
-        &*chunk.first, nels, peer, EXCH_TAG_RING, ctx, &reqs[reqIdx]);
+        &*chunk.first, nels, peer, kTagRing, ctx, &reqs[reqIdx]);
   };
 
   std::size_t const total_reqs = 2 * totalExchanges;
@@ -249,7 +249,7 @@ inline void ring_waitsome(
   t_prepare.finish();
 
   do {
-    rtlx::TimeTrace t_comm{trace, COMMUNICATION};
+    rtlx::TimeTrace t_comm{trace, kCommunicationTime};
     ++n_comm_rounds;
 
     FMPI_DBG(n_comm_rounds);
@@ -362,7 +362,7 @@ inline void ring_waitsome(
 
       if (n >= static_cast<diff_type>(utilization_threshold)) {
         // trace communication
-        rtlx::TimeTrace t_comp{trace, COMPUTATION};
+        rtlx::TimeTrace t_comp{trace, kComputationTime};
 
         auto [last_piece, d_last] = detail::apply_compute(
             arrived_chunks.begin(),
@@ -385,10 +385,10 @@ inline void ring_waitsome(
     }
   } while (nc_reqs < total_reqs);
 
-  trace.put(N_COMM_ROUNDS, n_comm_rounds);
+  trace.put(kCommRounds, n_comm_rounds);
 
   {
-    rtlx::TimeTrace t_comp{trace, COMPUTATION};
+    rtlx::TimeTrace t_comp{trace, kComputationTime};
     auto const      nels = static_cast<std::size_t>(nr) * blocksize;
 
     using merge_buffer_t =

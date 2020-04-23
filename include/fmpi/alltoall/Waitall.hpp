@@ -114,7 +114,7 @@ inline void ring_waitall(
       auto* recvBuf = std::next(reqWin.rbuf(), nrreqs * blocksize);
 
       FMPI_CHECK_MPI(mpi::irecv(
-          recvBuf, blocksize, recvfrom, EXCH_TAG_RING, ctx, &reqs[nrreqs]));
+          recvBuf, blocksize, recvfrom, kTagRing, ctx, &reqs[nrreqs]));
 
       reqWin.pending_pieces().push_back(
           std::make_pair(recvBuf, std::next(recvBuf, blocksize)));
@@ -136,7 +136,7 @@ inline void ring_waitall(
           std::next(sbuffer, sendto * blocksize),
           blocksize,
           sendto,
-          EXCH_TAG_RING,
+          kTagRing,
           ctx,
           &reqs[winsize + nsreqs++]));
     }
@@ -145,7 +145,7 @@ inline void ring_waitall(
   };
 
   {
-    rtlx::TimeTrace give_me_a_name{trace, COMMUNICATION};
+    rtlx::TimeTrace give_me_a_name{trace, kCommunicationTime};
 
     std::tie(rphase, sphase) =
         moveReqWindow(std::make_pair(rphase, sphase), reqWin);
@@ -162,13 +162,13 @@ inline void ring_waitall(
     std::ignore = win;
 
     {
-      rtlx::TimeTrace give_me_a_name{trace, COMMUNICATION};
+      rtlx::TimeTrace give_me_a_name{trace, kCommunicationTime};
       std::tie(rphase, sphase) =
           moveReqWindow(std::make_pair(rphase, sphase), reqWin);
     }
 
     {
-      rtlx::TimeTrace give_me_a_name{trace, COMPUTATION};
+      rtlx::TimeTrace give_me_a_name{trace, kComputationTime};
       op(reqWin.ready_pieces(), mergebuf);
       auto const nMerged = reqWin.ready_pieces().size() * blocksize;
       mergebuf += nMerged;
@@ -177,14 +177,14 @@ inline void ring_waitall(
     }
 
     {
-      rtlx::TimeTrace give_me_a_name{trace, COMMUNICATION};
+      rtlx::TimeTrace give_me_a_name{trace, kCommunicationTime};
       FMPI_CHECK_MPI(mpi::waitall(&(*std::begin(reqs)), &(*std::end(reqs))));
       reqWin.buffer_swap();
     }
   }
 
   {
-    rtlx::TimeTrace give_me_a_name{trace, COMPUTATION};
+    rtlx::TimeTrace give_me_a_name{trace, kComputationTime};
 
     auto mergeSrc = &*out;
     auto target   = buffer.begin();
@@ -220,7 +220,7 @@ inline void ring_waitall(
     }
   }
 
-  trace.put(N_COMM_ROUNDS, static_cast<int>(nrounds));
+  trace.put(kCommRounds, static_cast<int>(nrounds));
 }
 namespace detail {
 

@@ -339,7 +339,7 @@ int main(int argc, char* argv[])
               std::make_tuple(
                   t,
                   trace.lookup(fmpi::MERGE),
-                  trace.lookup(fmpi::COMMUNICATION)));
+                  trace.lookup(fmpi::kCommunicationTime)));
           trace.clear();
         }
       }
@@ -372,7 +372,7 @@ int main(int argc, char* argv[])
               std::make_tuple(
                   t,
                   trace.lookup(fmpi::MERGE),
-                  trace.lookup(fmpi::COMMUNICATION)));
+                  trace.lookup(fmpi::kCommunicationTime)));
           trace.clear();
         }
       }

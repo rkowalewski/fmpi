@@ -32,7 +32,7 @@ inline void oneFactor_odd(
   auto steps = fmpi::range(0, nr);
 
   auto trace = TimeTrace{me, "OneFactor"};
-  trace.tick(COMMUNICATION);
+  trace.tick(kCommunicationTime);
 
   for (auto const r : steps) {
     auto partner = mod(r - me, nr);
@@ -60,7 +60,7 @@ inline void oneFactor_odd(
           MPI_SUCCESS);
     }
   }
-  trace.tock(COMMUNICATION);
+  trace.tock(kCommunicationTime);
 }
 
 template <class InputIt, class OutputIt, class Op, std::size_t NReqs = 1>
@@ -91,7 +91,7 @@ inline void oneFactor_even(
   };
 
   auto trace = TimeTrace{me, "OneFactor"};
-  trace.tick(COMMUNICATION);
+  trace.tick(kCommunicationTime);
 
   std::copy(
       begin + me * blocksize,
@@ -118,7 +118,7 @@ inline void oneFactor_even(
         MPI_SUCCESS);
   }
 
-  trace.tock(COMMUNICATION);
+  trace.tock(kCommunicationTime);
 }
 }  // namespace detail
 
