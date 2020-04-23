@@ -3,7 +3,7 @@
 
 #include <mpi.h>
 
-#include <fmpi/Config.hpp>
+#include <fmpi/Constants.hpp>
 #include <fmpi/Debug.hpp>
 #include <fmpi/NumericRange.hpp>
 

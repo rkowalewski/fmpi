@@ -21,7 +21,7 @@
 
 #include <tlx/math.hpp>
 
-#include <fmpi/Config.hpp>
+#include <fmpi/Constants.hpp>
 #include <fmpi/Debug.hpp>
 
 namespace fmpi {

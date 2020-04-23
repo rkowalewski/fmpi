@@ -1,7 +1,7 @@
 #ifndef FMPI_ALLTOALL_DETAIL_HPP
 #define FMPI_ALLTOALL_DETAIL_HPP
 
-#include <fmpi/Config.hpp>
+#include <fmpi/Constants.hpp>
 #include <fmpi/mpi/Algorithm.hpp>
 #include <fmpi/mpi/Environment.hpp>
 

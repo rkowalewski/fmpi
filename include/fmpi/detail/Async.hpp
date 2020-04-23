@@ -5,8 +5,8 @@
 
 #include <fmpi/Config.hpp>
 #include <fmpi/Debug.hpp>
+#include <fmpi/Function.hpp>
 #include <fmpi/common/Porting.hpp>
-#include <fmpi/detail/Capture.hpp>
 #include <fmpi/mpi/Environment.hpp>
 
 #include <rtlx/Timer.hpp>

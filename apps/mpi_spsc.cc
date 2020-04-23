@@ -15,7 +15,6 @@
 #include <fmpi/container/BoundedBuffer.hpp>
 #include <fmpi/container/buffered_channel.hpp>
 #include <fmpi/detail/Async.hpp>
-#include <fmpi/detail/Capture.hpp>
 #include <fmpi/mpi/Algorithm.hpp>
 #include <fmpi/mpi/Environment.hpp>
 #include <fmpi/mpi/Request.hpp>

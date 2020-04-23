@@ -3,21 +3,23 @@
 
 #include <mpi.h>
 
-#include <cmath>
-#include <fmpi/Config.hpp>
+#include <numeric>
+
+#include <fmpi/Constants.hpp>
 #include <fmpi/Math.hpp>
-#include <fmpi/NumericRange.hpp>
+
+#include <fmpi/alltoall/Detail.hpp>
+
 #include <fmpi/mpi/Algorithm.hpp>
 #include <fmpi/mpi/Environment.hpp>
 #include <fmpi/mpi/Request.hpp>
-#include <memory>
-#include <numeric>
-#include <rtlx/Assert.hpp>
-#include <rtlx/Trace.hpp>
+
+#include <fmpi/NumericRange.hpp>
+
 #include <tlx/math/integer_log2.hpp>
 #include <tlx/simple_vector.hpp>
 
-#include <fmpi/alltoall/Detail.hpp>
+#include <rtlx/Trace.hpp>
 
 namespace fmpi {
 
@@ -58,6 +60,7 @@ static constexpr const char UNPACK[] = "Tunpack";
 template <class T>
 using buffer_t = tlx::SimpleVector<T, tlx::SimpleVectorMode::Normal>;
 
+class Dispatcher {};
 
 }  // namespace detail
 
@@ -421,7 +424,6 @@ inline void bruck_interleave(
         begin, out, blocksize, ctx, std::forward<Op&&>(op), trace);
     return;
   }
-
 
   // Phase 1: Process i rotates local elements by i blocks to the left in a
   // cyclic manner.

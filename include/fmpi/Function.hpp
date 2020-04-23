@@ -1,5 +1,5 @@
-#ifndef FMPI_DETAIL_CAPTURE_HPP
-#define FMPI_DETAIL_CAPTURE_HPP
+#ifndef FMPI_FUNCTION_HPP
+#define FMPI_FUNCTION_HPP
 
 #include <tuple>
 

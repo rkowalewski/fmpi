@@ -102,7 +102,7 @@ constexpr bool operator<(Rank const& lhs, Rank const& rhs) noexcept {
 }
 
 constexpr bool operator>(Rank const& lhs, Rank const& rhs) noexcept {
-  return !(lhs < rhs) && !(lhs == rhs);
+  return lhs.mpiRank() > rhs.mpiRank();
 }
 
 constexpr Rank operator+(Rank const& lhs, Rank const& rhs) noexcept {
