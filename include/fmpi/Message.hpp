@@ -1,6 +1,7 @@
 #ifndef FMPI_MESSAGE_HPP
 #define FMPI_MESSAGE_HPP
 
+#include <cstddef>
 #include <gsl/span>
 
 #include <fmpi/mpi/Rank.hpp>
@@ -8,30 +9,31 @@
 
 namespace fmpi {
 
-namespace detail {
-
-class MessageBase {
-  constexpr MessageBase() = default;
-
-  constexpr MessageBase(const MessageBase&) = default;
-  constexpr MessageBase& operator=(MessageBase const&) = default;
-
-  constexpr MessageBase(MessageBase&&) noexcept = default;
-  constexpr MessageBase& operator=(MessageBase&&) noexcept = default;
-};
-}  // namespace detail
-
 struct Envelope {
-  mpi::Comm comm{MPI_COMM_NULL};
-  mpi::Rank peer{};
-  mpi::Tag  tag{};
+ private:
+  mpi::Comm comm_{MPI_COMM_NULL};
+  mpi::Rank peer_{};
+  mpi::Tag  tag_{};
 
+ public:
   constexpr Envelope() = default;
 
-  constexpr Envelope(mpi::Rank peer_, mpi::Tag tag_, mpi::Comm comm_) noexcept
-    : comm(comm_)
-    , peer(peer_)
-    , tag(tag_) {
+  constexpr Envelope(mpi::Rank peer, mpi::Tag tag, mpi::Comm comm) noexcept
+    : comm_(comm)
+    , peer_(peer)
+    , tag_(tag) {
+  }
+
+  [[nodiscard]] constexpr mpi::Rank peer() const noexcept {
+    return peer_;
+  }
+
+  [[nodiscard]] constexpr mpi::Comm comm() const noexcept {
+    return comm_;
+  }
+
+  [[nodiscard]] constexpr mpi::Tag tag() const noexcept {
+    return tag_;
   }
 };
 
@@ -53,7 +55,9 @@ class Message {
     : buf_(span.data())
     , count_(span.size())
     , type_(mpi::type_mapper<T>::type())
-    , envelope_(peer, tag, comm) {
+    , envelope_(peer, tag, comm)
+
+  {
     set_buffer(span);
   }
 
@@ -91,22 +95,22 @@ class Message {
   }
 
   [[nodiscard]] constexpr mpi::Rank peer() const noexcept {
-    return envelope_.peer;
+    return envelope_.peer();
   }
 
   [[nodiscard]] constexpr mpi::Comm comm() const noexcept {
-    return envelope_.comm;
+    return envelope_.comm();
   }
 
   [[nodiscard]] constexpr mpi::Tag tag() const noexcept {
-    return envelope_.tag;
+    return envelope_.tag();
   }
 
  private:
-  Envelope     envelope_{};
-  MPI_Datatype type_{};
-  std::size_t  count_{};
   void*        buf_{};
+  std::size_t  count_{};
+  MPI_Datatype type_{};
+  Envelope     envelope_{};
 };
 
 static_assert(sizeof(Envelope) == 12);
@@ -114,7 +118,110 @@ static_assert(sizeof(MPI_Datatype) == 4);
 static_assert(alignof(Message) == 8);
 static_assert(sizeof(Message) == 32);
 
-class Isend {};
+struct Isend {
+  constexpr Isend() = default;
+
+  template <class T>
+  constexpr Isend(
+      gsl::span<T>     span,
+      mpi::Rank        source,
+      mpi::Tag         tag,
+      mpi::Comm const& comm) noexcept
+    : data_(span.data())
+    , count_(span.size() * mpi::type_mapper<std::remove_const_t<T>>::factor())
+    , mpi_type(mpi::type_mapper<std::remove_const_t<T>>::type())
+    , envelope_(source, tag, comm) {
+  }
+
+  [[nodiscard]] constexpr void const* data() const noexcept {
+    return data_;
+  }
+
+  [[nodiscard]] constexpr MPI_Datatype type() const noexcept {
+    return mpi_type;
+  }
+
+  [[nodiscard]] constexpr std::size_t count() const noexcept {
+    return count_;
+  }
+
+  [[nodiscard]] constexpr mpi::Rank peer() const noexcept {
+    return envelope_.peer();
+  }
+
+  [[nodiscard]] constexpr mpi::Comm comm() const noexcept {
+    return envelope_.comm();
+  }
+
+  [[nodiscard]] constexpr mpi::Tag tag() const noexcept {
+    return envelope_.tag();
+  }
+
+ private:
+  void const*  data_{};
+  std::size_t  count_{};
+  MPI_Datatype mpi_type{MPI_BYTE};
+  Envelope     envelope_{};
+};
+
+struct Irecv {
+  constexpr Irecv() = default;
+
+  template <class T>
+  constexpr Irecv(
+      gsl::span<T>     span,
+      mpi::Rank        source,
+      mpi::Tag         tag,
+      mpi::Comm const& comm) noexcept
+    : data_(span.data())
+    , count_(span.size() * mpi::type_mapper<T>::factor())
+    , mpi_type_(mpi::type_mapper<T>::type())
+    , envelope_(source, tag, comm) {
+  }
+
+  constexpr Irecv(
+      mpi::Rank source, mpi::Tag tag, mpi::Comm const& comm) noexcept
+    : envelope_(source, tag, comm) {
+  }
+
+  [[nodiscard]] constexpr void const* data() const noexcept {
+    return data_;
+  }
+
+  [[nodiscard]] constexpr MPI_Datatype type() const noexcept {
+    return mpi_type_;
+  }
+
+  [[nodiscard]] constexpr std::size_t count() const noexcept {
+    return count_;
+  }
+
+  [[nodiscard]] constexpr mpi::Rank peer() const noexcept {
+    return envelope_.peer();
+  }
+
+  [[nodiscard]] constexpr mpi::Comm comm() const noexcept {
+    return envelope_.comm();
+  }
+
+  [[nodiscard]] constexpr mpi::Tag tag() const noexcept {
+    return envelope_.tag();
+  }
+
+  template <class T>
+  constexpr void set_buffer(gsl::span<T> buf) {
+    data_     = buf.data();
+    count_    = buf.size() * mpi::type_mapper<T>::factor;
+    mpi_type_ = mpi::type_mapper<T>::type();
+  }
+
+ private:
+  void*        data_{};
+  std::size_t  count_{};
+  MPI_Datatype mpi_type_{MPI_BYTE};
+  Envelope     envelope_{};
+};
+
 }  // namespace fmpi
 
 #endif
