@@ -261,6 +261,12 @@ auto algorithm_list(std::string const& pattern, mpi::Context const& ctx)
                          RandomAccessIterator2,
                          Callback>),
                  std::make_pair(
+                     "Bruck_interleave_dispatch",
+                     fmpi::bruck_interleave_dispatch<
+                         RandomAccessIterator1,
+                         RandomAccessIterator2,
+                         Callback>),
+                 std::make_pair(
                      "Bruck_Mod",
                      fmpi::bruck_mod<
                          RandomAccessIterator1,
