@@ -502,9 +502,6 @@ inline void bruck_interleave(
       }
     }
 
-    FMPI_DBG("send_buffer");
-    FMPI_DBG_RANGE(sendbuf, sendbuf + blocksize * blocks.size());
-
     rtlx::TimeTrace tt{trace, kCommunicationTime};
 
     auto recv = Message(
@@ -533,17 +530,12 @@ inline void bruck_interleave(
       op(chunks, std::next(buffer.begin(), op_first));
       merged.push_back(merged.back() + chunks.size() * blocksize);
       chunks.clear();
-      FMPI_DBG("merge_buffer");
-      FMPI_DBG_RANGE(buffer.begin(), buffer.end());
     }
 
     {
       rtlx::TimeTrace tt{trace, kCommunicationTime};
       auto const      success = future.get();
       FMPI_CHECK_MPI(success);
-
-      FMPI_DBG("recv_buffer");
-      FMPI_DBG_RANGE(recvbuf, recvbuf + blocksize * blocks.size());
 
       {
         auto rng     = range<std::size_t>(r);
@@ -581,9 +573,6 @@ inline void bruck_interleave(
               recvbuf + block * blocksize + blocksize,
               out + blocks[block] * blocksize);
         }
-
-        FMPI_DBG("out_buffer");
-        FMPI_DBG_RANGE(out, out + nels);
 
         blocks.clear();
       }

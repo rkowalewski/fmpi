@@ -150,7 +150,7 @@ class SPSCNChannel {
     auto const ret    = status == channel_op_status::success;
 
     if ((nproduced_ += ret) == high_watermark_) {
-      channel_.close();
+      //channel_.close();
     }
 
     return ret;
