@@ -2,33 +2,31 @@
 
 suppressMessages(library(tidyverse))
 suppressMessages(library(DescTools))
+suppressMessages(library(argparser))
 
-# Convert str input to boolean
-str2bool = function(input_str)
-{
-  if(input_str == "0")
-  {
-    input_str = FALSE
-  }
-  else if(input_str == "1")
-  {
-    input_str = TRUE
-  }
-  return(input_str)
+thisFile <- function() {
+        cmdArgs <- commandArgs(trailingOnly = FALSE)
+        needle <- "--file="
+        match <- grep(needle, cmdArgs)
+        if (length(match) > 0) {
+                # Rscript
+                return(normalizePath(sub(needle, "", cmdArgs[match])))
+        } else {
+                # 'source'd via R console
+                return(normalizePath(sys.frames()[[1]]$ofile))
+        }
 }
 
-args = commandArgs(trailingOnly=TRUE)
+# load util functions
+source(paste0(dirname(thisFile()), "/internal/", "utils.R"))
 
-if (length(args) < 2) {
-    stop("Usage: ./plots.R <csv_input> <csv_output>", call.=FALSE)
-}
+params <- arg_parser("calculating statistics from benchmark output")
+params <- add_argument(params, "--input", help = "input file", default = "-")
+params <- add_argument(params, "--output", help = "output file", default = "-")
 
-csv_in <- args[1]
-csv_out <- args[2]
+argv <- parse_args(params)
 
-print(paste0("--reading file: ", csv_in))
-
-df.in <- read_csv(csv_in, col_names=TRUE, col_types="iiii?iciicd")
+df.in <- util.read_csv(argv$input, col_names=TRUE, col_types="iiii?iciicd")
 
 ci <- function(n, sd_x, prob = .95) {
   z_t <- qt(1 - (1 - prob) / 2, df = n - 1)
@@ -78,11 +76,9 @@ df.stats <- df.in %>%
                      med_upperCI=~medianCI(., ci_prob)[3]
                   )
                 ) %>%
+    arrange(median, .by_group = TRUE) %>%
     ungroup() %>%
     mutate(avg_ci = ci(n, sd, ci_prob),
            PPN = Procs / Nodes)
 
-print(paste0("--writing file: ", csv_out))
-
-write_csv(df.stats, csv_out, na = "NA", append = FALSE, col_names = TRUE,
-            quote_escape = "double")
+util.write_csv(df.stats, argv$output)

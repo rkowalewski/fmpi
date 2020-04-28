@@ -75,4 +75,4 @@ grep -h '^\(Nodes\|[0-9]\+,\)' "${files[@]}" |
 
 echo "-- summarizing statistics in $OUTFILE"
 
-Rscript "$SCRIPTPATH/R/stats.R" "$TMPF" "$OUTFILE"
+Rscript "$SCRIPTPATH/R/stats.R" --input "$TMPF" --output "$OUTFILE"
