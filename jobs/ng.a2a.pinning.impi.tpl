@@ -42,5 +42,6 @@ export I_MPI_DEBUG="4"
 
 mpiexec -n $((<<NUM_PROCS>> * <<NUM_NODES>>)) \
     -env I_MPI_PIN_DOMAIN $((96 / <<NUM_PROCS>>)) \
+    -env I_MPI_PIN_ORDER spread \
     ./build.release/apps/mpiPinning
 

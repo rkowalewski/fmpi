@@ -37,8 +37,10 @@ export OMP_NUM_THREADS="$((FMPI_DOMAIN_SIZE - 1))"
 export OMP_PROC_BIND="true"
 export OMP_PLACES="$(./scripts/genPlaces.sh <<NUM_PROCS>>)"
 
+
 mpiexec \
-    -env I_MPI_PIN_DOMAIN $((FMPI_DOMAIN_SIZE * 2)) \
+    -env I_MPI_PIN_DOMAIN $((96 / <<NUM_PROCS>>)) \
+    -env I_MPI_PIN_ORDER compact \
     -n $SLURM_NTASKS  \
     build.release/benchmark/twoSidedAlgorithms \
     $SLURM_JOB_NUM_NODES <<ARGS>>
