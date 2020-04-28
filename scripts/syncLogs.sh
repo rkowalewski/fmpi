@@ -1,3 +1,7 @@
 #!/bin/sh
 
-rsync -avzP --cvs-exclude --delete --exclude="**~" "skx.supermuc:~/logs/ng.a2a.impi.rma" /media/kowalewski/benchmarks/logs/
+
+root="$(git rev-parse --show-toplevel)"
+remote="skx.supermuc:~/workspaces/alltoall/logs/"
+
+rsync -avzP --cvs-exclude --delete --exclude="**~" "$remote" "$root/logs/"
