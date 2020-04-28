@@ -5,6 +5,7 @@ suppressMessages(library(tidyverse))
 #suppressMessages(library(gridExtra))
 #suppressMessages(library(grid))
 suppressMessages(library(argparser))
+suppressMessages(library(ggsci))
 
 thisFile <- function() {
         cmdArgs <- commandArgs(trailingOnly = FALSE)
@@ -51,6 +52,7 @@ if (!("Ttotal_speedup" %in% colnames(data))) {
     stop("something went wrong. We cannot calculate the speedup in this dataset.")
 }
 
+# cat(format_csv(data))
 
 mylimit <- function(x) {
     limits <- c(min(x) - .2, max(x) + .2)
@@ -69,15 +71,23 @@ my_labeller <- label_bquote(
   cols = .(PPN) / .(Threads) / .(Blocksize)
 )
 
+cat(format_csv(data))
 x_variable <- "Blocksize"
+
+theme <- theme_bw()
+# change xaxis text
+theme$axis.text.x <- element_text(angle = 45)
+
 # The errorbars overlapped, so use position_dodge to move them horizontally
 pd <- position_dodge(0.1) # move them .05 to the left and right
 p <- ggplot(data, aes_string(x=paste0("factor(", x_variable, ")"), y="Ttotal_speedup", group="Algo"))
-p <- p + geom_line(position=pd, aes(linetype=Algo)) +
-    geom_point(position=pd, size=2,aes(shape=Algo)) +
-    theme_bw() +
+p <- p + geom_line(position=pd, aes(linetype=Algo, colour=Algo)) +
+    geom_point(position=pd, size=2,aes(shape=Algo, colour=Algo)) +
+    theme +
     # To use for line and point colors, add
-    #scale_colour_brewer(type="qal", palette="Paired") +
+    # scale_colour_grey() +
+    # scale_colour_brewer() +
+    scale_color_npg() +
     scale_y_continuous(breaks=seq(0,5,by=.2),limits=mylimit) +
     xlab(x_variable) +
     ylab("Speedup")+
@@ -88,4 +98,6 @@ if (argv$title != '') {
     p <- p + ggtitle(argv$title)
 }
 
+print(p)
+dev.off()
 
