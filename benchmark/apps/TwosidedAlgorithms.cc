@@ -275,4 +275,3 @@ void write_csv_line(
   myos << entry.second << "\n";
   os << myos.str();
 }
-

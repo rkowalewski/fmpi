@@ -118,11 +118,11 @@ static_assert(sizeof(MPI_Datatype) == 4);
 static_assert(alignof(Message) == 8);
 static_assert(sizeof(Message) == 32);
 
-struct Isend {
-  constexpr Isend() = default;
+struct SendMessage {
+  constexpr SendMessage() = default;
 
   template <class T>
-  constexpr Isend(
+  constexpr SendMessage(
       gsl::span<T>     span,
       mpi::Rank        source,
       mpi::Tag         tag,
@@ -131,6 +131,7 @@ struct Isend {
     , count_(span.size() * mpi::type_mapper<std::remove_const_t<T>>::factor())
     , mpi_type(mpi::type_mapper<std::remove_const_t<T>>::type())
     , envelope_(source, tag, comm) {
+    static_assert(std::is_const_v<T>, "send buffer must be const");
   }
 
   [[nodiscard]] constexpr void const* data() const noexcept {
@@ -164,22 +165,20 @@ struct Isend {
   Envelope     envelope_{};
 };
 
-struct Irecv {
-  constexpr Irecv() = default;
+struct RecvMessage {
+  constexpr RecvMessage() = default;
 
   template <class T>
-  constexpr Irecv(
+  constexpr RecvMessage(
       gsl::span<T>     span,
       mpi::Rank        source,
       mpi::Tag         tag,
       mpi::Comm const& comm) noexcept
-    : data_(span.data())
-    , count_(span.size() * mpi::type_mapper<T>::factor())
-    , mpi_type_(mpi::type_mapper<T>::type())
-    , envelope_(source, tag, comm) {
+    : envelope_(source, tag, comm) {
+    set_buffer(span);
   }
 
-  constexpr Irecv(
+  constexpr RecvMessage(
       mpi::Rank source, mpi::Tag tag, mpi::Comm const& comm) noexcept
     : envelope_(source, tag, comm) {
   }
@@ -209,9 +208,10 @@ struct Irecv {
   }
 
   template <class T>
-  constexpr void set_buffer(gsl::span<T> buf) {
+  constexpr void set_buffer(gsl::span<T> buf) noexcept {
+    static_assert(!std::is_const_v<T>, "recv buffer must not be const");
     data_     = buf.data();
-    count_    = buf.size() * mpi::type_mapper<T>::factor;
+    count_    = buf.size() * mpi::type_mapper<T>::factor();
     mpi_type_ = mpi::type_mapper<T>::type();
   }
 
@@ -220,6 +220,10 @@ struct Irecv {
   std::size_t  count_{};
   MPI_Datatype mpi_type_{MPI_BYTE};
   Envelope     envelope_{};
+};
+
+class DefaultMessgeHandler {
+
 };
 
 }  // namespace fmpi

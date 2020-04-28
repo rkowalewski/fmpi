@@ -20,8 +20,7 @@ struct type_mapper {
       "We cannot map a reference type to a MPI type");
 
   static_assert(
-      !std::is_const<T>::value,
-      "We cannot map a const type to a MPI type");
+      !std::is_const<T>::value, "We cannot map a const type to a MPI type");
 
   static_assert(
       !std::is_arithmetic<T>::value,
@@ -62,12 +61,18 @@ FMPI_MPI_DATATYPE_MAPPER(double, MPI_DOUBLE)
 FMPI_MPI_DATATYPE_MAPPER(long double, MPI_LONG_DOUBLE)
 FMPI_MPI_DATATYPE_MAPPER(bool, MPI_C_BOOL)
 
+#undef FMPI_MPI_DATATYPE_MAPPER
+
 }  // namespace detail
 
 template <class T>
 struct type_mapper {
   static constexpr auto type() -> MPI_Datatype {
     return detail::type_mapper<T>::type();
+  }
+
+  static constexpr auto factor() -> MPI_Datatype {
+    return detail::type_mapper<T>::factor();
   }
 };
 

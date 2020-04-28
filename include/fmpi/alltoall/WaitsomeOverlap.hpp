@@ -355,7 +355,7 @@ inline void ring_waitsome_overlap(
   trace.trace().add_time("Tcomm.total", dispatcher_stats.total_time);
 
   trace.trace().put(
-      "Tcomm.iterations", static_cast<int>(dispatcher_stats.iterations));
+      "comm.iterations", static_cast<int>(dispatcher_stats.iterations));
 }
 }  // namespace fmpi
 #endif

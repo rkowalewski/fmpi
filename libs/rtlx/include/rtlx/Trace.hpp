@@ -99,7 +99,7 @@ class TimeTrace {
   TimeTrace(Trace& trace, std::string_view key)
     : duration_(0)
     , timer_(duration_)
-    , trace_(trace)
+    , cache_(trace)
     , key_(std::string{key}) {
   }
 
@@ -112,15 +112,15 @@ class TimeTrace {
     finish();
   }
 
-  void finish() {
+  void finish() noexcept {
     timer_.finish();
-    trace_.add_time(key_, duration_);
+    cache_.add_time(key_, duration_);
   }
 
  private:
   typename Clock::duration duration_{};
   timer                    timer_;
-  Trace&                   trace_;
+  Trace&                   cache_;
   std::string              key_;
 };
 

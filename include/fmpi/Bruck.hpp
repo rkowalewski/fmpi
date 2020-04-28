@@ -51,9 +51,10 @@ constexpr
   return d_first + n;
 }
 
-constexpr auto Trotate = std::string_view("Trotate");
-constexpr auto Tpack   = std::string_view("Tpack");
-constexpr auto Tunpack = std::string_view("Tunpack");
+constexpr auto Trotate   = std::string_view("Tcomm.rotate");
+constexpr auto Tpack     = std::string_view("Tcomm.pack");
+constexpr auto Tunpack   = std::string_view("Tcomm.unpack");
+constexpr auto Tdispatch = std::string_view("Tcomm.dispatch");
 
 template <class T>
 using buffer_t = tlx::SimpleVector<T, tlx::SimpleVectorMode::Normal>;
@@ -425,7 +426,7 @@ inline void bruck_interleave(
   // cyclic manner.
 
   {
-    rtlx::TimeTrace tt{trace, detail::Trotate};
+    rtlx::TimeTrace{trace, detail::Trotate};
 
     // O(p * blocksize)
     std::rotate_copy(
@@ -479,7 +480,7 @@ inline void bruck_interleave(
 
     // a) pack blocks into a contigous send buffer
     {
-      rtlx::TimeTrace tt{trace, detail::Tpack};
+      rtlx::TimeTrace{trace, detail::Tpack};
 
       auto rng = range<std::size_t>(one, nr);
 
@@ -504,7 +505,7 @@ inline void bruck_interleave(
     }
 
     {
-      rtlx::TimeTrace tt{trace, kCommunicationTime};
+      rtlx::TimeTrace{trace, kCommunicationTime};
 
       FMPI_CHECK_MPI(mpi::irecv(
           recvbuf,
@@ -525,7 +526,7 @@ inline void bruck_interleave(
 
     if (r > 0) {
       {
-        rtlx::TimeTrace tt{trace, kComputationTime};
+        rtlx::TimeTrace{trace, kComputationTime};
         // merge chunks of last iteration...
         // auto const op_first = (r == 1) ? 0 : (one << (r - 1)) * blocksize;
         auto const op_first = merged.back();
@@ -538,7 +539,7 @@ inline void bruck_interleave(
     }
 
     {
-      rtlx::TimeTrace tt{trace, kCommunicationTime};
+      rtlx::TimeTrace{trace, kCommunicationTime};
       FMPI_CHECK_MPI(mpi::waitall(reqs.begin(), reqs.end()));
 
       {
@@ -565,7 +566,7 @@ inline void bruck_interleave(
     {
       // c) unpack blocks which will be forwarded to other processors
       {
-        rtlx::TimeTrace tt{trace, detail::Tunpack};
+        rtlx::TimeTrace{trace, detail::Tunpack};
 
 #pragma omp parallel for
         for (std::size_t block = one << r;
@@ -585,12 +586,11 @@ inline void bruck_interleave(
     std::swap(recvbuf, mergebuf);
   }
 
-  {
-    rtlx::TimeTrace tt{trace, kComputationTime};
+  rtlx::TimeTrace tt{trace, kComputationTime};
 
-    auto const nchunks = niter;
+  auto const nchunks = niter;
 
-    if (nchunks > 1) {
+  if (nchunks > 1) {
 #if 0
     auto mid = buffer.begin() + 2 * blocksize;
 
@@ -603,16 +603,16 @@ inline void bruck_interleave(
       chunks.emplace_back(std::make_pair(mid, last));
     }
 #endif
-      FMPI_DBG(merged);
-      std::transform(
-          std::begin(merged),
-          std::prev(std::end(merged)),
-          std::next(std::begin(merged)),
-          std::back_inserter(chunks),
-          [rbuf = buffer.begin()](auto first, auto next) {
-            return std::make_pair(
-                std::next(rbuf, first), std::next(rbuf, next));
-          });
+    FMPI_DBG(merged);
+    std::transform(
+        std::begin(merged),
+        std::prev(std::end(merged)),
+        std::next(std::begin(merged)),
+        std::back_inserter(chunks),
+        [rbuf = buffer.begin()](auto first, auto next) {
+          return std::make_pair(
+              std::next(rbuf, first), std::next(rbuf, next));
+        });
 
 #if 0
     auto last_chunk = std::max(2, std::int32_t(nchunks) - 1);
@@ -627,8 +627,7 @@ inline void bruck_interleave(
     }
 #endif
 
-      op(chunks, out);
-    }
+    op(chunks, out);
   }
 }
 
@@ -738,7 +737,7 @@ inline void bruck_interleave_dispatch(
       }
     }
 
-    rtlx::TimeTrace tt{trace, kCommunicationTime};
+    rtlx::TimeTrace tdispatch{trace, detail::Tdispatch};
 
     auto recv = Message(
         gsl::span<value_t>(recvbuf, blocksize * blocks.size()),
@@ -754,10 +753,10 @@ inline void bruck_interleave_dispatch(
 
     auto future = dispatcher.dispatch(std::make_pair(send, recv));
 
-    tt.finish();
+    tdispatch.finish();
 
     if (r > 0) {
-      rtlx::TimeTrace tt{trace, kComputationTime};
+      rtlx::TimeTrace{trace, kComputationTime};
       // merge chunks of last iteration...
       // auto const op_first = (r == 1) ? 0 : (one << (r - 1)) * blocksize;
       auto const op_first = merged.back();
@@ -769,8 +768,8 @@ inline void bruck_interleave_dispatch(
     }
 
     {
-      rtlx::TimeTrace tt{trace, kCommunicationTime};
-      auto const      success = future.get();
+      rtlx::TimeTrace{trace, kCommunicationTime};
+      auto const success = future.get();
       FMPI_CHECK_MPI(success);
 
       {
@@ -797,7 +796,7 @@ inline void bruck_interleave_dispatch(
     {
       // c) unpack blocks which will be forwarded to other processors
       {
-        rtlx::TimeTrace tt{trace, detail::Tunpack};
+        rtlx::TimeTrace{trace, detail::Tunpack};
 
 #pragma omp parallel for
         for (std::size_t block = one << r;
@@ -817,12 +816,11 @@ inline void bruck_interleave_dispatch(
     std::swap(recvbuf, mergebuf);
   }
 
-  {
-    rtlx::TimeTrace tt{trace, kComputationTime};
+  rtlx::TimeTrace tt{trace, kComputationTime};
 
-    auto const nchunks = niter;
+  auto const nchunks = niter;
 
-    if (nchunks > 1) {
+  if (nchunks > 1) {
 #if 0
     auto mid = buffer.begin() + 2 * blocksize;
 
@@ -835,16 +833,16 @@ inline void bruck_interleave_dispatch(
       chunks.emplace_back(std::make_pair(mid, last));
     }
 #endif
-      FMPI_DBG(merged);
-      std::transform(
-          std::begin(merged),
-          std::prev(std::end(merged)),
-          std::next(std::begin(merged)),
-          std::back_inserter(chunks),
-          [rbuf = buffer.begin()](auto first, auto next) {
-            return std::make_pair(
-                std::next(rbuf, first), std::next(rbuf, next));
-          });
+    FMPI_DBG(merged);
+    std::transform(
+        std::begin(merged),
+        std::prev(std::end(merged)),
+        std::next(std::begin(merged)),
+        std::back_inserter(chunks),
+        [rbuf = buffer.begin()](auto first, auto next) {
+          return std::make_pair(
+              std::next(rbuf, first), std::next(rbuf, next));
+        });
 
 #if 0
     auto last_chunk = std::max(2, std::int32_t(nchunks) - 1);
@@ -859,8 +857,7 @@ inline void bruck_interleave_dispatch(
     }
 #endif
 
-      op(chunks, out);
-    }
+    op(chunks, out);
   }
 }
 
