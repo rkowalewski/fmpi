@@ -9,7 +9,8 @@
 #include <fmpi/Message.hpp>
 #include <fmpi/NumericRange.hpp>
 #include <fmpi/alltoall/Detail.hpp>
-#include <fmpi/common/SimpleDispatcher.hpp>
+#include <fmpi/concurrency/SimpleDispatcher.hpp>
+
 #include <fmpi/mpi/Algorithm.hpp>
 #include <fmpi/mpi/Environment.hpp>
 #include <fmpi/mpi/Request.hpp>

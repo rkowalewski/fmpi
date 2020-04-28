@@ -20,8 +20,8 @@
 
 #include <fmpi/AlltoAll.hpp>
 #include <fmpi/Bruck.hpp>
-#include <fmpi/OpenMP.hpp>
 #include <fmpi/Random.hpp>
+#include <fmpi/concurrency/OpenMP.hpp>
 
 #include <rtlx/ScopedLambda.hpp>
 #include <rtlx/UnorderedMap.hpp>

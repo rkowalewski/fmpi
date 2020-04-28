@@ -7,7 +7,6 @@
 #include <fmpi/alltoall/Detail.hpp>
 #include <fmpi/container/StackContainer.hpp>
 #include <fmpi/container/buffered_channel.hpp>
-#include <fmpi/detail/Async.hpp>
 #include <rtlx/Trace.hpp>
 #include <tlx/container/ring_buffer.hpp>
 #include <utility>

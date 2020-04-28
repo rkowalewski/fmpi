@@ -57,7 +57,7 @@ using max_align_v_ = max_align_t_<
 constexpr std::size_t max_align_v = detail::max_align_v_::value;
 struct alignas(max_align_v) max_align_t {};
 
-int  get_num_threads();
+int  get_num_user_threads();
 bool pinThreadToCore(std::thread& thread, int core_id);
 
 }  // namespace fmpi

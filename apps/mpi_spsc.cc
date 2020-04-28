@@ -12,9 +12,8 @@
 #include <fmpi/NumericRange.hpp>
 #include <fmpi/allocator/ContiguousPoolAllocator.hpp>
 #include <fmpi/allocator/HeapAllocator.hpp>
-#include <fmpi/container/BoundedBuffer.hpp>
+#include <fmpi/concurrency/Async.hpp>
 #include <fmpi/container/buffered_channel.hpp>
-#include <fmpi/detail/Async.hpp>
 #include <fmpi/mpi/Algorithm.hpp>
 #include <fmpi/mpi/Environment.hpp>
 #include <fmpi/mpi/Request.hpp>

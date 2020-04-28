@@ -1,11 +1,11 @@
-#include <fmpi/OpenMP.hpp>
+#include <fmpi/concurrency/OpenMP.hpp>
 #include <fmpi/common/Porting.hpp>
 
 #include <thread>
 
 namespace fmpi {
 
-int get_num_threads() {
+int get_num_user_threads() {
 #ifdef _OPENMP
   return omp_get_max_threads();
 #else

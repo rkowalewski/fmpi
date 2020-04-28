@@ -40,11 +40,7 @@ fmpi::Config::Config() {
     }
   }
 
-  num_threads = get_num_threads();
-
-  if (num_threads < 4) {
-    throw std::runtime_error("4 Threads at least required");
-  }
+  num_threads = get_num_user_threads();
 
   auto const ncpus = folly::CacheLocality::system().numCpus / 2;
 
