@@ -135,7 +135,7 @@ inline void ring_waitsome_overlap(
   using channel_t = SPSCNChannel<chunk>;
 #endif
 
-  using dispatcher_t = CommDispatcher<mpi::testsome>;
+  using dispatcher_t = CommDispatcher<mpi::waitsome>;
 
   auto comm_channel =
       std::make_shared<typename dispatcher_t::channel>(n_messages);
