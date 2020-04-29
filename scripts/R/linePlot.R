@@ -27,6 +27,7 @@ params <- arg_parser("visualizing speedup in a lineplot")
 params <- add_argument(params, "--input", help = "input file", default = "-")
 params <- add_argument(params, "--output", help = "output file", default = "output.pdf")
 params <- add_argument(params, "--title", help = "PDF Title", default = "")
+params <- add_argument(params, "--caption", help = "PDF Caption", default = "")
 params <- add_argument(params, "--paper", help = "paper format (see R pdf manual)", default = "special")
 
 argv <- parse_args(params)
@@ -40,7 +41,6 @@ if (argv$input == "-") {
     data.in <- read.csv(file=argv$input, header=TRUE, sep=",")
 }
 
-
 data <- data.in %>%
     filter(Measurement == "Ttotal") %>%
     group_by(Nodes,Procs,Threads, Blocksize) %>%
@@ -52,8 +52,6 @@ if (!("Ttotal_speedup" %in% colnames(data))) {
     stop("something went wrong. We cannot calculate the speedup in this dataset.")
 }
 
-# cat(format_csv(data))
-
 mylimit <- function(x) {
     limits <- c(min(x) - .2, max(x) + .2)
     limits
@@ -62,7 +60,7 @@ mylimit <- function(x) {
 title <- argv$title
 
 if (title == '') {
-    title <- remove_extension(argv$output)
+    title <- remove_extension(basename(argv$output))
 }
 
 pdf(argv$output, title=title, paper=argv$paper)
@@ -71,7 +69,6 @@ my_labeller <- label_bquote(
   cols = .(PPN) / .(Threads) / .(Blocksize)
 )
 
-cat(format_csv(data))
 x_variable <- "Blocksize"
 
 theme <- theme_bw()
@@ -93,9 +90,8 @@ p <- p + geom_line(position=pd, aes(linetype=Algo, colour=Algo)) +
     ylab("Speedup")+
     geom_hline(yintercept = 1)
 
-if (argv$title != '') {
-    #p <- p + (caption=argv$title)
-    p <- p + ggtitle(argv$title)
+if (argv$caption != '') {
+    p <- p + ggtitle(argv$caption)
 }
 
 print(p)
