@@ -1,6 +1,6 @@
 #!/bin/bash
 
-csv_filter() {
+_csv_filter() {
   local _pat="$(echo $@ | sed 's#\\$#\$#g')"
   awk -F',' "(NR == 1 || ${_pat}) {print}"
 }
@@ -25,8 +25,6 @@ procs="$(awk -F',' '{if (NR == 2) {print $2}}' $input)"
 threads="$(awk -F',' '{if (NR == 2) {print $3}}' $input)"
 ppn="$(awk -F',' '{if (NR == 2) {print $NF}}' $input)"
 
-echo "$procs $threads $ppn"
-
 git_root="$(git rev-parse --show-toplevel)"
 
 _dirname="$(dirname $input)"
@@ -39,10 +37,12 @@ for algo in ${patterns[@]}; do
   for nn in ${nodes[@]}; do
     _desc="$(echo $algo | sed 's/\[.*\]//')"
     _plot="$_target/${_filename%.csv}.${_desc}.n${nn}.pdf"
-    cat "$input" | csv_filter "\$1 == $nn && \$5 ~ /${baseline}|${algo}/" |
+    _caption="${_filename%.csv} (#N: $nn, #P: $procs, #PPN: $ppn, #T: $threads)"
+
+    cat "$input" | _csv_filter "\$1 == $nn && \$5 ~ /${baseline}|${algo}/" |
       Rscript "$git_root/scripts/R/linePlot.R" \
         --output "$_plot" \
-        --caption "${_filename%.csv} (#N: $nn, #P: $procs, #PPN: $ppn, #T: $threads)"
+        --caption "$_caption"
 
     if [[ $? -eq 0 ]]; then
       echo "--generated plot: $_plot"

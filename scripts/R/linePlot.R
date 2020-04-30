@@ -100,5 +100,7 @@ if (argv$caption != '') {
 }
 
 print(p)
-dev.off()
+
+# suppress null device output
+garbage <- dev.off()
 
