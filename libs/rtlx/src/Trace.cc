@@ -23,7 +23,7 @@ auto Trace::context() const noexcept -> std::string const& {
   return m_context;
 }
 
-void Trace::put(std::string_view key, int v) {
+void Trace::put(std::string_view key, TraceStore::integer_t v) {
   if constexpr (TraceStore::enabled()) {
     m_cache[key_t{key}] = v;
   }

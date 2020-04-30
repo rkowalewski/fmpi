@@ -16,9 +16,10 @@ class Trace;
 
 class TraceStore {
  public:
-  using duration = std::chrono::nanoseconds;
-  using key_t    = std::string;
-  using value_t  = std::variant<duration, int>;
+  using duration  = std::chrono::nanoseconds;
+  using key_t     = std::string;
+  using integer_t = int64_t;
+  using value_t   = std::variant<duration, integer_t>;
 
  private:
   using context_t = key_t;
@@ -67,7 +68,7 @@ class Trace {
 
   static auto enabled() noexcept -> bool;
 
-  void put(std::string_view, int v);
+  void put(std::string_view, TraceStore::integer_t);
 
   template <class Rep, class Period>
   void add_time(

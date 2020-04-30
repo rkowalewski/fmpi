@@ -35,12 +35,17 @@ class TimeTrace {
     , trace_(name_) {
   }
 
+  TimeTrace(const TimeTrace& other) = delete;
+  TimeTrace(TimeTrace&& other)      = delete;
+  TimeTrace& operator=(const TimeTrace& other) = delete;
+  TimeTrace& operator=(TimeTrace&& other) = delete;
+
   ~TimeTrace() {
     trace_.add_time("Tmain.initialize", initialize);
     trace_.add_time("Tmain.dispatch", dispatch);
     trace_.add_time("Tmain.receive", receive);
     trace_.add_time("Tmain.shutdown", shutdown);
-    trace_.add_time("Tmain.compute", compute);
+    trace_.add_time(kComputationTime, compute);
     trace_.add_time("Tmain.idle", idle);
   }
 
@@ -77,20 +82,20 @@ inline void ring_waitsome_overlap(
 
   auto const nr = ctx.size();
 
-  auto trace = detail::TimeTrace<timer>{std::string{Schedule::NAME} +
-                                        std::string{algorithm_name} +
-                                        std::to_string(NReqs)};
+  auto tt = detail::TimeTrace<timer>{std::string{Schedule::NAME} +
+                                     std::string{algorithm_name} +
+                                     std::to_string(NReqs)};
 
   FMPI_DBG_STREAM(
-      "running algorithm " << trace.name() << ", blocksize: " << blocksize);
+      "running algorithm " << tt.name() << ", blocksize: " << blocksize);
 
   if (nr < 3) {
     detail::ring_pairwise_lt3(
-        begin, out, blocksize, ctx, std::forward<Op&&>(op), trace.trace());
+        begin, out, blocksize, ctx, std::forward<Op&&>(op), tt.trace());
     return;
   }
 
-  timer t_init{trace.initialize};
+  timer t_init{tt.initialize};
 
   Schedule const commAlgo{};
 
@@ -214,7 +219,7 @@ inline void ring_waitsome_overlap(
 
   {
     FMPI_DBG("Sending essages");
-    timer{trace.dispatch};
+    timer{tt.dispatch};
 
     for (auto&& r : range(commAlgo.phaseCount(ctx))) {
       auto const rpeer = commAlgo.recvRank(ctx, r);
@@ -239,8 +244,6 @@ inline void ring_waitsome_overlap(
   {
     FMPI_DBG("processing message arrivals...");
 
-    timer{trace.receive};
-
     // chunks to merge
     std::vector<std::pair<OutputIt, OutputIt>> chunks;
     std::vector<std::pair<OutputIt, OutputIt>> processed;
@@ -264,13 +267,14 @@ inline void ring_waitsome_overlap(
     auto d_first = out;
 
     {
+      timer{tt.receive};
       chunk task{};
       while (data_channel->wait_dequeue(task)) {
         auto span = task.second;
         chunks.emplace_back(span.data(), span.data() + span.size());
 
         if (enough_work()) {
-          timer{trace.compute};
+          timer{tt.compute};
           // merge all chunks
           auto d_last = op(chunks, d_first);
 
@@ -293,7 +297,7 @@ inline void ring_waitsome_overlap(
     }
 
     {
-      timer{trace.compute};
+      timer{tt.compute};
       auto const nels = static_cast<std::size_t>(ctx.size()) * blocksize;
 
       using merge_buffer_t = tlx::
@@ -329,32 +333,34 @@ inline void ring_waitsome_overlap(
   }
 
   {
-    timer{trace.idle};
+    timer{tt.idle};
     // We definitely have to wait here because although all data has arrived
     // there might still be pending tasks for other peers (e.g. sends)
     comm_dispatcher.loop_until_done();
   }
 
-  timer t_shutdown{trace.shutdown};
+  timer t_shutdown{tt.shutdown};
 
   auto const dispatcher_stats = comm_dispatcher.stats();
 
   auto const recv_stats = data_channel->statistics();
   auto const comm_stats = comm_channel->statistics();
 
-  trace.trace().add_time("Tcomm.enqueue", comm_stats.enqueue_time);
-  trace.trace().add_time("Tcomm.dequeue", comm_stats.dequeue_time);
+  tt.trace().add_time("Tcomm.enqueue", comm_stats.enqueue_time);
+  tt.trace().add_time("Tcomm.dequeue", comm_stats.dequeue_time);
 
-  trace.trace().add_time("Tcomp.enqueue", recv_stats.enqueue_time);
-  trace.trace().add_time("Tcomp.dequeue", recv_stats.dequeue_time);
+  tt.trace().add_time("Tcomp.enqueue", recv_stats.enqueue_time);
+  tt.trace().add_time("Tcomp.dequeue", recv_stats.dequeue_time);
 
-  trace.trace().add_time("Tcomm.dispatch", dispatcher_stats.dispatch_time);
-  trace.trace().add_time("Tcomm.progress", dispatcher_stats.completion_time);
-  trace.trace().add_time("Tcomm.callback", dispatcher_stats.callback_time);
-  trace.trace().add_time("Tcomm.total", dispatcher_stats.total_time);
+  tt.trace().add_time("Tcomm.dispatch", dispatcher_stats.dispatch_time);
+  tt.trace().add_time("Tcomm.progress", dispatcher_stats.progress_time);
+  tt.trace().add_time("Tcomm.completion", dispatcher_stats.completion_time);
+  tt.trace().add_time("Tcomm.callback", dispatcher_stats.callback_time);
+  tt.trace().add_time("Tcomm.total", dispatcher_stats.total_time);
+  tt.trace().put("Tcomm.high_watermark", dispatcher_stats.high_watermark);
+  tt.trace().put("Tcomm.nreqs_completion", dispatcher_stats.nreqs_completion);
 
-  trace.trace().put(
-      "comm.iterations", static_cast<int>(dispatcher_stats.iterations));
+  tt.trace().put(kCommRounds, dispatcher_stats.iterations);
 }
 }  // namespace fmpi
 #endif

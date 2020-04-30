@@ -10,8 +10,8 @@ namespace fmpi {
 
 constexpr auto kTotalTime         = std::string_view{"Ttotal"};
 constexpr auto kComputationTime   = std::string_view{"Tcomp"};
-constexpr auto kCommunicationTime = std::string_view{"Tcomm"};
-constexpr auto kCommRounds        = std::string_view{"Ncomm_rounds"};
+constexpr auto kCommunicationTime = std::string_view{"Tcomm.time"};
+constexpr auto kCommRounds        = std::string_view{"Tcomm.iterations"};
 
 constexpr int kTagRing  = 110435;
 constexpr int kTagBruck = 110436;

@@ -150,7 +150,7 @@ class SPSCNChannel {
     auto const ret    = status == channel_op_status::success;
 
     if ((nproduced_ += ret) == high_watermark_) {
-      //channel_.close();
+      // channel_.close();
     }
 
     return ret;
@@ -227,8 +227,10 @@ class CommDispatcher {
     // modified internally, read externally
     std::size_t high_watermark{};
     std::size_t iterations{};
+    std::size_t nreqs_completion{};
     duration    dispatch_time{0};
     duration    callback_time{0};
+    duration    progress_time{0};
     duration    completion_time{0};
     duration    total_time{0};
   };
@@ -467,6 +469,7 @@ inline void CommDispatcher<testReqs>::worker() {
 
   {
     constexpr auto force_progress = true;
+    stats_.nreqs_completion = req_count();
     do_progress(force_progress);
   }
 
@@ -516,7 +519,7 @@ void CommDispatcher<testReqs>::do_progress(bool force) {
 template <typename mpi::reqsome_op testReqs>
 inline typename CommDispatcher<testReqs>::idx_ranges_t
 CommDispatcher<testReqs>::progress_network(bool force) {
-  Timer{stats_.completion_time};
+  Timer{force ? stats_.completion_time : stats_.progress_time};
 
   auto const nreqs = req_count();
 

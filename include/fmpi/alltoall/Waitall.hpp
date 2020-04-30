@@ -220,7 +220,7 @@ inline void ring_waitall(
     }
   }
 
-  trace.put(kCommRounds, static_cast<int>(nrounds));
+  trace.put(kCommRounds, nrounds);
 }
 namespace detail {
 
