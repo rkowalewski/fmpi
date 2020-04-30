@@ -76,3 +76,10 @@ grep -h '^\(Nodes\|[0-9]\+,\)' "${files[@]}" |
 echo "-- summarizing statistics in $OUTFILE"
 
 Rscript "$SCRIPTPATH/R/stats.R" --input "$TMPF" --output "$OUTFILE"
+
+if [[ $? -eq 0 ]]; then
+  info_file="${OUTFILE%.csv}-meta.txt"
+  echo "- temp file: $TMPF" > "$info_file"
+  echo "- logs:" >> "$info_file"
+  printf "  %s\n" "${files[@]}" >> "$info_file"
+fi
