@@ -293,7 +293,7 @@ inline void ring_waitsome(
     FMPI_ASSERT((!(nc_reqs < total_reqs)) || null_reqs < reqs->size());
 
     int* lastIdx{};
-    FMPI_CHECK_MPI(mpi::waitsome(
+    FMPI_CHECK_MPI(mpi::testsome(
         &(*reqs->begin()),
         &(*reqs->end()),
         &(*indices->begin()),
