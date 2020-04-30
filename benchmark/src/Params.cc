@@ -92,6 +92,12 @@ auto process(
       "correctly. This does not work with random text (no way to "
       " reproduce).");
 
+  cp.add_flag(
+      0,
+      "blocking_progress",
+      params.blocking_progress,
+      "blocking or non-blocking (default) progress");
+
   std::string sizes_csv;
   cp.add_string('s', "sizes", sizes_csv, "list of block sizes");
 

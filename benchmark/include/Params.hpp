@@ -11,6 +11,12 @@ namespace benchmark {
 constexpr size_t MINSZ = 32;
 constexpr size_t MAXSZ = 128;
 
+enum class Progress : uint8_t
+{
+  Nonblocking = 0,
+  Blocking
+};
+
 struct Params {
   unsigned int nhosts{};
 #ifdef NDEBUG
@@ -20,6 +26,7 @@ struct Params {
 #endif
   std::string pattern{};
   bool        check{false};
+  bool        blocking_progress{false};
 
   std::vector<std::size_t> sizes{};
 };
