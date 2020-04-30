@@ -35,6 +35,7 @@ argv <- parse_args(params)
 # just declare this variable
 data.in <- 0
 
+
 if (argv$input == "-") {
     data.in <- read.csv(file=file('stdin'), header=TRUE, sep=",")
 } else {
@@ -47,6 +48,10 @@ data <- data.in %>%
     mutate(Ttotal_speedup = median[Algo == "AlltoAll"] / median) %>%
     ungroup() %>%
     filter(Algo != "AlltoAll")
+
+if (nrow(data) == 0) {
+    stop("no data available")
+}
 
 if (!("Ttotal_speedup" %in% colnames(data))) {
     stop("something went wrong. We cannot calculate the speedup in this dataset.")

@@ -70,8 +70,8 @@ df.stats <- df.in %>%
                      se=~sd(., na.rm = TRUE)/sqrt(sum(!is.na(.))),
                      ~min(., na.rm = TRUE),
                      ~max(., na.rm = TRUE),
-                     #,minR = ~Rank[which.min(.)],
-                     #maxR = ~Rank[which.max(.)],
+                     minR = ~Rank[which.min(.)],
+                     maxR = ~Rank[which.max(.)],
                      med_lowerCI=~medianCI(., ci_prob)[2],
                      med_upperCI=~medianCI(., ci_prob)[3]
                   )
