@@ -256,15 +256,22 @@ inline void ring_waitsome_overlap(
 
     processed.reserve(ctx.size());
 
-    auto enough_work = [&chunks]() -> bool {
+    auto enough_work = [](auto c_first, auto c_last) -> bool {
       // minimum number of chunks to merge: ideally we have a full level2
       // cache
       constexpr auto op_threshold = (NReqs / 2);
-      return chunks.size() >= op_threshold;
+      return static_cast<std::size_t>(std::distance(c_first, c_last)) >=
+             op_threshold;
     };
 
     // prefix sum over all processed chunks
     auto d_first = out;
+
+    using merge_buffer_t =
+        tlx::SimpleVector<value_type, tlx::SimpleVectorMode::NoInitNoDestroy>;
+    std::vector<merge_buffer_t> allocated_blocks;
+
+    allocated_blocks.reserve(10);
 
     {
       timer{tt.receive};
@@ -273,8 +280,8 @@ inline void ring_waitsome_overlap(
         auto span = task.second;
         chunks.emplace_back(span.data(), span.data() + span.size());
 
-        if (enough_work()) {
-          timer{tt.compute};
+        timer{tt.compute};
+        if (enough_work(chunks.begin(), chunks.end())) {
           // merge all chunks
           auto d_last = op(chunks, d_first);
 
@@ -290,8 +297,25 @@ inline void ring_waitsome_overlap(
           // 3) increase out iterator
           processed.emplace_back(d_first, d_last);
           std::swap(d_first, d_last);
-        } else {
-          // TODO(rkowalewski): merge processed chunks
+        } else if (processed.size() > 1) {
+          auto const nels = std::accumulate(
+              std::begin(processed),
+              std::end(processed),
+              std::size_t(0),
+              [](auto acc, auto piece) {
+                return acc + std::distance(piece.first, piece.second);
+              });
+
+          auto& target = allocated_blocks.emplace_back(merge_buffer_t{nels});
+
+          op(processed, target.begin());
+
+          processed.clear();
+
+          allocated_blocks.erase(
+              std::begin(allocated_blocks), std::end(allocated_blocks) - 1);
+
+          processed.emplace_back(target.begin(), target.end());
         }
       }
     }
@@ -299,9 +323,6 @@ inline void ring_waitsome_overlap(
     {
       timer{tt.compute};
       auto const nels = static_cast<std::size_t>(ctx.size()) * blocksize;
-
-      using merge_buffer_t = tlx::
-          SimpleVector<value_type, tlx::SimpleVectorMode::NoInitNoDestroy>;
 
       auto mergeBuffer = merge_buffer_t{nels};
 
