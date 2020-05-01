@@ -232,6 +232,7 @@ class CommDispatcher {
     duration    callback_time{0};
     duration    progress_time{0};
     duration    completion_time{0};
+    duration    queue_time{};
     duration    total_time{0};
   };
 
@@ -446,6 +447,7 @@ inline void CommDispatcher<testReqs>::worker() {
       stats_.high_watermark = std::max(stats_.high_watermark, n_backlog);
     }
     while (req_capacity()) {
+      Timer{stats_.queue_time};
       CommTask task{};
       // if we fail, there are two reasons...
       // either the timeout is hit without popping an element
@@ -469,7 +471,7 @@ inline void CommDispatcher<testReqs>::worker() {
 
   {
     constexpr auto force_progress = true;
-    stats_.nreqs_completion = req_count();
+    stats_.nreqs_completion       = req_count();
     do_progress(force_progress);
   }
 
@@ -479,8 +481,6 @@ inline void CommDispatcher<testReqs>::worker() {
     auto const was_busy = std::exchange(busy_, false);
     FMPI_ASSERT(was_busy);
   }
-
-  t_total.finish();
 
   cv_finished_.notify_all();
 }
