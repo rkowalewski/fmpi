@@ -1,5 +1,6 @@
 add_library(fmpi
     concurrency/CacheLocality.cc
+    memory/BlockAllocator.cc
     mpi/Algorithm.cc
     mpi/Environment.cc
     mpi/Rank.cc

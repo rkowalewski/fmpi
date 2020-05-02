@@ -7,9 +7,11 @@
 #include <fmpi/allocator/ContiguousPoolAllocator.hpp>
 namespace fmpi {
 
+namespace detail {}
+
 template <
     class T,
-    bool ThreadSafe      = false,
+    bool ThreadSafe,
     class SmallAllocator = ContiguousPoolAllocator<T, ThreadSafe>>
 class BufferAllocator {
   std::size_t const small_threshold_{};
@@ -36,7 +38,8 @@ class BufferAllocator {
 
   //     template <class U> struct rebind {typedef BufferAllocator<U> other;};
 
-  BufferAllocator(std::size_t small_threshold, SmallAllocator alloc) noexcept
+  BufferAllocator(
+      std::size_t small_threshold, SmallAllocator const& alloc) noexcept
     : small_threshold_{small_threshold}
     , small_alloc_{alloc} {
   }  // not required, unless used
@@ -47,8 +50,7 @@ class BufferAllocator {
   }
 #endif
 
-  value_type*  // Use pointer if pointer is not a value_type*
-  allocate(std::size_t n) {
+  value_type* allocate(std::size_t n) {
     if (n < small_threshold_) {
       return small_alloc_.allocate(n);
     } else {

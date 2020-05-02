@@ -60,28 +60,32 @@ class TimeTrace {
 
 template <class T, class Allocator>
 class Piece {
-  gsl::span<T> span_{};
-  Allocator*   alloc_{};
-  mpi::Rank    source_;
+  using range = gsl::span<T>;
+  range      span_{};
+  Allocator* alloc_{};
 
  public:
+  using value_type     = T;
+  using size_type      = typename range::size_type;
+  using iterator       = T*;
+  using const_iterator = T const*;
+
   constexpr Piece() = default;
 
-  constexpr Piece(
-      gsl::span<T> span, Allocator* alloc, mpi::Rank source) noexcept
+  constexpr Piece(gsl::span<T> span) noexcept
+    : Piece(span, nullptr) {
+  }
+
+  constexpr Piece(gsl::span<T> span, Allocator* alloc) noexcept
     : span_(span)
-    , alloc_(alloc)
-    , source_(source) {
+    , alloc_(alloc) {
+    FMPI_DBG(span.size());
   }
 
   ~Piece() {
     if (alloc_) {
-      alloc_->deallocate(span_.data());
+      alloc_->deallocate(span_.data(), span_.size());
     }
-  }
-
-  constexpr gsl::span<T> span() const noexcept {
-    return span_;
   }
 
   Piece(Piece const&) = delete;
@@ -98,12 +102,51 @@ class Piece {
     using std::swap;
     swap(span_, other.span_);
     swap(alloc_, other.alloc_);
-    swap(source_, other.source_);
 
     // reset other to null span to avoid double frees
-    other.span_ = gsl::span<T>{};
+    other.span_  = gsl::span<T>{};
+    other.alloc_ = nullptr;
 
     return *this;
+  }
+
+  constexpr iterator data() noexcept {
+    return span_.data();
+  }
+
+  constexpr const_iterator data() const noexcept {
+    return span_.data();
+  }
+
+  //! return number of items in range
+  constexpr size_type size() const noexcept {
+    return span_.size();
+  }
+
+  //! return mutable T* to first element
+  constexpr iterator begin() noexcept {
+    return span_.data();
+  }
+  //! return constant T* to first element
+  constexpr const_iterator begin() const noexcept {
+    return span_.data();
+  }
+  //! return constant T* to first element
+  constexpr const_iterator cbegin() const noexcept {
+    return begin();
+  }
+
+  //! return mutable T* beyond last element
+  constexpr iterator end() noexcept {
+    return data() + size();
+  }
+  //! return constant T* beyond last element
+  constexpr const_iterator end() const noexcept {
+    return data() + size();
+  }
+  //! return constant T* beyond last element
+  constexpr const_iterator cend() const noexcept {
+    return end();
   }
 };
 
@@ -127,6 +170,10 @@ inline void ring_waitsome_overlap(
     Op&&                op) {
   using timer = rtlx::Timer<>;
 
+  int wait = 0;
+  while (wait)
+    ;
+
   constexpr auto algorithm_name = std::string_view("WaitsomeOverlap");
 
   auto const& config = Config::instance();
@@ -148,6 +195,8 @@ inline void ring_waitsome_overlap(
     return;
   }
 
+  auto const nels = static_cast<std::size_t>(ctx.size()) * blocksize;
+
   timer t_init{tt.initialize};
 
   Schedule const commAlgo{};
@@ -162,7 +211,8 @@ inline void ring_waitsome_overlap(
   auto const winsz        = reqsInFlight * messages_per_round;
 
   // intermediate buffer for two pipelines
-  using buffer_allocator = HeapAllocator<value_type, true /*thread_safe*/>;
+  static constexpr bool thread_safe_alloc = true;
+  using buffer_allocator = HeapAllocator<value_type, thread_safe_alloc>;
 
   std::size_t const nthreads = config.num_threads;
 
@@ -303,29 +353,27 @@ inline void ring_waitsome_overlap(
     // chunks to merge
     // std::vector<chunk>                         chunks;
     using iter_pair = std::pair<OutputIt, OutputIt>;
-    using piece     = detail::Piece<value_type, buffer_allocator>;
 
-    auto enough_work = [](auto c_first, auto c_last) -> bool {
+    auto enough_work = [](auto /*c_first*/, auto /*c_last*/) -> bool {
       // minimum number of chunks to merge: ideally we have a full level2
       // cache
-      constexpr auto op_threshold = (NReqs / 2);
-      return static_cast<std::size_t>(std::distance(c_first, c_last)) >=
-             op_threshold;
+      // constexpr auto op_threshold = (NReqs / 2);
+      // return static_cast<std::size_t>(std::distance(c_first, c_last)) > 1
+      //        op_threshold;
+      return true;
     };
 
     // prefix sum over all processed chunks
-    auto d_first = out;
+    auto       d_first = out;
+    auto const d_last  = std::next(out, nels);
 
-    std::vector<piece> arrivals;
-    arrivals.reserve(ctx.size());
+    using piece        = detail::Piece<value_type, buffer_allocator>;
+    using merge_buffer = detail::simple_vector<value_type>;
 
-    std::vector<iter_pair> processed;
-    processed.reserve(ctx.size());
+    using merge_chunk = std::variant<piece, merge_buffer>;
 
-    using merge_buffer_t = detail::simple_vector<value_type>;
-
-    std::vector<merge_buffer_t> allocated_blocks;
-    allocated_blocks.reserve(ctx.size());
+    std::vector<merge_chunk> pieces;
+    pieces.reserve(ctx.size());
 
     {
       timer{tt.receive};
@@ -333,87 +381,98 @@ inline void ring_waitsome_overlap(
           gsl::span{std::next(begin, ctx.rank() * blocksize),
                     std::next(begin, (ctx.rank() + 1) * blocksize)};
 
-      arrivals.emplace_back(local_span, nullptr, ctx.rank());
+      pieces.emplace_back(local_span);
 
       chunk task{};
       while (data_channel->wait_dequeue(task)) {
         auto [source, span] = task;
-        arrivals.emplace_back(span, &buf_alloc, source);
+        pieces.emplace_back(piece{span, &buf_alloc});
 
         timer{tt.compute};
-        if (enough_work(arrivals.begin(), arrivals.end())) {
+        if (enough_work(pieces.begin(), pieces.end())) {
           // merge all chunks
           std::vector<iter_pair> chunks;
-          chunks.reserve(arrivals.size());
+          chunks.reserve(pieces.size());
 
           std::transform(
-              std::begin(arrivals),
-              std::end(arrivals),
+              std::begin(pieces),
+              std::end(pieces),
               std::back_inserter(chunks),
-              [](auto const& piece) {
-                auto span = piece.span();
-                FMPI_ASSERT(span.size());
-                return std::make_pair(span.data(), span.data() + span.size());
+              [](auto& piece) {
+                return std::visit(
+                    [](auto&& v) -> iter_pair {
+                      FMPI_ASSERT(v.begin() <= v.end());
+                      return std::make_pair(v.begin(), v.end());
+                    },
+                    piece);
               });
 
-          auto d_last = op(chunks, d_first);
-
-          arrivals.clear();
-
-          // 3) increase out iterator
-          processed.emplace_back(d_first, d_last);
-          std::swap(d_first, d_last);
-        } else if (processed.size() > 1) {
-          auto const nels = std::accumulate(
-              std::begin(processed),
-              std::end(processed),
+          auto const n_elements = std::accumulate(
+              std::begin(chunks),
+              std::end(chunks),
               std::size_t(0),
-              [](auto acc, auto piece) {
+              [](auto acc, auto const& piece) {
                 return acc + std::distance(piece.first, piece.second);
               });
 
-          auto& target = allocated_blocks.emplace_back(nels);
+          FMPI_DBG(n_elements);
 
-          auto target_end = op(processed, target.begin());
+          auto last = d_last;
 
-          FMPI_ASSERT(target_end == target.end());
+          using diff_t =
+              typename std::iterator_traits<OutputIt>::difference_type;
 
-          allocated_blocks.erase(
-              std::begin(allocated_blocks), std::end(allocated_blocks) - 1);
+          if (diff_t(n_elements) <= std::distance(d_first, d_last)) {
+            last = op(chunks, d_first);
+            pieces.emplace_back(piece{gsl::span{d_first, last}});
+            std::swap(d_first, last);
+          } else {
+            auto buffer = merge_buffer{n_elements};
+            last        = op(chunks, buffer.begin());
 
-          processed.clear();
-          processed.emplace_back(target.begin(), target_end);
+            FMPI_ASSERT(last == buffer.end());
+
+            pieces.emplace_back(std::move(buffer));
+          }
+
+          pieces.erase(std::begin(pieces), std::prev(std::end(pieces)));
         }
       }
     }
 
     {
       timer{tt.compute};
-      auto const nels = static_cast<std::size_t>(ctx.size()) * blocksize;
 
-      FMPI_DBG(arrivals.size());
-      FMPI_DBG(processed.size());
+      FMPI_DBG("final merge");
+      FMPI_DBG(pieces.size());
 
       std::vector<iter_pair> chunks;
-      chunks.reserve(arrivals.size() + processed.size());
+      chunks.reserve(pieces.size());
 
       std::transform(
-          std::begin(arrivals),
-          std::end(arrivals),
+          std::begin(pieces),
+          std::end(pieces),
           std::back_inserter(chunks),
-          [](auto const& piece) {
-            auto span = piece.span();
-            return std::make_pair(span.data(), span.data() + span.size());
+          [](auto& piece) {
+            return std::visit(
+                [](auto&& v) -> iter_pair {
+                  return std::make_pair(v.begin(), v.end());
+                },
+                piece);
           });
 
-      std::copy(
-          std::begin(processed),
-          std::end(processed),
-          std::back_inserter(chunks));
+      auto const n_elements = std::accumulate(
+          std::begin(chunks),
+          std::end(chunks),
+          std::size_t(0),
+          [](auto acc, auto const& piece) {
+            return acc + std::distance(piece.first, piece.second);
+          });
 
-      FMPI_DBG(chunks.size());
+      FMPI_DBG(n_elements);
+      FMPI_ASSERT(n_elements == nels);
 
-      auto       mergeBuffer = merge_buffer_t{nels};
+      auto       mergeBuffer = merge_buffer{nels};
       auto const last        = op(chunks, mergeBuffer.begin());
 
       FMPI_ASSERT(last == mergeBuffer.end());
@@ -451,6 +510,6 @@ inline void ring_waitsome_overlap(
   tt.trace().put("Tcomm.nreqs_completion", dispatcher_stats.nreqs_completion);
 
   tt.trace().put(kCommRounds, dispatcher_stats.iterations);
-}
+}  // namespace fmpi
 }  // namespace fmpi
 #endif
