@@ -225,7 +225,7 @@ class buffered_channel {
             *reinterpret_cast<value_type*>(std::addressof(s->storage)))};
         s->cycle.store(idx + capacity_, std::memory_order_release);
         not_full_cnd_.notify_one();
-        return std::move(value);
+        return value;
       }
       if (channel_op_status::empty == status) {
         std::unique_lock<std::mutex> lk{mtx_};
