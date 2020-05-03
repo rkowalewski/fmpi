@@ -171,10 +171,6 @@ inline void ring_waitsome_overlap(
     Op&&                op) {
   using timer = rtlx::Timer<>;
 
-  int wait = 0;
-  while (wait)
-    ;
-
   constexpr auto algorithm_name = std::string_view("WaitsomeOverlap");
 
   auto const& config = Config::instance();
@@ -492,6 +488,7 @@ inline void ring_waitsome_overlap(
   tt.trace().add_time("Tcomm.completion", dispatcher_stats.completion_time);
   tt.trace().add_time("Tcomm.callback", dispatcher_stats.callback_time);
   tt.trace().add_time("Tcomm.total", dispatcher_stats.total_time);
+  tt.trace().add_time("Tcomm.queue_time", dispatcher_stats.queue_time);
   tt.trace().put("Tcomm.high_watermark", dispatcher_stats.high_watermark);
   tt.trace().put("Tcomm.nreqs_completion", dispatcher_stats.nreqs_completion);
 
