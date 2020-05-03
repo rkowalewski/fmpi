@@ -143,9 +143,11 @@ int main(int argc, char* argv[]) {
     auto correct = container(0);
 
     for (auto it = 0; it < static_cast<int>(params.niters) + nwarmup; ++it) {
-#pragma omp parallel default(none) shared(data)
+#pragma omp parallel default(none) shared(data) firstprivate(nr, sendcount)
       {
-        std::mt19937_64 generator(random_seed_seq::get_instance());
+        std::random_device r;
+        std::seed_seq seed_seq{r(), r(), r(), r(), r(), r()};
+        std::mt19937_64    generator(seed_seq);
         std::uniform_int_distribution<value_t> distribution(-1E6, 1E6);
 #pragma omp for
         for (std::size_t block = 0; block < std::size_t(nr); ++block) {

@@ -59,6 +59,21 @@ BENCHMARK(BM_OpenMP)
     ->UseRealTime();
 #endif
 
+template <class Iter>
+void random(Iter first, Iter last) {
+  std::random_device r;
+  std::seed_seq seed_seq{r(), r(), r(), r(), r(), r()};
+  std::mt19937_64    generator(seed_seq);
+
+  using value_t = typename std::iterator_traits<Iter>::value_type;
+
+  std::uniform_int_distribution<value_t> distribution(-1E6, 1E6);
+
+  // initialize vectors with random numbers
+  std::generate(
+      first, last, [&]() { return distribution(generator); });
+}
+
 static void BM_TlxMergeSequential(benchmark::State& state) {
   using value_t = int;
 
@@ -69,14 +84,9 @@ static void BM_TlxMergeSequential(benchmark::State& state) {
   std::vector<value_t> src(size);
   std::vector<value_t> target(size);
 
-  std::mt19937_64 generator(random_seed_seq::get_instance());
-  std::uniform_int_distribution<value_t> distribution(-1E6, 1E6);
+  random(std::begin(src), std::end(src));
 
   using iterator = typename std::vector<value_t>::iterator;
-
-  // initialize vectors with random numbers
-  std::generate(
-      src.begin(), src.end(), [&]() { return distribution(generator); });
 
   std::vector<std::pair<iterator, iterator>> chunks(nblocks);
 
@@ -103,14 +113,9 @@ static void BM_TlxMerge(benchmark::State& state) {
   std::vector<value_t> src(size);
   std::vector<value_t> target(size);
 
-  std::mt19937_64 generator(random_seed_seq::get_instance());
-  std::uniform_int_distribution<value_t> distribution(-1E6, 1E6);
+  random(std::begin(src), std::end(src));
 
   using iterator = typename std::vector<value_t>::iterator;
-
-  // initialize vectors with random numbers
-  std::generate(
-      src.begin(), src.end(), [&]() { return distribution(generator); });
 
   std::vector<std::pair<iterator, iterator>> chunks(nblocks);
 
@@ -168,14 +173,10 @@ static void BM_Sort(benchmark::State& state) {
   std::vector<value_t> src(size);
   std::vector<value_t> target(size);
 
-  std::mt19937_64 generator(random_seed_seq::get_instance());
-  std::uniform_int_distribution<value_t> distribution(-1E6, 1E6);
+  random(std::begin(src), std::end(src));
+
 
   using iterator = typename std::vector<value_t>::iterator;
-
-  // initialize vectors with random numbers
-  std::generate(
-      src.begin(), src.end(), [&]() { return distribution(generator); });
 
   std::vector<std::pair<iterator, iterator>> chunks(nblocks);
 
