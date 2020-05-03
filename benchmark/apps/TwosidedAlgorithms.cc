@@ -146,7 +146,7 @@ int main(int argc, char* argv[]) {
 #pragma omp parallel default(none) shared(data) firstprivate(nr, sendcount)
       {
         std::random_device r;
-        std::seed_seq seed_seq{r(), r(), r(), r(), r(), r()};
+        std::seed_seq      seed_seq{r(), r(), r(), r(), r(), r()};
         std::mt19937_64    generator(seed_seq);
         std::uniform_int_distribution<value_t> distribution(-1E6, 1E6);
 #pragma omp for

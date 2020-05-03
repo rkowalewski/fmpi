@@ -62,7 +62,7 @@ BENCHMARK(BM_OpenMP)
 template <class Iter>
 void random(Iter first, Iter last) {
   std::random_device r;
-  std::seed_seq seed_seq{r(), r(), r(), r(), r(), r()};
+  std::seed_seq      seed_seq{r(), r(), r(), r(), r(), r()};
   std::mt19937_64    generator(seed_seq);
 
   using value_t = typename std::iterator_traits<Iter>::value_type;
@@ -70,8 +70,7 @@ void random(Iter first, Iter last) {
   std::uniform_int_distribution<value_t> distribution(-1E6, 1E6);
 
   // initialize vectors with random numbers
-  std::generate(
-      first, last, [&]() { return distribution(generator); });
+  std::generate(first, last, [&]() { return distribution(generator); });
 }
 
 static void BM_TlxMergeSequential(benchmark::State& state) {
@@ -174,7 +173,6 @@ static void BM_Sort(benchmark::State& state) {
   std::vector<value_t> target(size);
 
   random(std::begin(src), std::end(src));
-
 
   using iterator = typename std::vector<value_t>::iterator;
 
