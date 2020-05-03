@@ -13,3 +13,9 @@
 [submodule "external/GSL"]
 	path = external/GSL
 	url = git@github.com:microsoft/GSL.git
+[submodule "mimalloc"]
+	path = mimalloc
+	url = git@github.com:microsoft/mimalloc.git
+[submodule "external/snmalloc"]
+	path = external/snmalloc
+	url = git@github.com:microsoft/snmalloc.git

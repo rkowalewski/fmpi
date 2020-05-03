@@ -7,6 +7,7 @@
 #include <fmpi/alltoall/Detail.hpp>
 #include <fmpi/container/StackContainer.hpp>
 #include <fmpi/container/buffered_channel.hpp>
+#include <fmpi/memory/ThreadAllocator.hpp>
 #include <rtlx/Trace.hpp>
 #include <tlx/container/ring_buffer.hpp>
 #include <utility>
@@ -211,29 +212,14 @@ inline void ring_waitsome_overlap(
   auto const winsz        = reqsInFlight * messages_per_round;
 
   // intermediate buffer for two pipelines
-  static constexpr bool thread_safe_alloc = true;
-  using buffer_allocator = HeapAllocator<value_type, thread_safe_alloc>;
+  using thread_alloc = ThreadAllocator<value_type>;
 
   std::size_t const nthreads = config.num_threads;
 
   FMPI_DBG(nthreads);
   FMPI_DBG(blocksize);
 
-  // Number of Pipeline Stages
-  constexpr std::size_t n_pipelines = 2;
-
-  auto const required = reqsInFlight * blocksize * n_pipelines;
-  auto const capacity =
-      nthreads * kMaxContiguousBufferSize / sizeof(value_type);
-
-  auto const n_buffer_nels = std::min<std::size_t>(
-      std::min(required, capacity),
-      std::numeric_limits<typename buffer_allocator::index_type>::max());
-
-  auto buf_alloc = buffer_allocator{
-      static_cast<typename buffer_allocator::index_type>(n_buffer_nels)};
-
-  FMPI_DBG(n_buffer_nels);
+  auto buf_alloc = thread_alloc{};
 
   // queue for ready tasks
   using chunk = std::pair<mpi::Rank, gsl::span<value_type>>;
@@ -367,7 +353,7 @@ inline void ring_waitsome_overlap(
     auto       d_first = out;
     auto const d_last  = std::next(out, nels);
 
-    using piece        = detail::Piece<value_type, buffer_allocator>;
+    using piece        = detail::Piece<value_type, thread_alloc>;
     using merge_buffer = detail::simple_vector<value_type>;
 
     using merge_chunk = std::variant<piece, merge_buffer>;

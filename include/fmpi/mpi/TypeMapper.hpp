@@ -12,8 +12,12 @@ namespace detail {
 template <class T>
 struct type_mapper {
   static_assert(
-      !std::is_trivially_copyable<T>::value,
+      std::is_trivially_copyable<T>::value,
       "MPI always requires trivially copyable types");
+
+  static_assert(
+      std::is_arithmetic<T>::value,
+      "arithmetic types can be perfectly matched to MPI Types");
 
   static_assert(
       !std::is_reference<T>::value,
@@ -21,10 +25,6 @@ struct type_mapper {
 
   static_assert(
       !std::is_const<T>::value, "We cannot map a const type to a MPI type");
-
-  static_assert(
-      !std::is_arithmetic<T>::value,
-      "arithmetic types can be perfectly matched to MPI Types");
 
   static constexpr auto type() -> MPI_Datatype {
     return MPI_BYTE;
