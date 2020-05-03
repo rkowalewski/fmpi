@@ -42,7 +42,7 @@ endif()
 
 
 if (NOT MSVC)
-    target_compile_options(fmpi PUBLIC -Wall -Wextra -Werror)
+    target_compile_options(fmpi PUBLIC -Wall -Wextra)
 endif()
 
 if (PEDANTIC_SUPPORTED)
@@ -58,7 +58,8 @@ endif()
 if (OVERLOADED_VIRTUAL_SUPPORTED)
     target_compile_options(fmpi PUBLIC -Woverloaded-virtual)
 endif()
-if (REDUNDANT_DECLS_SUPPORTED)
-    target_compile_options(fmpi PUBLIC -Wredundant-decls)
-endif()
+
+#if (REDUNDANT_DECLS_SUPPORTED)
+#    target_compile_options(fmpi PUBLIC -Wredundant-decls)
+#endif()
 
