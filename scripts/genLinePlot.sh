@@ -1,8 +1,17 @@
 #!/bin/bash
 
+# allow pattern to expand to an empty string
+# shopt -s nullglob
+
 _csv_filter() {
   local _pat="$(echo $@ | sed 's#\\$#\$#g')"
   awk -F',' "(NR == 1 || ${_pat}) {print}"
+}
+
+_ls_pattern() {
+  if ls *"$1" 1>/dev/null 2>&1; then
+    ls *"$1" | xargs
+  fi
 }
 
 input="$1"
@@ -21,7 +30,6 @@ nodes=(
     tr '\n' ' ')
 )
 
-procs="$(awk -F',' '{if (NR == 2) {print $2}}' $input)"
 threads="$(awk -F',' '{if (NR == 2) {print $3}}' $input)"
 ppn="$(awk -F',' '{if (NR == 2) {print $NF}}' $input)"
 
@@ -35,6 +43,7 @@ mkdir -p $_target
 
 for algo in ${patterns[@]}; do
   for nn in ${nodes[@]}; do
+    procs="$((nn * ppn))"
     _desc="$(echo $algo | sed 's/\[.*\]//')"
     _plot="$_target/${_filename%.csv}.${_desc}.n${nn}.pdf"
     _caption="${_filename%.csv} (#N: $nn, #P: $procs, #PPN: $ppn, #T: $threads)"
@@ -53,6 +62,10 @@ done
 cd "$_target"
 
 for nn in ${nodes[@]}; do
-  pdfjam *."Waitsome.n${nn}.pdf" *."Overlap.n${nn}.pdf" *."Waitall.n${nn}.pdf" \
+  pdfjam \
+    $(_ls_pattern "Waitsome.n${nn}.pdf") \
+    $(_ls_pattern "Overlap.n${nn}.pdf") \
+    $(_ls_pattern "Waitall.n${nn}.pdf") \
+    $(_ls_pattern "Bruck.n${nn}.pdf") \
     --landscape --frame true --nup 3x2 --outfile "all.n${nn}.pdf"
 done
