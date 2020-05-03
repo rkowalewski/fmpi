@@ -27,6 +27,8 @@
 #Important
 module load slurm_setup
 module load hwloc
+module unload gcc
+module load gcc/9
 
 unset KMP_AFFINITY
 

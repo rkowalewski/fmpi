@@ -13,6 +13,11 @@ if [[ "$#" -lt 2 ]]; then
   exit 1
 fi
 
+if [[ "${OUTFILE##*.}" != "csv" ]]; then
+  echo "<outfile> must be csv: $OUTFILE"
+  exit 1
+fi
+
 if [[ ! -x "$(command -v R)" ]]; then
   echo "R seems not to be installed on your system"
   exit 1
@@ -20,19 +25,9 @@ fi
 
 shift # remove file
 
-if [[ -f "$OUTFILE" && ! -w "$OUTFILE" ]]; then
-  echo "file not writable: $OUTFILE"
-  exit 1
-fi
-
-if [[ ! -e "$OUTFILE" ]]; then
-  if [[ "${OUTFILE##*.}" != "csv" ]]; then
-    echo "output file must be csv: $OUTFILE"
-    exit 1
-  elif [[ ! -w "$(dirname "$OUTFILE")" ]]; then
+if ! mkdir -p "$(dirname "$OUTFILE")"; then
     echo "path to file $OUTFILE not writable"
-    exit 1
-  fi
+    exit
 fi
 
 TMPDIR="/tmp"
