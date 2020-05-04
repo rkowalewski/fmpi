@@ -134,7 +134,9 @@ class SPSCNChannel {
     return true;
   }
 
-  bool wait_dequeue(value_type& val, duration const& timeout) {
+  template <class Rep, class Period>
+  bool wait_dequeue(
+      value_type& val, std::chrono::duration<Rep, Period> const& timeout) {
     timer{stats_.dequeue_time};
     if (!count_.load(std::memory_order_relaxed)) {
       return false;

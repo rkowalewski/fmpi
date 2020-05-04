@@ -331,6 +331,7 @@ inline void ring_waitsome_overlap(
 
   {
     FMPI_DBG("processing message arrivals...");
+    timer{tt.compute};
 
     // chunks to merge
     // std::vector<chunk>                         chunks;
@@ -370,7 +371,6 @@ inline void ring_waitsome_overlap(
         auto [source, span] = task;
         pieces.emplace_back(piece{span, &buf_alloc});
 
-        timer{tt.compute};
         if (enough_work(pieces.begin(), pieces.end())) {
           // merge all chunks
           std::vector<iter_pair> chunks;
@@ -423,8 +423,6 @@ inline void ring_waitsome_overlap(
     }
 
     {
-      timer{tt.compute};
-
       FMPI_DBG("final merge");
       FMPI_DBG(pieces.size());
 

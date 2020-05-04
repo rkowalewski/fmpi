@@ -16,6 +16,9 @@
 #include <rtlx/Trace.hpp>
 
 namespace fmpi {
+
+constexpr auto kAlltoall = std::string_view("AlltoAll");
+
 template <class InputIt, class OutputIt, class Op>
 inline void mpi_alltoall(
     InputIt             begin,
@@ -27,7 +30,7 @@ inline void mpi_alltoall(
 
   auto nr = ctx.size();
 
-  auto trace = rtlx::Trace{"AlltoAll"};
+  auto trace = rtlx::Trace{kAlltoall};
 
   std::unique_ptr<value_type[]> rbuf;
 

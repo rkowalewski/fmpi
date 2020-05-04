@@ -32,8 +32,11 @@ class TraceStore {
   TraceStore(const TraceStore& src) = delete;
   auto operator=(const TraceStore& rhs) -> TraceStore& = delete;
 
-  auto traces(context_t const& ctx)
+  auto traces(std::string_view ctx) noexcept
       -> std::unordered_map<key_t, value_t> const&;
+
+  auto traces() const noexcept -> std::
+      unordered_map<context_t, std::unordered_map<key_t, value_t>> const&;
   // void clear();
   static constexpr auto enabled() noexcept -> bool {
 #ifdef RTLX_ENABLE_TRACE
@@ -42,7 +45,11 @@ class TraceStore {
     return false;
 #endif
   }
-  void erase(context_t const& ctx);
+  void erase(std::string_view);
+
+  bool empty() const noexcept {
+    return m_traces.empty();
+  }
 
   // Singleton Instance (Thread Safe)
   static auto instance() -> TraceStore&;
@@ -57,7 +64,7 @@ class Trace {
   using value_t = TraceStore::value_t;
 
  public:
-  explicit Trace(TraceStore::context_t ctx);
+  explicit Trace(std::string_view ctx);
 
   Trace(Trace&&)      = delete;
   Trace(Trace const&) = delete;
@@ -65,8 +72,6 @@ class Trace {
   Trace& operator=(Trace&&) = delete;
 
   ~Trace();
-
-  static auto enabled() noexcept -> bool;
 
   void put(std::string_view, TraceStore::integer_t);
 

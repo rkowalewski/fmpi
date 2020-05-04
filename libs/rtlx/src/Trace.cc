@@ -8,8 +8,8 @@
 
 namespace rtlx {
 
-Trace::Trace(TraceStore::context_t ctx)
-  : m_context(std::move(ctx)) {
+Trace::Trace(std::string_view ctx)
+  : m_context(ctx) {
 }
 
 Trace::~Trace() {
@@ -29,9 +29,15 @@ void Trace::put(std::string_view key, TraceStore::integer_t v) {
   }
 }
 
-auto TraceStore::traces(context_t const& ctx)
+auto TraceStore::traces(std::string_view ctx) noexcept
     -> std::unordered_map<TraceStore::key_t, TraceStore::value_t> const& {
-  return m_traces[ctx];
+  return m_traces[std::string(ctx)];
+}
+
+auto TraceStore::traces() const noexcept -> std::unordered_map<
+    TraceStore::context_t,
+    std::unordered_map<TraceStore::key_t, TraceStore::value_t>> const& {
+  return m_traces;
 }
 
 auto TraceStore::instance() -> TraceStore& {
@@ -39,9 +45,9 @@ auto TraceStore::instance() -> TraceStore& {
   return singleton;
 }
 
-void TraceStore::erase(context_t const& ctx) {
+void TraceStore::erase(std::string_view ctx) {
   // Test
-  m_traces.erase(ctx);
+  m_traces.erase(std::string(ctx));
 }
 
 }  // namespace rtlx

@@ -170,6 +170,8 @@ int main(int argc, char* argv[]) {
         }
       }
 
+      auto& traceStore = rtlx::TraceStore::instance();
+
       // first we want to obtain the correct result which we can verify then
       // with our own algorithms
       if (params.check) {
@@ -180,6 +182,7 @@ int main(int argc, char* argv[]) {
             static_cast<int>(sendcount),
             world,
             merger);
+        traceStore.erase(fmpi::kAlltoall);
       }
 
       Measurement m{};
@@ -213,8 +216,6 @@ int main(int argc, char* argv[]) {
               out.begin(), out.end(), correct.begin(), world, algo.first);
         }
 
-        auto& traceStore = rtlx::TraceStore::instance();
-
         if (it >= nwarmup) {
           m.algorithm = algo.first;
           m.iter      = it - nwarmup + 1;
@@ -233,6 +234,7 @@ int main(int argc, char* argv[]) {
 
         traceStore.erase(algo.first);
       }
+      FMPI_ASSERT(traceStore.empty());
     }
   }
 
