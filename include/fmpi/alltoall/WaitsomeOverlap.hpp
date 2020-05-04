@@ -30,6 +30,7 @@ class TimeTrace {
   duration shutdown{0};
   duration compute{0};
   duration idle{0};
+  duration main{0};
 
   TimeTrace(std::string name)
     : name_(std::move(name))
@@ -48,6 +49,7 @@ class TimeTrace {
     trace_.add_time("Tmain.shutdown", shutdown);
     trace_.add_time(kComputationTime, compute);
     trace_.add_time("Tmain.idle", idle);
+    trace_.add_time("Tmain.main", main);
   }
 
   std::string_view name() const noexcept {
@@ -195,6 +197,7 @@ inline void ring_waitsome_overlap(
   auto const nels = static_cast<std::size_t>(ctx.size()) * blocksize;
 
   timer t_init{tt.initialize};
+  timer t_main{tt.main};
 
   Schedule const commAlgo{};
 
@@ -460,6 +463,8 @@ inline void ring_waitsome_overlap(
       std::move(mergeBuffer.begin(), mergeBuffer.end(), out);
     }
   }
+
+  t_main.finish();
 
   {
     timer{tt.idle};

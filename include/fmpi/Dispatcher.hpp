@@ -405,7 +405,7 @@ inline CommDispatcher<testReqs>::CommDispatcher(
     std::shared_ptr<channel> chan, std::size_t winsz)
   : task_channel_(std::move(chan)) {
   using clock = typename rtlx::ChooseClockType::type;
-  life_tp_       = clock::now();
+  life_tp_    = clock::now();
 
   do_reset(winsz);
 }
@@ -418,7 +418,7 @@ inline CommDispatcher<testReqs>::~CommDispatcher() {
 template <typename mpi::reqsome_op testReqs>
 inline void CommDispatcher<testReqs>::start_worker() {
   using clock = typename rtlx::ChooseClockType::type;
-  start_tp_      = clock::now();
+  start_tp_   = clock::now();
 
   thread_ = std::thread([this]() { worker(); });
 }
@@ -627,17 +627,17 @@ inline void CommDispatcher<testReqs>::loop_until_done() {
 
 template <mpi::reqsome_op testReqs>
 inline void CommDispatcher<testReqs>::stop_worker() {
+  using clock = typename rtlx::ChooseClockType::type;
+
   loop_until_done();
+
+  stats_.thread_time = clock::now() - start_tp_;
+
   if (thread_.joinable()) {
     thread_.join();
   }
 
-  using clock = typename rtlx::ChooseClockType::type;
-
-  auto const now   = clock::now();
-
-  stats_.life_time = now - life_tp_;
-  stats_.thread_time = now - start_tp_;
+  stats_.life_time = clock::now() - life_tp_;
 }
 
 template <mpi::reqsome_op testReqs>
