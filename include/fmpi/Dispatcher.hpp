@@ -237,6 +237,7 @@ class CommDispatcher {
     duration    queue_time{};
     duration    total_time{0};
     duration    life_time{0};
+    duration    thread_time{0};
   };
 
   using channel = SPSCNChannel<CommTask>;
@@ -260,7 +261,8 @@ class CommDispatcher {
   // Condition to signal a finished task
   std::condition_variable cv_finished_;
 
-  typename std::chrono::steady_clock::time_point start_{duration{0}};
+  typename std::chrono::steady_clock::time_point start_tp_{duration{0}};
+  typename std::chrono::steady_clock::time_point life_tp_{duration{0}};
 
   // flag if dispatcher is busy
   bool busy_{true};
@@ -402,7 +404,9 @@ template <typename mpi::reqsome_op testReqs>
 inline CommDispatcher<testReqs>::CommDispatcher(
     std::shared_ptr<channel> chan, std::size_t winsz)
   : task_channel_(std::move(chan)) {
-  start_ = std::chrono::steady_clock::now();
+  using clock = typename rtlx::ChooseClockType::type;
+  life_tp_       = clock::now();
+
   do_reset(winsz);
 }
 
@@ -413,6 +417,9 @@ inline CommDispatcher<testReqs>::~CommDispatcher() {
 
 template <typename mpi::reqsome_op testReqs>
 inline void CommDispatcher<testReqs>::start_worker() {
+  using clock = typename rtlx::ChooseClockType::type;
+  start_tp_      = clock::now();
+
   thread_ = std::thread([this]() { worker(); });
 }
 
@@ -625,7 +632,12 @@ inline void CommDispatcher<testReqs>::stop_worker() {
     thread_.join();
   }
 
-  stats_.life_time = std::chrono::steady_clock::now() - start_;
+  using clock = typename rtlx::ChooseClockType::type;
+
+  auto const now   = clock::now();
+
+  stats_.life_time = now - life_tp_;
+  stats_.thread_time = now - start_tp_;
 }
 
 template <mpi::reqsome_op testReqs>

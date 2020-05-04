@@ -488,10 +488,12 @@ inline void ring_waitsome_overlap(
   tt.trace().add_time("Tcomm.total", dispatcher_stats.total_time);
   tt.trace().add_time("Tcomm.queue_time", dispatcher_stats.queue_time);
   tt.trace().add_time("Tcomm.life_time", dispatcher_stats.life_time);
+  tt.trace().add_time("Tcomm.thread_time", dispatcher_stats.thread_time);
   tt.trace().put("Tcomm.high_watermark", dispatcher_stats.high_watermark);
   tt.trace().put("Tcomm.nreqs_completion", dispatcher_stats.nreqs_completion);
 
   tt.trace().put(kCommRounds, dispatcher_stats.iterations);
+
 }  // namespace fmpi
 }  // namespace fmpi
 #endif
