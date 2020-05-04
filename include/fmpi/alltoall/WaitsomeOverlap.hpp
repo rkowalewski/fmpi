@@ -363,7 +363,7 @@ inline void ring_waitsome_overlap(
     pieces.reserve(ctx.size());
 
     {
-      timer{tt.receive};
+      timer t_receive{tt.receive};
       auto local_span =
           gsl::span{std::next(begin, ctx.rank() * blocksize),
                     std::next(begin, (ctx.rank() + 1) * blocksize)};
@@ -424,6 +424,7 @@ inline void ring_waitsome_overlap(
           pieces.erase(std::begin(pieces), std::prev(std::end(pieces)));
         }
       }
+      t_receive.finish();
     }
 
     {
