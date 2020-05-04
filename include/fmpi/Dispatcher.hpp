@@ -125,7 +125,7 @@ class SPSCNChannel {
   SPSCNChannel& operator=(SPSCNChannel const&) = delete;
 
   bool wait_dequeue(value_type& val) {
-    timer{stats_.dequeue_time};
+    timer t_dequeue{stats_.dequeue_time};
     if (!count_.load(std::memory_order_relaxed)) {
       return false;
     }
@@ -137,7 +137,7 @@ class SPSCNChannel {
   template <class Rep, class Period>
   bool wait_dequeue(
       value_type& val, std::chrono::duration<Rep, Period> const& timeout) {
-    timer{stats_.dequeue_time};
+    timer t_enqueue{stats_.dequeue_time};
     if (!count_.load(std::memory_order_relaxed)) {
       return false;
     }
@@ -147,7 +147,7 @@ class SPSCNChannel {
   }
 
   bool enqueue(value_type const& task) {
-    timer{stats_.enqueue_time};
+    timer t_enqueue{stats_.enqueue_time};
     auto const status = channel_.push(task);
     auto const ret    = status == channel_op_status::success;
 
@@ -461,7 +461,7 @@ inline void CommDispatcher<testReqs>::worker() {
       stats_.high_watermark = std::max(stats_.high_watermark, n_backlog);
     }
     while (req_capacity()) {
-      Timer{stats_.queue_time};
+      Timer t_queue{stats_.queue_time};
       CommTask task{};
       // if we fail, there are two reasons...
       // either the timeout is hit without popping an element
@@ -501,7 +501,7 @@ inline void CommDispatcher<testReqs>::worker() {
 
 template <typename mpi::reqsome_op testReqs>
 void CommDispatcher<testReqs>::do_dispatch(CommTask task) {
-  Timer{stats_.dispatch_time};
+  Timer t_dispatch{stats_.dispatch_time};
 
   auto const req_type = rtlx::to_underlying(task.type);
 
@@ -533,7 +533,7 @@ void CommDispatcher<testReqs>::do_progress(bool force) {
 template <typename mpi::reqsome_op testReqs>
 inline typename CommDispatcher<testReqs>::idx_ranges_t
 CommDispatcher<testReqs>::progress_network(bool force) {
-  Timer{force ? stats_.completion_time : stats_.progress_time};
+  Timer t_progress{force ? stats_.completion_time : stats_.progress_time};
 
   auto const nreqs = req_count();
 
@@ -585,7 +585,7 @@ CommDispatcher<testReqs>::progress_network(bool force) {
 template <typename mpi::reqsome_op testReqs>
 inline void CommDispatcher<testReqs>::trigger_callbacks(
     idx_ranges_t completed) {
-  Timer{stats_.callback_time};
+  Timer t_callback{stats_.callback_time};
   for (auto&& type : range(n_types)) {
     auto first = type == 0 ? std::begin(indices_) : completed[type - 1];
     auto last  = completed[type];

@@ -364,7 +364,7 @@ inline void ring_waitsome_overlap(
 
     {
       timer t_receive{tt.receive};
-      auto local_span =
+      auto  local_span =
           gsl::span{std::next(begin, ctx.rank() * blocksize),
                     std::next(begin, (ctx.rank() + 1) * blocksize)};
 
@@ -470,7 +470,7 @@ inline void ring_waitsome_overlap(
   t_main.finish();
 
   {
-    timer{tt.idle};
+    timer t_idle{tt.idle};
     // We definitely have to wait here because although all data has arrived
     // there might still be pending tasks for other peers (e.g. sends)
     comm_dispatcher.stop_worker();
