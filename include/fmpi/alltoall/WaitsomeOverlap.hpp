@@ -465,7 +465,7 @@ inline void ring_waitsome_overlap(
     timer{tt.idle};
     // We definitely have to wait here because although all data has arrived
     // there might still be pending tasks for other peers (e.g. sends)
-    comm_dispatcher.loop_until_done();
+    comm_dispatcher.stop_worker();
   }
 
   timer t_shutdown{tt.shutdown};
@@ -487,6 +487,7 @@ inline void ring_waitsome_overlap(
   tt.trace().add_time("Tcomm.callback", dispatcher_stats.callback_time);
   tt.trace().add_time("Tcomm.total", dispatcher_stats.total_time);
   tt.trace().add_time("Tcomm.queue_time", dispatcher_stats.queue_time);
+  tt.trace().add_time("Tcomm.life_time", dispatcher_stats.life_time);
   tt.trace().put("Tcomm.high_watermark", dispatcher_stats.high_watermark);
   tt.trace().put("Tcomm.nreqs_completion", dispatcher_stats.nreqs_completion);
 

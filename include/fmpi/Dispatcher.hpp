@@ -236,6 +236,7 @@ class CommDispatcher {
     duration    completion_time{0};
     duration    queue_time{};
     duration    total_time{0};
+    duration    life_time{0};
   };
 
   using channel = SPSCNChannel<CommTask>;
@@ -258,6 +259,8 @@ class CommDispatcher {
   std::condition_variable cv_tasks_;
   // Condition to signal a finished task
   std::condition_variable cv_finished_;
+
+  typename std::chrono::steady_clock::time_point start_{duration{0}};
 
   // flag if dispatcher is busy
   bool busy_{true};
@@ -303,6 +306,8 @@ class CommDispatcher {
       message_type type, F&& callable, Args&&... args);
 
   void loop_until_done();
+
+  void stop_worker();
 
   void start_worker();
 
@@ -397,13 +402,13 @@ template <typename mpi::reqsome_op testReqs>
 inline CommDispatcher<testReqs>::CommDispatcher(
     std::shared_ptr<channel> chan, std::size_t winsz)
   : task_channel_(std::move(chan)) {
+  start_ = std::chrono::steady_clock::now();
   do_reset(winsz);
 }
 
 template <typename mpi::reqsome_op testReqs>
 inline CommDispatcher<testReqs>::~CommDispatcher() {
-  loop_until_done();
-  thread_.join();
+  stop_worker();
 }
 
 template <typename mpi::reqsome_op testReqs>
@@ -608,7 +613,19 @@ template <mpi::reqsome_op testReqs>
 inline void CommDispatcher<testReqs>::loop_until_done() {
   std::unique_lock<std::mutex> lk{mutex_};
 
-  cv_finished_.wait(lk, [this]() { return task_channel_->done() && !busy_; });
+  if (busy_) {
+    cv_finished_.wait(lk, [this]() { return !busy_; });
+  }
+}
+
+template <mpi::reqsome_op testReqs>
+inline void CommDispatcher<testReqs>::stop_worker() {
+  loop_until_done();
+  if (thread_.joinable()) {
+    thread_.join();
+  }
+
+  stats_.life_time = std::chrono::steady_clock::now() - start_;
 }
 
 template <mpi::reqsome_op testReqs>
