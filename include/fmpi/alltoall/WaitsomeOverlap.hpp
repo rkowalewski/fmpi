@@ -310,7 +310,7 @@ inline void ring_waitsome_overlap(
 
   {
     FMPI_DBG("Sending essages");
-    timer{tt.dispatch};
+    timer t_dispatch{tt.dispatch};
 
     for (auto&& r : range(commAlgo.phaseCount(ctx))) {
       auto const rpeer = commAlgo.recvRank(ctx, r);
@@ -330,11 +330,12 @@ inline void ring_waitsome_overlap(
         comm_channel->enqueue(CommTask{message_type::ISEND, send});
       }
     }
+    t_dispatch.finish();
   }
 
   {
+    timer t_comp{tt.compute};
     FMPI_DBG("processing message arrivals...");
-    timer{tt.compute};
 
     // chunks to merge
     // std::vector<chunk>                         chunks;
@@ -462,6 +463,7 @@ inline void ring_waitsome_overlap(
 
       std::move(mergeBuffer.begin(), mergeBuffer.end(), out);
     }
+    t_comp.finish();
   }
 
   t_main.finish();
