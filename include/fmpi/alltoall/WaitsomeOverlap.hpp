@@ -30,7 +30,6 @@ class TimeTrace {
   duration shutdown{0};
   duration compute{0};
   duration idle{0};
-  duration main{0};
 
   TimeTrace(std::string name)
     : name_(std::move(name))
@@ -49,7 +48,6 @@ class TimeTrace {
     trace_.add_time("Tmain.shutdown", shutdown);
     trace_.add_time(kComputationTime, compute);
     trace_.add_time("Tmain.idle", idle);
-    trace_.add_time("Tmain.main", main);
   }
 
   std::string_view name() const noexcept {
@@ -197,7 +195,6 @@ inline void ring_waitsome_overlap(
   auto const nels = static_cast<std::size_t>(ctx.size()) * blocksize;
 
   timer t_init{tt.initialize};
-  timer t_main{tt.main};
 
   Schedule const commAlgo{};
 
@@ -330,11 +327,13 @@ inline void ring_waitsome_overlap(
         comm_channel->enqueue(CommTask{message_type::ISEND, send});
       }
     }
-    t_dispatch.finish();
   }
 
   {
-    timer t_comp{tt.compute};
+    using timer_pause = rtlx::TimerPauseResume<timer>;
+
+    timer t_receive{tt.receive};
+
     FMPI_DBG("processing message arrivals...");
 
     // chunks to merge
@@ -363,8 +362,7 @@ inline void ring_waitsome_overlap(
     pieces.reserve(ctx.size());
 
     {
-      timer t_receive{tt.receive};
-      auto  local_span =
+      auto local_span =
           gsl::span{std::next(begin, ctx.rank() * blocksize),
                     std::next(begin, (ctx.rank() + 1) * blocksize)};
 
@@ -376,6 +374,8 @@ inline void ring_waitsome_overlap(
         pieces.emplace_back(piece{span, &buf_alloc});
 
         if (enough_work(pieces.begin(), pieces.end())) {
+          timer_pause pause_{t_receive};
+          timer       t_comp{tt.compute};
           // merge all chunks
           std::vector<iter_pair> chunks;
           chunks.reserve(pieces.size());
@@ -424,10 +424,10 @@ inline void ring_waitsome_overlap(
           pieces.erase(std::begin(pieces), std::prev(std::end(pieces)));
         }
       }
-      t_receive.finish();
     }
 
     {
+      timer t_comp{tt.compute};
       FMPI_DBG("final merge");
       FMPI_DBG(pieces.size());
 
@@ -464,10 +464,7 @@ inline void ring_waitsome_overlap(
 
       std::move(mergeBuffer.begin(), mergeBuffer.end(), out);
     }
-    t_comp.finish();
   }
-
-  t_main.finish();
 
   {
     timer t_idle{tt.idle};

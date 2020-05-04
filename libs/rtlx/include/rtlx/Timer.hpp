@@ -3,6 +3,8 @@
 
 #include <chrono>
 
+#include <rtlx/Assert.hpp>
+
 namespace rtlx {
 
 template <
@@ -28,13 +30,26 @@ class Timer {
       std::is_same<typename Clock::duration, std::chrono::nanoseconds>::value,
       "inprecise clock");
 
+  enum class state : uint8_t
+  {
+    running,
+    paused,
+    stopped
+  };
+
+  typename Clock::duration& _mark;
+  timepoint                 _start;
+  timepoint                 _stop;
+  state                     _state;
+
  public:
   using duration = typename Clock::duration;
+  using clock    = Clock;
 
   constexpr explicit Timer(duration& marker) noexcept
-    : _done(false)
-    , _mark(marker)
-    , _start(Clock::now()) {
+    : _mark(marker)
+    , _start(Clock::now())
+    , _state(state::running) {
   }
 
   Timer(Timer&&)      = delete;
@@ -46,26 +61,55 @@ class Timer {
     finish();
   }
 
+  void pause() noexcept {
+    RTLX_ASSERT(_state == state::running);
+
+    _mark += elapsed();
+    _state = state::paused;
+  }
+
+  void resume() noexcept {
+    RTLX_ASSERT(_state == state::paused);
+
+    _start = Clock::now();
+    _state = state::running;
+  }
+
   void finish() noexcept {
-    if (_done) {
+    if (_state == state::stopped) {
       return;
     }
 
+    RTLX_ASSERT(_state == state::running);
+
     _stop = Clock::now();
 
-    _mark += std::chrono::duration_cast<duration>(_stop - _start);
+    _mark += elapsed();
 
-    _done = true;
+    _state = state::stopped;
   }
   [[nodiscard]] bool done() const noexcept {
-    return _done;
+    return _state == state::stopped;
   }
 
  private:
-  bool      _done;
-  duration& _mark;
-  timepoint _start;
-  timepoint _stop;
+  duration elapsed() const noexcept {
+    return std::chrono::duration_cast<duration>(Clock::now() - _start);
+  }
+};
+
+template <class Timer>
+class TimerPauseResume {
+  Timer& timer_;
+
+ public:
+  TimerPauseResume(Timer& timer)
+    : timer_(timer) {
+    timer_.pause();
+  }
+  ~TimerPauseResume() {
+    timer_.resume();
+  }
 };
 
 template <class Rep, class Period>
