@@ -354,14 +354,15 @@ inline void ring_waitsome_overlap(
     pieces_t pieces;
     pieces.reserve(ctx.size());
 
-    auto enough_work = [](typename pieces_t::const_iterator c_first,
-                          typename pieces_t::const_iterator c_last) -> bool {
+    auto enough_work = [&config](
+                           typename pieces_t::const_iterator c_first,
+                           typename pieces_t::const_iterator c_last) -> bool {
       // minimum number of chunks to merge: ideally we have a full level2
       // cache
       // constexpr auto op_threshold = (NReqs / 2);
       // return static_cast<std::size_t>(std::distance(c_first, c_last)) > 1
       //        op_threshold;
-      constexpr std::size_t l2cachesize = 1048576;
+      constexpr auto l2cachesize = std::size_t(1048576);
 
       auto const nels = std::accumulate(
           c_first, c_last, std::size_t(0), [](auto acc, auto const& piece) {
@@ -369,7 +370,7 @@ inline void ring_waitsome_overlap(
                              [](auto&& v) -> std::size_t { return v.size(); },
                              piece);
           });
-      return nels >= l2cachesize;
+      return nels >= (l2cachesize * config.num_threads);
     };
 
     {
