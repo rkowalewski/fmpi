@@ -157,97 +157,50 @@ static void BM_TlxMergeParallel(benchmark::State& state) {
   }
 }
 
-#if 0
-static void CustomArguments(benchmark::internal::Benchmark* b) {
-  // std::size_t num_threads = omp_get_max_threads();
+static void BM_StdSort(benchmark::State& state) {
+  using iterator = typename vector_t::iterator;
 
-  // std::size_t num_nodes = 1,2,4,8,16,32,64
-  // std::size_t num_procs = 1,2,4,8
-  // std::size_t num_threads = std::thread::hardware_concurrency() / 2 /
-  // num_procs std::size_t window_sizes = 1,2,4,8,16,32
-  std::size_t num_cpus = std::thread::hardware_concurrency() / 2;
+  auto const blocksize = state.range(0);
+  auto const windowsz  = state.range(1);
 
-  // constexpr std::size_t l1dCache = 32768;
-  constexpr std::size_t l2Cache = 262144;
-  // constexpr std::size_t l3Cache  = 2883584;
+  auto const& world  = mpi::Context::world();
+  auto const& config = fmpi::Config::instance();
 
-#if 0
-  std::vector<int> cpu_names(num_threads);
+  auto const nblocks  = world.size();
 
-#pragma omp parallel default(none) shared(cpu_names)
-  {
-    auto thread_num       = omp_get_thread_num();  // Test
-    int  cpu              = sched_getcpu();
-    cpu_names[thread_num] = cpu;
-  }
+  auto const size = nblocks * blocksize;
 
-  for (auto&& r : fmpi::range(cpu_names.size())) {
-    std::cout << "{" << r << ", " << cpu_names[r] << "}\n";
-  }
-#endif
+  FMPI_DBG(nblocks);
+  FMPI_DBG(size);
 
-  constexpr auto max_blocksize = std::size_t(1) << 20;
-  constexpr auto ndispatchers  = 1;
+  vector_t src(size);
+  vector_t target(size);
 
-  for (std::size_t nn = 64; nn <= 64; nn *= 2) {
-    for (std::size_t np = 4; np <= 4; np *= 2) {
-      for (std::size_t ws = 16; ws <= 16; ws *= 2) {
-        for (std::size_t bytes = sizeof(value_t); bytes <= max_blocksize;
-             bytes *= 8) {
-          long const blocksz = bytes / sizeof(value_t);
-          long const nblocks = nn * np;
-          long const nthreads =
-              (std::thread::hardware_concurrency() / (2 * np)) - ndispatchers;
-
-          omp_set_num_threads(static_cast<int>(nthreads));
-
-          b->Args({nblocks, blocksz, nthreads});
-        }
-      }
-    }
-  }
-
-#if 0
-  for (long i = 1; i <= long(num_cpus); i *= 2) {
-    long const max = l2Cache * i;
-    for (long j = 8; j <= max; j *= 8) {
-      b->Args({omp_get_max_threads(), j});
-    }
-  }
-#endif
-}
-
-static void BM_Sort(benchmark::State& state) {
-  auto const nblocks   = state.range(0);
-  auto const size      = state.range(1) / sizeof(value_t);
-  auto const blocksize = size / nblocks;
-
-  std::vector<value_t> src(size);
-  std::vector<value_t> target(size);
-
-  random(std::begin(src), std::end(src));
-
-  using iterator = typename std::vector<value_t>::iterator;
-
-  std::vector<std::pair<iterator, iterator>> chunks(nblocks);
+  auto chunks = std::vector<std::pair<iterator, iterator>>(nblocks);
 
   for (auto _ : state) {
-    for (auto b = 0; b < nblocks; ++b) {
-      auto f = std::next(src.begin(), b * blocksize);
-      auto l = std::next(f, blocksize);
-      std::sort(f, l);
-      chunks[b] = std::make_pair(f, l);
-    }
-    std::sort(src.begin(), src.end());
-    auto res = std::copy(src.begin(), src.end(), target.begin());
+    state.PauseTiming();
+
+    random(std::begin(src), std::end(src), blocksize, nblocks);
+
+    state.ResumeTiming();
+
+    std::sort(
+        std::begin(src),
+        std::end(src));
+
+    auto res = std::copy(std::begin(src), std::end(src), std::begin(target));
+
     benchmark::DoNotOptimize(res);
+
+    FMPI_ASSERT(res == std::end(target));
+    FMPI_ASSERT(std::is_sorted(std::begin(target), std::end(target)));
   }
 }
-#endif
 
 BENCHMARK(BM_TlxMergeSequential)->Apply(CustomArguments)->UseRealTime();
 BENCHMARK(BM_TlxMergeParallel)->Apply(CustomArguments)->UseRealTime();
-// BENCHMARK(BM_Sort)->Apply(CustomArguments)->UseRealTime();
+BENCHMARK(BM_StdSort)->Apply(CustomArguments)->UseRealTime();
 
 // Run the benchmark
 // BENCHMARK_MAIN();
