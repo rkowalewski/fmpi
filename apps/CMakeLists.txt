@@ -6,10 +6,9 @@ target_link_libraries(mpiPinning PRIVATE
     MPI::MPI_CXX
     rtlx
     fmpi
-    benchmark
 )
 
-add_executable(mergebench mergebench.cc)
+add_executable(mergebench mergebench/mergebench.cc)
 target_link_libraries(mergebench PRIVATE
     fmpi
     benchmark

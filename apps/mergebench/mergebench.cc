@@ -50,7 +50,7 @@ static Params processParams(benchmark::State const& state) {
   params.blocksz  = state.range(1);
   params.windowsz = state.range(2);
 
-  params.nblocks = params.nprocs * params.nprocs;
+  params.nblocks = params.nprocs /* * params.nprocs*/;
 
   params.arraysize = params.nblocks * params.blocksz;
 
@@ -67,14 +67,15 @@ static void CustomArguments(benchmark::internal::Benchmark* b) {
   constexpr auto max_blocksize = std::size_t(1) << 20;
   // constexpr auto ndispatchers  = 1;
 
-  constexpr std::size_t min_procs = 4;
+  constexpr std::size_t min_procs = 16;
   constexpr std::size_t max_procs = debug ? min_procs : 64;
 
   constexpr std::size_t min_blocksz = 256;
   constexpr std::size_t max_blocksz = debug ? min_blocksz : 1 << 20;
 
-  constexpr std::size_t min_winsz = 2;
-  constexpr std::size_t max_winsz = debug ? min_winsz : 32;
+  constexpr std::size_t min_winsz = 4;
+  constexpr std::size_t max_winsz = 4;
+  //constexpr std::size_t max_winsz = debug ? min_winsz : 32;
 
   for (long np = min_procs; np <= max_procs; np *= 2) {
     for (long block_bytes = min_blocksz; block_bytes <= max_blocksz;
