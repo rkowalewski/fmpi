@@ -13,6 +13,52 @@
 
 using value_t = int;
 
+static constexpr bool debug =
+#ifndef NDEBUG
+    true
+#else
+    false
+#endif
+    ;
+
+struct Params {
+  std::size_t nprocs;
+  std::size_t nblocks;
+  std::size_t blocksz;
+  std::size_t windowsz;
+  std::size_t arraysize;
+};
+
+std::ostream& operator<<(std::ostream& os, Params const& p) {
+  std::ostringstream ss;
+
+  ss << "{nprocs: " << p.nprocs << ", ";
+  ss << "nblocks: " << p.nblocks << ", ";
+  ss << "blocksz: " << p.blocksz << ", ";
+  ss << "windowsz: " << p.windowsz << ", ";
+  ss << "arraysize: " << p.arraysize << "}\n";
+
+  os << ss.str();
+
+  return os;
+}
+
+static Params processParams(benchmark::State const& state) {
+  Params params;
+
+  params.nprocs   = state.range(0);
+  params.blocksz  = state.range(1);
+  params.windowsz = state.range(2);
+
+  params.nblocks = params.nprocs * params.nprocs;
+
+  params.arraysize = params.nblocks * params.blocksz;
+
+  FMPI_DBG(params);
+
+  return params;
+}
+
 static void CustomArguments(benchmark::internal::Benchmark* b) {
   std::size_t num_cpus = std::thread::hardware_concurrency() / 2;
 
@@ -21,12 +67,23 @@ static void CustomArguments(benchmark::internal::Benchmark* b) {
   constexpr auto max_blocksize = std::size_t(1) << 20;
   // constexpr auto ndispatchers  = 1;
 
-  for (std::size_t block_bytes = 256; block_bytes <= max_blocksize;
-       block_bytes *= 8) {
-    long const blocksz = block_bytes / sizeof(value_t);
+  constexpr std::size_t min_procs = 4;
+  constexpr std::size_t max_procs = debug ? min_procs : 64;
 
-    for (long ws = 16; ws <= 16; ws *= 2) {
-      b->Args({blocksz, ws});
+  constexpr std::size_t min_blocksz = 256;
+  constexpr std::size_t max_blocksz = debug ? min_blocksz : 1 << 20;
+
+  constexpr std::size_t min_winsz = 2;
+  constexpr std::size_t max_winsz = debug ? min_winsz : 32;
+
+  for (long np = min_procs; np <= max_procs; np *= 2) {
+    for (long block_bytes = min_blocksz; block_bytes <= max_blocksz;
+         block_bytes *= 8) {
+      long const blocksz = block_bytes / sizeof(value_t);
+
+      for (long ws = min_winsz; ws <= max_winsz; ws *= 2) {
+        b->Args({np, blocksz, ws});
+      }
     }
   }
 }
@@ -34,11 +91,6 @@ static void CustomArguments(benchmark::internal::Benchmark* b) {
 template <class Iter>
 static void random(
     Iter first, Iter last, std::size_t blocksz, std::size_t nblocks) {
-  auto const nels = std::size_t(std::distance(first, last));
-
-  FMPI_ASSERT(nels / blocksz == nblocks);
-  FMPI_ASSERT(nels % blocksz == 0);
-
 #pragma omp parallel default(none) firstprivate(first, last, nblocks, blocksz)
   {
     std::random_device r;
@@ -46,10 +98,10 @@ static void random(
     std::mt19937_64    generator(seed_seq);
     std::uniform_int_distribution<value_t> distribution(-1E6, 1E6);
 #pragma omp for
-    for (std::size_t block = 0; block < std::size_t(nblocks); ++block) {
+    for (std::size_t block = 0; block < nblocks; ++block) {
       // generate some random values
       auto bf = std::next(first, block * blocksz);
-      auto bl = std::next(first, (block + 1) * blocksz);
+      auto bl = std::min(std::next(first, (block + 1) * blocksz), last);
 
       std::generate(bf, bl, [&]() { return distribution(generator); });
       // sort it
@@ -63,40 +115,33 @@ using vector_t = std::vector<value_t>;
 static void BM_TlxMergeSequential(benchmark::State& state) {
   using iterator = typename vector_t::iterator;
 
-  auto const blocksize = state.range(0);
-  auto const windowsz  = state.range(1);
+  FMPI_DBG("BM_TlxMergeSequential");
 
   auto const& world  = mpi::Context::world();
   auto const& config = fmpi::Config::instance();
 
-  auto const nblocks = world.size();
+  auto const params = processParams(state);
 
-  auto const size = nblocks * blocksize;
+  vector_t src(params.arraysize);
+  vector_t target(params.arraysize);
 
-  FMPI_DBG(nblocks);
-  FMPI_DBG(size);
-  FMPI_DBG(blocksize);
-
-  vector_t src(size);
-  vector_t target(size);
-
-  auto chunks = std::vector<std::pair<iterator, iterator>>(nblocks);
+  auto chunks = std::vector<std::pair<iterator, iterator>>(params.nblocks);
 
   for (auto _ : state) {
     state.PauseTiming();
 
-    random(std::begin(src), std::end(src), blocksize, nblocks);
+    random(std::begin(src), std::end(src), params.blocksz, params.nblocks);
 
-    for (auto&& b : fmpi::range(nblocks)) {
-      auto f    = std::next(std::begin(src), b * blocksize);
-      auto l    = std::next(f, blocksize);
+    for (auto&& b : fmpi::range(params.nblocks)) {
+      auto f    = std::next(std::begin(src), b * params.blocksz);
+      auto l    = std::next(f, params.blocksz);
       chunks[b] = std::make_pair(f, l);
     }
 
     state.ResumeTiming();
 
     auto res = tlx::multiway_merge(
-        chunks.begin(), chunks.end(), std::begin(target), size);
+        chunks.begin(), chunks.end(), std::begin(target), params.arraysize);
 
     benchmark::DoNotOptimize(res);
 
@@ -108,36 +153,32 @@ static void BM_TlxMergeSequential(benchmark::State& state) {
 static void BM_TlxMergeSequentialRecursive(benchmark::State& state) {
   using iterator = typename vector_t::iterator;
 
-  auto const blocksize = state.range(0);
-  auto const windowsz  = state.range(1);
+  FMPI_DBG("BM_TlxMergeSequentialRecursive");
 
   auto const& world  = mpi::Context::world();
   auto const& config = fmpi::Config::instance();
 
-  auto const nblocks = world.size();
+  auto const params = processParams(state);
 
-  auto const size = nblocks * blocksize;
+  vector_t src(params.arraysize);
+  vector_t target(params.arraysize);
 
-  FMPI_DBG(nblocks);
-  FMPI_DBG(size);
-  FMPI_DBG(windowsz);
-  FMPI_DBG(blocksize);
+  auto chunks = std::vector<std::pair<iterator, iterator>>(params.windowsz);
+  auto processed =
+      std::vector<std::pair<iterator, iterator>>(params.windowsz);
 
-  vector_t src(size);
-  vector_t target(size);
-
-  auto chunks    = std::vector<std::pair<iterator, iterator>>(windowsz);
-  auto processed = std::vector<std::pair<iterator, iterator>>(windowsz);
-
-  std::size_t mergedepth = nblocks / windowsz + ((nblocks % windowsz) > 0);
+  std::size_t mergedepth = params.nblocks / params.windowsz +
+                           ((params.nblocks % params.windowsz) > 0);
   FMPI_DBG(mergedepth);
 
-  auto const window_nels = windowsz * blocksize;
+  auto const window_nels = params.windowsz * params.blocksz;
+
+  FMPI_DBG(window_nels);
 
   for (auto _ : state) {
     state.PauseTiming();
 
-    random(std::begin(src), std::end(src), blocksize, nblocks);
+    random(std::begin(src), std::end(src), params.blocksz, params.nblocks);
 
     state.ResumeTiming();
 
@@ -146,21 +187,22 @@ static void BM_TlxMergeSequentialRecursive(benchmark::State& state) {
     for (auto&& level : fmpi::range(mergedepth)) {
       auto w_first = std::next(std::begin(src), level * window_nels);
 
-      auto const max    = std::distance(w_first, std::end(src));
-      auto       w_last = std::next(w_first, std::min(window_nels, max));
+      auto const max = std::distance(w_first, std::end(src));
+      auto       w_last =
+          std::next(w_first, std::min<std::size_t>(window_nels, max));
 
       auto const n            = std::distance(w_first, w_last);
-      auto const n_blocks_win = std::max<std::size_t>(n / blocksize, 1);
+      auto const n_blocks_win = std::max<std::size_t>(n / params.blocksz, 1);
 
-      for (auto&& b :
-           fmpi::range(std::min<std::size_t>(windowsz, n_blocks_win))) {
-        auto f    = std::next(w_first, b * blocksize);
-        auto l    = std::min(std::next(f, blocksize), w_last);
+      for (auto&& b : fmpi::range(
+               std::min<std::size_t>(params.windowsz, n_blocks_win))) {
+        auto f    = std::next(w_first, b * params.blocksz);
+        auto l    = std::min(std::next(f, params.blocksz), w_last);
         chunks[b] = std::make_pair(f, l);
       }
 
       auto last_it =
-          tlx::multiway_merge(chunks.begin(), chunks.end(), first, size);
+          tlx::multiway_merge(chunks.begin(), chunks.end(), first, n);
 
       processed.emplace_back(first, last_it);
       std::swap(first, last_it);
@@ -172,10 +214,13 @@ static void BM_TlxMergeSequentialRecursive(benchmark::State& state) {
     using simple_vector =
         tlx::SimpleVector<value_t, tlx::SimpleVectorMode::NoInitNoDestroy>;
 
-    auto buffer = simple_vector{size};
+    auto buffer = simple_vector{params.arraysize};
 
     auto last_it = tlx::multiway_merge(
-        processed.begin(), processed.end(), std::begin(buffer), size);
+        processed.begin(),
+        processed.end(),
+        std::begin(buffer),
+        params.arraysize);
 
     auto res =
         std::move(std::begin(buffer), std::end(buffer), std::begin(target));
@@ -188,34 +233,28 @@ static void BM_TlxMergeSequentialRecursive(benchmark::State& state) {
 static void BM_TlxMergeParallel(benchmark::State& state) {
   using iterator = typename vector_t::iterator;
 
-  auto const blocksize = state.range(0);
-  auto const windowsz  = state.range(1);
-
   auto const& world  = mpi::Context::world();
   auto const& config = fmpi::Config::instance();
 
-  auto const nblocks  = world.size();
   auto const nthreads = config.num_threads;
 
-  auto const size = nblocks * blocksize;
+  auto const params = processParams(state);
 
-  FMPI_DBG(nblocks);
-  FMPI_DBG(size);
   FMPI_DBG(nthreads);
 
-  vector_t src(size);
-  vector_t target(size);
+  vector_t src(params.arraysize);
+  vector_t target(params.arraysize);
 
-  auto chunks = std::vector<std::pair<iterator, iterator>>(nblocks);
+  auto chunks = std::vector<std::pair<iterator, iterator>>(params.nblocks);
 
   for (auto _ : state) {
     state.PauseTiming();
 
-    random(std::begin(src), std::end(src), blocksize, nblocks);
+    random(std::begin(src), std::end(src), params.blocksz, params.nblocks);
 
-    for (auto&& b : fmpi::range(nblocks)) {
-      auto f    = std::next(std::begin(src), b * blocksize);
-      auto l    = std::next(f, blocksize);
+    for (auto&& b : fmpi::range(params.nblocks)) {
+      auto f    = std::next(std::begin(src), b * params.blocksz);
+      auto l    = std::next(f, params.blocksz);
       chunks[b] = std::make_pair(f, l);
     }
 
@@ -225,7 +264,7 @@ static void BM_TlxMergeParallel(benchmark::State& state) {
         chunks.begin(),
         chunks.end(),
         std::begin(target),
-        size,
+        params.arraysize,
         std::less<>{},
         tlx::MultiwayMergeAlgorithm::MWMA_ALGORITHM_DEFAULT,
         tlx::MultiwayMergeSplittingAlgorithm::MWMSA_DEFAULT,
@@ -241,38 +280,33 @@ static void BM_TlxMergeParallel(benchmark::State& state) {
 static void BM_TlxMergeParallelRecursive(benchmark::State& state) {
   using iterator = typename vector_t::iterator;
 
-  auto const blocksize = state.range(0);
-  auto const windowsz  = state.range(1);
-
+  auto const  params = processParams(state);
   auto const& world  = mpi::Context::world();
   auto const& config = fmpi::Config::instance();
 
-  auto const nblocks = world.size();
   auto const nthreads = config.num_threads;
 
-  auto const size = nblocks * blocksize;
-
-  FMPI_DBG(nblocks);
-  FMPI_DBG(size);
-  FMPI_DBG(windowsz);
-  FMPI_DBG(blocksize);
   FMPI_DBG(nthreads);
 
-  vector_t src(size);
-  vector_t target(size);
+  vector_t src(params.arraysize);
+  vector_t target(params.arraysize);
 
-  auto chunks    = std::vector<std::pair<iterator, iterator>>(windowsz);
-  auto processed = std::vector<std::pair<iterator, iterator>>(windowsz);
+  auto chunks = std::vector<std::pair<iterator, iterator>>(params.windowsz);
+  auto processed =
+      std::vector<std::pair<iterator, iterator>>(params.windowsz);
 
-  std::size_t mergedepth = nblocks / windowsz + ((nblocks % windowsz) > 0);
+  std::size_t mergedepth = params.nblocks / params.windowsz +
+                           ((params.nblocks % params.windowsz) > 0);
   FMPI_DBG(mergedepth);
 
-  auto const window_nels = windowsz * blocksize;
+  auto const window_nels = params.windowsz * params.blocksz;
+
+  FMPI_DBG(window_nels);
 
   for (auto _ : state) {
     state.PauseTiming();
 
-    random(std::begin(src), std::end(src), blocksize, nblocks);
+    random(std::begin(src), std::end(src), params.blocksz, params.nblocks);
 
     state.ResumeTiming();
 
@@ -281,24 +315,25 @@ static void BM_TlxMergeParallelRecursive(benchmark::State& state) {
     for (auto&& level : fmpi::range(mergedepth)) {
       auto w_first = std::next(std::begin(src), level * window_nels);
 
-      auto const max    = std::distance(w_first, std::end(src));
-      auto       w_last = std::next(w_first, std::min(window_nels, max));
+      auto const max = std::distance(w_first, std::end(src));
+      auto       w_last =
+          std::next(w_first, std::min<std::size_t>(window_nels, max));
 
       auto const n            = std::distance(w_first, w_last);
-      auto const n_blocks_win = std::max<std::size_t>(n / blocksize, 1);
+      auto const n_blocks_win = std::max<std::size_t>(n / params.blocksz, 1);
 
-      for (auto&& b :
-           fmpi::range(std::min<std::size_t>(windowsz, n_blocks_win))) {
-        auto f    = std::next(w_first, b * blocksize);
-        auto l    = std::min(std::next(f, blocksize), w_last);
+      for (auto&& b : fmpi::range(
+               std::min<std::size_t>(params.windowsz, n_blocks_win))) {
+        auto f    = std::next(w_first, b * params.blocksz);
+        auto l    = std::min(std::next(f, params.blocksz), w_last);
         chunks[b] = std::make_pair(f, l);
       }
 
       auto last_it = tlx::parallel_multiway_merge(
           chunks.begin(),
           chunks.end(),
-          std::begin(target),
-          size,
+          first,
+          n,
           std::less<>{},
           tlx::MultiwayMergeAlgorithm::MWMA_ALGORITHM_DEFAULT,
           tlx::MultiwayMergeSplittingAlgorithm::MWMSA_DEFAULT,
@@ -309,15 +344,21 @@ static void BM_TlxMergeParallelRecursive(benchmark::State& state) {
     }
 
     FMPI_ASSERT(first == std::end(target));
-    FMPI_ASSERT(first == std::end(target));
 
     using simple_vector =
         tlx::SimpleVector<value_t, tlx::SimpleVectorMode::NoInitNoDestroy>;
 
-    auto buffer = simple_vector{size};
+    auto buffer = simple_vector{params.arraysize};
 
-    auto last_it = tlx::multiway_merge(
-        processed.begin(), processed.end(), std::begin(buffer), size);
+    auto last_it = tlx::parallel_multiway_merge(
+        processed.begin(),
+        processed.end(),
+        std::begin(buffer),
+        params.arraysize,
+        std::less<>{},
+        tlx::MultiwayMergeAlgorithm::MWMA_ALGORITHM_DEFAULT,
+        tlx::MultiwayMergeSplittingAlgorithm::MWMSA_DEFAULT,
+        nthreads);
 
     auto res =
         std::move(std::begin(buffer), std::end(buffer), std::begin(target));
@@ -330,28 +371,20 @@ static void BM_TlxMergeParallelRecursive(benchmark::State& state) {
 static void BM_StdSort(benchmark::State& state) {
   using iterator = typename vector_t::iterator;
 
-  auto const blocksize = state.range(0);
-  auto const windowsz  = state.range(1);
-
   auto const& world  = mpi::Context::world();
   auto const& config = fmpi::Config::instance();
 
-  auto const nblocks = world.size();
+  auto const params = processParams(state);
 
-  auto const size = nblocks * blocksize;
+  vector_t src(params.arraysize);
+  vector_t target(params.arraysize);
 
-  FMPI_DBG(nblocks);
-  FMPI_DBG(size);
-
-  vector_t src(size);
-  vector_t target(size);
-
-  auto chunks = std::vector<std::pair<iterator, iterator>>(nblocks);
+  auto chunks = std::vector<std::pair<iterator, iterator>>(params.nblocks);
 
   for (auto _ : state) {
     state.PauseTiming();
 
-    random(std::begin(src), std::end(src), blocksize, nblocks);
+    random(std::begin(src), std::end(src), params.blocksz, params.nblocks);
 
     state.ResumeTiming();
 
