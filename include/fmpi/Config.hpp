@@ -12,6 +12,7 @@ namespace fmpi {
 struct Config {
   uint32_t main_core{};
   uint32_t dispatcher_core{};
+  uint32_t num_nodes{};
   // uint32_t scheduler_core{};
   // uint32_t comp_core{};
   uint32_t domain_size{};

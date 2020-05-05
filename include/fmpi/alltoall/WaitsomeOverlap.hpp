@@ -357,11 +357,12 @@ inline void ring_waitsome_overlap(
     auto enough_work = [&config](
                            typename pieces_t::const_iterator c_first,
                            typename pieces_t::const_iterator c_last) -> bool {
-      // minimum number of chunks to merge: ideally we have a full level2
-      // cache
-      // constexpr auto op_threshold = (NReqs / 2);
-      // return static_cast<std::size_t>(std::distance(c_first, c_last)) > 1
-      //        op_threshold;
+    // minimum number of chunks to merge: ideally we have a full level2
+    // cache
+    // constexpr auto op_threshold = (NReqs / 2);
+    // return static_cast<std::size_t>(std::distance(c_first, c_last)) > 1
+    //        op_threshold;
+#if 0
       constexpr auto l2cachesize = std::size_t(1048576);
 
       auto const nels = std::accumulate(
@@ -371,6 +372,12 @@ inline void ring_waitsome_overlap(
                              piece);
           });
       return nels >= (l2cachesize * config.num_threads);
+#else
+      static_cast<void>(config);
+      FMPI_ASSERT(c_first <= c_last);
+      constexpr auto op_threshold = (NReqs / 2);
+      return std::size_t(std::distance(c_first, c_last)) > op_threshold;
+#endif
     };
 
     {

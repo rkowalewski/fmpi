@@ -15,6 +15,7 @@ target_link_libraries(mergebench PRIVATE
     benchmark
     OpenMP::OpenMP_CXX
     tlx
+    rtlx
 )
 
 add_executable(mpiSpsc mpi_spsc.cc)

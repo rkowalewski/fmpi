@@ -8,7 +8,9 @@
 
 namespace mpi {
 
-static MPI_Comm comm_world;
+static MPI_Comm comm_world = MPI_COMM_NULL;
+
+static bool initialized = false;
 
 Context::Context(MPI_Comm comm)
   : m_comm(comm) {
@@ -49,6 +51,8 @@ bool is_thread_main() {
 }
 
 bool initialize(int* argc, char*** argv, ThreadLevel level) {
+  if (initialized) return true;
+
   auto const required = rtlx::to_underlying(level);
   int        provided;
 
@@ -58,7 +62,9 @@ bool initialize(int* argc, char*** argv, ThreadLevel level) {
 
   auto const success = init == MPI_SUCCESS && dup == MPI_SUCCESS;
 
-  return success && required <= provided;
+  initialized = success && required <= provided;
+
+  return initialized;
 }
 
 void finalize() {
