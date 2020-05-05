@@ -73,9 +73,10 @@ static void CustomArguments(benchmark::internal::Benchmark* b) {
   constexpr std::size_t min_blocksz = 256;
   constexpr std::size_t max_blocksz = debug ? min_blocksz : 1 << 20;
 
+  //constexpr std::size_t min_winsz = 32;
+  //constexpr std::size_t max_winsz = debug ? min_winsz : 32;
   constexpr std::size_t min_winsz = 4;
   constexpr std::size_t max_winsz = 4;
-  //constexpr std::size_t max_winsz = debug ? min_winsz : 32;
 
   for (long np = min_procs; np <= max_procs; np *= 2) {
     for (long block_bytes = min_blocksz; block_bytes <= max_blocksz;
