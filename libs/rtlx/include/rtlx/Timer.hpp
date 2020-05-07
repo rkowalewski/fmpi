@@ -7,19 +7,11 @@
 
 namespace rtlx {
 
-template <
-    bool HighResIsSteady = std::chrono::high_resolution_clock::is_steady>
-struct ChooseSteadyClock {
-  using type = std::chrono::high_resolution_clock;
-};
-
-template <>
-struct ChooseSteadyClock<false> {
-  using type = std::chrono::steady_clock;
-};
-
 struct ChooseClockType {
-  using type = ChooseSteadyClock<>::type;
+  using type = std::conditional_t<
+      std::chrono::high_resolution_clock::is_steady,
+      std::chrono::high_resolution_clock,
+      std::chrono::steady_clock>;
 };
 
 template <class Clock = ChooseClockType::type>
