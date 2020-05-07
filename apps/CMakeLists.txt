@@ -8,15 +8,6 @@ target_link_libraries(mpiPinning PRIVATE
     fmpi
 )
 
-add_executable(mergebench mergebench/mergebench.cc)
-target_link_libraries(mergebench PRIVATE
-    fmpi
-    benchmark
-    OpenMP::OpenMP_CXX
-    tlx
-    rtlx
-)
-
 add_executable(mpiSpsc mpi_spsc.cc)
 target_link_libraries(mpiSpsc PRIVATE
     fmpi
@@ -26,3 +17,4 @@ target_link_libraries(mpiSpsc PRIVATE
     rtlx
 )
 
+add_subdirectory(mergebench)
