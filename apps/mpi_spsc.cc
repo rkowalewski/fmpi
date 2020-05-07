@@ -6,7 +6,6 @@
 
 #include <gsl/span>
 
-#include <boost/container/small_vector.hpp>
 #include <boost/lockfree/spsc_queue.hpp>
 #include <fmpi/Dispatcher.hpp>
 #include <fmpi/NumericRange.hpp>
