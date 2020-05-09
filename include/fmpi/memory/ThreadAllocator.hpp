@@ -30,7 +30,7 @@ class ThreadAllocator {
     snmalloc_free(p, size * sizeof(T));
   }
 
-  ThreadAllocator select_on_container_copy_construction() const noexcept {
+  [[nodiscard]] ThreadAllocator select_on_container_copy_construction() const noexcept {
     return *this;
   }
 

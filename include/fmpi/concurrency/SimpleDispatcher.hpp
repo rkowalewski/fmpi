@@ -44,7 +44,7 @@ class SimpleDispatcher {
   std::condition_variable cv_;
   bool                    quit_ = false;
 
-  void dispatch_thread_handler(void);
+  void dispatch_thread_handler();
 };
 
 SimpleDispatcher::SimpleDispatcher() {
@@ -133,7 +133,7 @@ std::future<mpi::return_code> SimpleDispatcher::dispatch(message&& message) {
   return future;
 }
 
-void SimpleDispatcher::dispatch_thread_handler(void) {
+void SimpleDispatcher::dispatch_thread_handler() {
   std::unique_lock<std::mutex> lock(lock_);
 
   do {

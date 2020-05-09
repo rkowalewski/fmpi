@@ -45,11 +45,11 @@ class TraceStore {
 
   void erase(std::string_view);
 
-  bool empty() const noexcept {
+  [[nodiscard]] bool empty() const noexcept {
     return m_traces.empty();
   }
 
-  bool contains(std::string_view key) const {
+  [[nodiscard]] bool contains(std::string_view key) const {
     auto it = m_traces.find(context(key));
     return it != std::end(m_traces) && !it->second.empty();
   }
@@ -94,7 +94,7 @@ class MultiTrace {
 
   duration_t& duration(std::string_view key);
 
-  std::string_view name() const noexcept;
+  [[nodiscard]] std::string_view name() const noexcept;
 
   void merge(MultiTrace&& source);
 

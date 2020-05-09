@@ -83,12 +83,12 @@ class Piece {
     return span_.data();
   }
 
-  constexpr const_iterator data() const noexcept {
+  [[nodiscard]] constexpr const_iterator data() const noexcept {
     return span_.data();
   }
 
   //! return number of items in range
-  constexpr size_type size() const noexcept {
+  [[nodiscard]] constexpr size_type size() const noexcept {
     return span_.size();
   }
 
@@ -97,11 +97,11 @@ class Piece {
     return span_.data();
   }
   //! return constant T* to first element
-  constexpr const_iterator begin() const noexcept {
+  [[nodiscard]] constexpr const_iterator begin() const noexcept {
     return span_.data();
   }
   //! return constant T* to first element
-  constexpr const_iterator cbegin() const noexcept {
+  [[nodiscard]] constexpr const_iterator cbegin() const noexcept {
     return begin();
   }
 
@@ -110,11 +110,11 @@ class Piece {
     return data() + size();
   }
   //! return constant T* beyond last element
-  constexpr const_iterator end() const noexcept {
+  [[nodiscard]] constexpr const_iterator end() const noexcept {
     return data() + size();
   }
   //! return constant T* beyond last element
-  constexpr const_iterator cend() const noexcept {
+  [[nodiscard]] constexpr const_iterator cend() const noexcept {
     return end();
   }
 };

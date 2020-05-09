@@ -39,14 +39,13 @@ Params processParams(benchmark::State const& state) {
 // We can use it to disable output from all but the root process
 class NullReporter : public ::benchmark::BenchmarkReporter {
  public:
-  NullReporter() {
-  }
-  virtual bool ReportContext(const Context&) {
+  NullReporter() = default;
+  bool ReportContext(const Context&) override {
     return true;
   }
-  virtual void ReportRuns(const std::vector<Run>&) {
+  void ReportRuns(const std::vector<Run>&) override {
   }
-  virtual void Finalize() {
+  void Finalize() override {
   }
 };
 

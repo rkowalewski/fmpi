@@ -33,8 +33,8 @@ class BlockAllocator {
   void* allocate(size_t size, std::size_t alignment);
   void  deallocate(void* p);
 
-  size_t getBlockSize() const;
-  size_t getAlignment() const;
+  [[nodiscard]] size_t getBlockSize() const;
+  [[nodiscard]] size_t getAlignment() const;
 
  private:
   struct BlockHeader {
