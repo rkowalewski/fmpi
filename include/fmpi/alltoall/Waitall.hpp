@@ -38,14 +38,19 @@ inline void ring_waitall(
   using buffer_t   = ::tlx::
       SimpleVector<value_type, ::tlx::SimpleVectorMode::NoInitNoDestroy>;
 
+  constexpr auto algorithm_name = std::string_view("Waitall");
+
   auto me = ctx.rank();
   auto nr = ctx.size();
 
-  std::ostringstream os;
-  os << Schedule::NAME << "Waitall" << NReqs;
-  auto trace = rtlx::Trace{os.str()};
-
   auto const schedule = Schedule{};
+
+  using steady_timer = rtlx::Timer<>;
+
+  auto const name = std::string{Schedule::NAME} +
+                    std::string{algorithm_name} + std::to_string(NReqs);
+
+  auto trace = MultiTrace{std::string_view(name)};
 
   FMPI_DBG_STREAM(
       "running algorithm " << os.str() << ", blocksize: " << blocksize);
@@ -68,7 +73,8 @@ inline void ring_waitall(
 
   // auto const phaseCount =
   // static_cast<std::size_t>(schedule.phaseCount(ctx));
-  auto const nrounds = tlx::div_ceil(totalExchanges, reqsInFlight);
+  auto const nrounds =
+      std::int64_t(tlx::div_ceil(totalExchanges, reqsInFlight));
 
   std::vector<std::size_t> mergePsum;
   mergePsum.reserve(nrounds + 2);
@@ -145,7 +151,7 @@ inline void ring_waitall(
   };
 
   {
-    rtlx::TimeTrace give_me_a_name{trace, kCommunicationTime};
+    steady_timer t{trace.duration(kCommunicationTime)};
 
     std::tie(rphase, sphase) =
         moveReqWindow(std::make_pair(rphase, sphase), reqWin);
@@ -162,13 +168,13 @@ inline void ring_waitall(
     std::ignore = win;
 
     {
-      rtlx::TimeTrace give_me_a_name{trace, kCommunicationTime};
+      steady_timer t{trace.duration(kCommunicationTime)};
       std::tie(rphase, sphase) =
           moveReqWindow(std::make_pair(rphase, sphase), reqWin);
     }
 
     {
-      rtlx::TimeTrace give_me_a_name{trace, kComputationTime};
+      steady_timer t{trace.duration(kComputationTime)};
       op(reqWin.ready_pieces(), mergebuf);
       auto const nMerged = reqWin.ready_pieces().size() * blocksize;
       mergebuf += nMerged;
@@ -177,14 +183,14 @@ inline void ring_waitall(
     }
 
     {
-      rtlx::TimeTrace give_me_a_name{trace, kCommunicationTime};
+      steady_timer t{trace.duration(kCommunicationTime)};
       FMPI_CHECK_MPI(mpi::waitall(&(*std::begin(reqs)), &(*std::end(reqs))));
       reqWin.buffer_swap();
     }
   }
 
   {
-    rtlx::TimeTrace give_me_a_name{trace, kComputationTime};
+    steady_timer t{trace.duration(kComputationTime)};
 
     auto mergeSrc = &*out;
     auto target   = buffer.begin();
@@ -220,8 +226,9 @@ inline void ring_waitall(
     }
   }
 
-  trace.put(kCommRounds, nrounds);
+  trace.value<int64_t>(kCommRounds) = nrounds;
 }
+
 namespace detail {
 
 template <class T>

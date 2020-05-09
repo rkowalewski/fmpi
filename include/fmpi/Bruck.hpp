@@ -10,10 +10,10 @@
 #include <fmpi/NumericRange.hpp>
 #include <fmpi/alltoall/Detail.hpp>
 #include <fmpi/concurrency/SimpleDispatcher.hpp>
-
 #include <fmpi/mpi/Algorithm.hpp>
 #include <fmpi/mpi/Environment.hpp>
 #include <fmpi/mpi/Request.hpp>
+#include <fmpi/util/Trace.hpp>
 
 #include <tlx/math/integer_log2.hpp>
 #include <tlx/simple_vector.hpp>
@@ -74,7 +74,10 @@ inline void bruck(
 
   using value_t = typename std::iterator_traits<InputIt>::value_type;
 
-  auto trace = rtlx::Trace{"Bruck"};
+  using namespace std::literals::string_view_literals;
+  auto trace = MultiTrace{"Bruck"sv};
+
+  using steady_timer = rtlx::Timer<>;
 
   // Phase 1: Process i rotates local elements by i blocks to the left in a
   // cyclic manner.
@@ -87,7 +90,7 @@ inline void bruck(
   typename detail::buffer_t<value_t>::iterator recvbuf{};
 
   {
-    rtlx::TimeTrace tt{trace, detail::Trotate};
+    steady_timer tt{trace.duration(detail::Trotate)};
 
     // O(p * blocksize)
     std::rotate_copy(
@@ -126,7 +129,7 @@ inline void bruck(
         mod(me + j, static_cast<mpi::Rank>(nr)));
 
     {
-      rtlx::TimeTrace tt{trace, detail::Tpack};
+      steady_timer tt{trace.duration(detail::Tpack)};
 
       // We exchange all blocks where the j-th bit is set
       auto rng = range<std::size_t>(1, nr);
@@ -153,7 +156,7 @@ inline void bruck(
     }
 
     {
-      rtlx::TimeTrace tt{trace, kCommunicationTime};
+      steady_timer tt{trace.duration(kCommunicationTime)};
 
       FMPI_CHECK_MPI(mpi::isend(
           sendbuf,
@@ -175,7 +178,7 @@ inline void bruck(
     }
 
     {
-      rtlx::TimeTrace tt{trace, detail::Tunpack};
+      steady_timer tt{trace.duration(detail::Tunpack)};
 
       // c) unpack blocks into recv buffer
 #pragma omp parallel for
@@ -205,7 +208,7 @@ inline void bruck(
 #endif
 
   {
-    rtlx::TimeTrace tt{trace, kComputationTime};
+    steady_timer tt{trace.duration(kComputationTime)};
 
     std::vector<std::pair<InputIt, InputIt>> chunks;
     chunks.reserve(nr);
@@ -240,7 +243,10 @@ inline void bruck_indexed(
 
   using value_t = typename std::iterator_traits<InputIt>::value_type;
 
-  auto trace = rtlx::Trace{"Bruck_indexed"};
+  using namespace std::literals::string_view_literals;
+  auto trace = MultiTrace{"Bruck_indexed"sv};
+
+  using steady_timer = rtlx::Timer<>;
 
   // Phase 1: Process i rotates local elements by i blocks to the left in a
   // cyclic manner.
@@ -260,7 +266,7 @@ inline void bruck_indexed(
   MPI_Count    mysize{};
 
   {
-    rtlx::TimeTrace tt{trace, detail::Trotate};
+    steady_timer tt{trace.duration(detail::Trotate)};
 
     // O(p * blocksize)
     std::rotate_copy(
@@ -289,7 +295,7 @@ inline void bruck_indexed(
         mod(me + j, static_cast<mpi::Rank>(nr)));
 
     {
-      rtlx::TimeTrace tt{trace, detail::Tpack};
+      steady_timer tt{trace.duration(detail::Tpack)};
 
       // We exchange all blocks where the j-th bit is set
       auto rng = range<std::size_t>(1, nr);
@@ -353,7 +359,7 @@ inline void bruck_indexed(
     }
 
     {
-      rtlx::TimeTrace tt{trace, kCommunicationTime};
+      steady_timer tt{trace.duration(kCommunicationTime)};
 
       FMPI_CHECK_MPI(mpi::irecv(
           out, 1, packed, recvfrom, kTagBruck, ctx.mpiComm(), &reqs[0]));
@@ -375,7 +381,7 @@ inline void bruck_indexed(
   }
 
   {
-    rtlx::TimeTrace tt{trace, kComputationTime};
+    steady_timer tt{trace.duration(kComputationTime)};
 
     std::vector<std::pair<InputIt, InputIt>> chunks;
     chunks.reserve(nr);
@@ -415,7 +421,10 @@ inline void bruck_interleave(
   auto const                nels = nr * blocksize;
   detail::buffer_t<value_t> buffer{nels};
 
-  auto trace = rtlx::Trace{"Bruck_interleave"};
+  using namespace std::literals::string_view_literals;
+  auto trace = MultiTrace{"Bruck_interleave"sv};
+
+  using steady_timer = rtlx::Timer<>;
 
   if (nr < 3) {
     detail::ring_pairwise_lt3(
@@ -427,7 +436,7 @@ inline void bruck_interleave(
   // cyclic manner.
 
   {
-    rtlx::TimeTrace{trace, detail::Trotate};
+    steady_timer t{trace.duration(detail::Trotate)};
 
     // O(p * blocksize)
     std::rotate_copy(
@@ -481,7 +490,7 @@ inline void bruck_interleave(
 
     // a) pack blocks into a contigous send buffer
     {
-      rtlx::TimeTrace{trace, detail::Tpack};
+      steady_timer t{trace.duration(detail::Tpack)};
 
       auto rng = range<std::size_t>(one, nr);
 
@@ -506,7 +515,7 @@ inline void bruck_interleave(
     }
 
     {
-      rtlx::TimeTrace{trace, kCommunicationTime};
+      steady_timer t{trace.duration(kCommunicationTime)};
 
       FMPI_CHECK_MPI(mpi::irecv(
           recvbuf,
@@ -527,7 +536,7 @@ inline void bruck_interleave(
 
     if (r > 0) {
       {
-        rtlx::TimeTrace{trace, kComputationTime};
+        steady_timer t{trace.duration(kComputationTime)};
         // merge chunks of last iteration...
         // auto const op_first = (r == 1) ? 0 : (one << (r - 1)) * blocksize;
         auto const op_first = merged.back();
@@ -540,7 +549,7 @@ inline void bruck_interleave(
     }
 
     {
-      rtlx::TimeTrace{trace, kCommunicationTime};
+      steady_timer t{trace.duration(kCommunicationTime)};
       FMPI_CHECK_MPI(mpi::waitall(reqs.begin(), reqs.end()));
 
       {
@@ -567,7 +576,7 @@ inline void bruck_interleave(
     {
       // c) unpack blocks which will be forwarded to other processors
       {
-        rtlx::TimeTrace{trace, detail::Tunpack};
+        steady_timer t{trace.duration(detail::Tunpack)};
 
 #pragma omp parallel for
         for (std::size_t block = one << r;
@@ -587,7 +596,7 @@ inline void bruck_interleave(
     std::swap(recvbuf, mergebuf);
   }
 
-  rtlx::TimeTrace tt{trace, kComputationTime};
+  steady_timer tt{trace.duration(kComputationTime)};
 
   auto const nchunks = niter;
 
@@ -649,7 +658,10 @@ inline void bruck_interleave_dispatch(
   auto const                nels = nr * blocksize;
   detail::buffer_t<value_t> buffer{nels};
 
-  auto trace = rtlx::Trace{"Bruck_interleave_dispatch"};
+  using namespace std::literals::string_view_literals;
+  auto trace = MultiTrace{"Bruck_interleave_dispatch"sv};
+
+  using steady_timer = rtlx::Timer<>;
 
   if (nr < 3) {
     detail::ring_pairwise_lt3(
@@ -661,7 +673,7 @@ inline void bruck_interleave_dispatch(
   // cyclic manner.
 
   {
-    rtlx::TimeTrace tt{trace, detail::Trotate};
+    steady_timer tt{trace.duration(detail::Trotate)};
 
     // O(p * blocksize)
     std::rotate_copy(
@@ -714,7 +726,7 @@ inline void bruck_interleave_dispatch(
 
     // a) pack blocks into a contigous send buffer
     {
-      rtlx::TimeTrace tt{trace, detail::Tpack};
+      steady_timer tt{trace.duration(detail::Tpack)};
 
       auto rng = range<std::size_t>(one, nr);
 
@@ -738,7 +750,7 @@ inline void bruck_interleave_dispatch(
       }
     }
 
-    rtlx::TimeTrace tdispatch{trace, detail::Tdispatch};
+    steady_timer tdispatch{trace.duration(detail::Tdispatch)};
 
     auto recv = Message(
         gsl::span<value_t>(recvbuf, blocksize * blocks.size()),
@@ -757,7 +769,7 @@ inline void bruck_interleave_dispatch(
     tdispatch.finish();
 
     if (r > 0) {
-      rtlx::TimeTrace{trace, kComputationTime};
+      steady_timer t{trace.duration(kComputationTime)};
       // merge chunks of last iteration...
       // auto const op_first = (r == 1) ? 0 : (one << (r - 1)) * blocksize;
       auto const op_first = merged.back();
@@ -769,8 +781,8 @@ inline void bruck_interleave_dispatch(
     }
 
     {
-      rtlx::TimeTrace{trace, kCommunicationTime};
-      auto const success = future.get();
+      steady_timer t{trace.duration(kCommunicationTime)};
+      auto const   success = future.get();
       FMPI_CHECK_MPI(success);
 
       {
@@ -797,7 +809,7 @@ inline void bruck_interleave_dispatch(
     {
       // c) unpack blocks which will be forwarded to other processors
       {
-        rtlx::TimeTrace{trace, detail::Tunpack};
+        steady_timer t{trace.duration(detail::Tunpack)};
 
 #pragma omp parallel for
         for (std::size_t block = one << r;
@@ -817,7 +829,7 @@ inline void bruck_interleave_dispatch(
     std::swap(recvbuf, mergebuf);
   }
 
-  rtlx::TimeTrace tt{trace, kComputationTime};
+  steady_timer tt{trace.duration(kComputationTime)};
 
   auto const nchunks = niter;
 
@@ -874,12 +886,15 @@ inline void bruck_mod(
 
   using value_t = typename std::iterator_traits<InputIt>::value_type;
 
-  auto trace = rtlx::Trace{"Bruck_Mod"};
+  using namespace std::literals::string_view_literals;
+  auto trace = MultiTrace{"Bruck_Mod"sv};
+
+  using steady_timer = rtlx::Timer<>;
 
   auto const nels = size_t(nr) * blocksize;
 
   {
-    rtlx::TimeTrace tt{trace, detail::Trotate};
+    steady_timer tt{trace.duration(detail::Trotate)};
 
     // TODO(rkowalewski): this can be more efficient
     if (isPow2(nr)) {
@@ -937,7 +952,7 @@ inline void bruck_mod(
     // a) pack blocks into a contigous send buffer
 
     {
-      rtlx::TimeTrace tt{trace, detail::Tpack};
+      steady_timer tt{trace.duration(detail::Tpack)};
 
       // We exchange all blocks where the j-th bit is set
       for (auto&& idx : range<std::size_t>(me + (me == 0), me + nr)) {
@@ -962,7 +977,7 @@ inline void bruck_mod(
     }
 
     {
-      rtlx::TimeTrace tt{trace, kCommunicationTime};
+      steady_timer tt{trace.duration(kCommunicationTime)};
 
       // b) exchange
       FMPI_CHECK_MPI(mpi::sendrecv(
@@ -980,8 +995,8 @@ inline void bruck_mod(
     // c) unpack blocks into recv buffer
 
     {
-      rtlx::TimeTrace tt{trace, detail::Tunpack};
-      auto            rng = range<std::size_t>(1, nr);
+      steady_timer tt{trace.duration(detail::Tunpack)};
+      auto         rng = range<std::size_t>(1, nr);
       // We exchange all blocks where the j-th bit is set
       std::copy_if(
           std::begin(rng), std::end(rng), std::begin(blocks), [j](auto idx) {
@@ -1004,7 +1019,7 @@ inline void bruck_mod(
   }
 
   {
-    rtlx::TimeTrace tt{trace, kComputationTime};
+    steady_timer tt{trace.duration(kComputationTime)};
 
     std::vector<std::pair<InputIt, InputIt>> chunks;
     chunks.reserve(nr);

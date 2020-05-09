@@ -1,11 +1,14 @@
 #ifndef FMPI_ALLTOALL_DETAIL_HPP
 #define FMPI_ALLTOALL_DETAIL_HPP
 
+#include <vector>
+
 #include <fmpi/Constants.hpp>
 #include <fmpi/mpi/Algorithm.hpp>
 #include <fmpi/mpi/Environment.hpp>
+#include <fmpi/util/Trace.hpp>
 
-#include <rtlx/Trace.hpp>
+#include <rtlx/Timer.hpp>
 
 #include <tlx/simple_vector.hpp>
 
@@ -19,8 +22,9 @@ inline void ring_pairwise_lt3(
     int                 blocksize,
     mpi::Context const& ctx,
     Op&&                op,
-    rtlx::Trace&        trace) {
-  using value_type = typename std::iterator_traits<OutputIt>::value_type;
+    MultiTrace&         multi_trace) {
+  using value_type   = typename std::iterator_traits<OutputIt>::value_type;
+  using steady_timer = rtlx::Timer<>;
 
   using merge_buffer_t =
       tlx::SimpleVector<value_type, tlx::SimpleVectorMode::NoInitNoDestroy>;
@@ -34,7 +38,7 @@ inline void ring_pairwise_lt3(
       std::make_pair(begin + me * blocksize, begin + (me + 1) * blocksize));
 
   if (ctx.size() == 1) {
-    rtlx::TimeTrace tt(trace, kComputationTime);
+    steady_timer t{multi_trace.duration(kComputationTime)};
     op(chunks, out);
     return;
   }
@@ -42,7 +46,7 @@ inline void ring_pairwise_lt3(
   auto other = static_cast<mpi::Rank>(1 - me);
 
   {
-    rtlx::TimeTrace tt(trace, kCommunicationTime);
+    steady_timer t{multi_trace.duration(kCommunicationTime)};
     FMPI_CHECK_MPI(mpi::sendrecv(
         begin + other * blocksize,
         blocksize,
@@ -56,7 +60,7 @@ inline void ring_pairwise_lt3(
   }
 
   {
-    rtlx::TimeTrace tt(trace, kComputationTime);
+    steady_timer t{multi_trace.duration(kComputationTime)};
 
     chunks.emplace_back(std::make_pair(
         out + other * blocksize, out + (other + 1) * blocksize));
@@ -66,7 +70,7 @@ inline void ring_pairwise_lt3(
     std::move(buffer.begin(), buffer.end(), out);
   }
 
-  trace.put(kCommRounds, 1);
+  multi_trace.value<int64_t>(kCommRounds) = 1;
 }
 }  // namespace detail
 }  // namespace fmpi

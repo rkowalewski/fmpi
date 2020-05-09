@@ -6,6 +6,7 @@ add_library(fmpi
     mpi/Environment.cc
     mpi/Rank.cc
     mpi/Request.cc
+    util/Trace.cc
     common/Porting.cc
     Schedule.cc
     Config.cc

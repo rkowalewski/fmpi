@@ -112,13 +112,14 @@ inline void ring_waitsome(
   auto const nr = ctx.size();
   auto const me = ctx.rank();
 
-  std::ostringstream os;
-  os << Schedule::NAME << "Waitsome" << NReqs;
+  constexpr auto algorithm_name = std::string_view("Waitsome");
+  auto const     name           = std::string{Schedule::NAME} +
+                    std::string{algorithm_name} + std::to_string(NReqs);
 
-  auto trace = rtlx::Trace{os.str()};
+  auto trace = MultiTrace{std::string_view(name)};
 
   FMPI_DBG_STREAM(
-      "running algorithm " << os.str() << ", blocksize: " << blocksize);
+      "running algorithm " << trace.name() << ", blocksize: " << blocksize);
 
   if (nr < 3) {
     detail::ring_pairwise_lt3(
@@ -126,7 +127,10 @@ inline void ring_waitsome(
     return;
   }
 
-  rtlx::TimeTrace t_prepare{trace, kCommunicationTime};
+  using namespace std::literals::string_view_literals;
+  using steady_timer = rtlx::Timer<>;
+
+  steady_timer t_init{trace.duration("initialize"sv)};
 
   constexpr auto winreqs = 2 * NReqs;
 
@@ -239,19 +243,20 @@ inline void ring_waitsome(
   auto              d_first    = out;
 
   // Yes, this is an int due to API requirements in our trace module
-  int n_comm_rounds = 0;
+  int nrounds = 0;
 
   // Indices smaller than the pivot are receive requests, then we have send
   // requests
   auto sreqs_pivot = std::next(indices->begin(), reqsInFlight);
 
-  t_prepare.finish();
+  t_init.finish();
 
   do {
-    rtlx::TimeTrace t_comm{trace, kCommunicationTime};
-    ++n_comm_rounds;
+    steady_timer t_comm{trace.duration(kCommunicationTime)};
 
-    FMPI_DBG(n_comm_rounds);
+    ++nrounds;
+
+    FMPI_DBG(nrounds);
 
     FMPI_DBG("receiving...");
     FMPI_DBG(nSlotsRecv);
@@ -351,17 +356,17 @@ inline void ring_waitsome(
 
     FMPI_DBG(arrived_chunks.size());
 
-    t_comm.finish();
-
     {
+      using scoped_timer_switch = rtlx::ScopedTimerSwitch<steady_timer>;
+
       auto const n =
           std::distance(std::begin(arrived_chunks), std::end(arrived_chunks));
 
       using diff_type = decltype(n);
 
       if (n >= static_cast<diff_type>(utilization_threshold)) {
-        // trace communication
-        rtlx::TimeTrace t_comp{trace, kComputationTime};
+        steady_timer        t_comp{trace.duration(kComputationTime)};
+        scoped_timer_switch switcher{t_comm, t_comp};
 
         auto [last_piece, d_last] = detail::apply_compute(
             arrived_chunks.begin(),
@@ -384,11 +389,11 @@ inline void ring_waitsome(
     }
   } while (nc_reqs < total_reqs);
 
-  trace.put(kCommRounds, n_comm_rounds);
+  trace.value<int64_t>(kCommRounds) = nrounds;
 
   {
-    rtlx::TimeTrace t_comp{trace, kComputationTime};
-    auto const      nels = static_cast<std::size_t>(nr) * blocksize;
+    steady_timer t_comp{trace.duration(kComputationTime)};
+    auto const   nels = static_cast<std::size_t>(nr) * blocksize;
 
     using merge_buffer_t =
         tlx::SimpleVector<value_type, tlx::SimpleVectorMode::NoInitNoDestroy>;

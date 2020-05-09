@@ -115,6 +115,10 @@ int main(int argc, char* argv[]) {
     write_csv_header(std::cout);
   }
 
+  int wait = 0;
+  while(wait);
+
+
   // calibrate clock
   auto clock           = SynchronizedClock{};
   bool is_clock_synced = clock.Init(world.mpiComm());
@@ -170,7 +174,7 @@ int main(int argc, char* argv[]) {
         }
       }
 
-      auto& traceStore = rtlx::TraceStore::instance();
+      auto& traceStore = fmpi::TraceStore::instance();
 
       // first we want to obtain the correct result which we can verify then
       // with our own algorithms
@@ -256,15 +260,17 @@ void write_csv_header(std::ostream& os) {
 }
 
 std::ostream& operator<<(
-    std::ostream& os, typename rtlx::TraceStore::value_t const& v) {
+    std::ostream& os, typename fmpi::TraceStore::mapped_type const& v) {
   std::visit([&os](auto const& val) { os << val; }, v);
   return os;
 }
 
 void write_csv_line(
-    std::ostream&                                                     os,
-    Measurement const&                                                params,
-    std::pair<std::string, typename rtlx::TraceStore::value_t> const& entry) {
+    std::ostream&      os,
+    Measurement const& params,
+    std::pair<
+        typename fmpi::TraceStore::key_type,
+        typename fmpi::TraceStore::mapped_type> const& entry) {
   std::ostringstream myos;
   myos << params.nhosts << ", ";
   myos << params.nprocs << ", ";

@@ -35,9 +35,11 @@ struct Measurement {
 void write_csv_header(std::ostream& os);
 
 void write_csv_line(
-    std::ostream&                                                     os,
-    Measurement const&                                                params,
-    std::pair<std::string, typename rtlx::TraceStore::value_t> const& entry);
+    std::ostream&      os,
+    Measurement const& params,
+    std::pair<
+        typename fmpi::TraceStore::key_type,
+        typename fmpi::TraceStore::mapped_type> const& entry);
 
 template <
     class RandomAccessIterator1,
@@ -62,12 +64,11 @@ auto run_algorithm(
     int                 blocksize,
     mpi::Context const& comm,
     Computation&&       op) {
-  using timer    = rtlx::Timer<>;
-  using duration = typename timer::duration;
+  using duration = typename rtlx::steady_timer::duration;
 
   duration d{};
   {
-    timer t{d};
+    rtlx::steady_timer t{d};
     f(begin, out, blocksize, comm, std::forward<Computation>(op));
   }
   return d;

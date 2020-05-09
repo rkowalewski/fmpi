@@ -9,11 +9,12 @@
 
 #include <fmpi/mpi/Algorithm.hpp>
 #include <fmpi/mpi/Environment.hpp>
+#include <fmpi/util/Trace.hpp>
 
 #include <tlx/simple_vector.hpp>
 
 #include <rtlx/Assert.hpp>
-#include <rtlx/Trace.hpp>
+#include <rtlx/Timer.hpp>
 
 namespace fmpi {
 
@@ -30,12 +31,13 @@ inline void mpi_alltoall(
 
   auto nr = ctx.size();
 
-  auto trace = rtlx::Trace{kAlltoall};
+  auto trace         = MultiTrace{kAlltoall};
+  using steady_timer = rtlx::Timer<>;
 
   std::unique_ptr<value_type[]> rbuf;
 
   {
-    rtlx::TimeTrace tt(trace, kCommunicationTime);
+    steady_timer tt{trace.duration(kCommunicationTime)};
 
     rbuf = std::unique_ptr<value_type[]>(new value_type[nr * blocksize]);
 
@@ -44,7 +46,7 @@ inline void mpi_alltoall(
   }
 
   {
-    rtlx::TimeTrace tt(trace, kComputationTime);
+    steady_timer tt{trace.duration(kComputationTime)};
 
     std::vector<std::pair<InputIt, InputIt>> chunks;
     chunks.reserve(nr);

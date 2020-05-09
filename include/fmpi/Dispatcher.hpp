@@ -27,6 +27,7 @@
 #include <fmpi/common/Porting.hpp>
 #include <fmpi/container/buffered_channel.hpp>
 #include <fmpi/mpi/Request.hpp>
+#include <fmpi/util/Trace.hpp>
 
 namespace fmpi {
 
@@ -147,7 +148,7 @@ class SPSCNChannel {
   }
 
   bool enqueue(value_type const& task) {
-    timer t_enqueue{stats_.enqueue_time};
+    timer      t_enqueue{stats_.enqueue_time};
     auto const status = channel_.push(task);
     auto const ret    = status == channel_op_status::success;
 
@@ -224,22 +225,24 @@ class CommDispatcher {
   using req_idx_t    = simple_vector<int>;
   using idx_ranges_t = std::array<int*, n_types>;
 
- public:
-  struct Statistics {
-    // modified internally, read externally
-    std::size_t high_watermark{};
-    std::size_t iterations{};
-    std::size_t nreqs_completion{};
-    duration    dispatch_time{0};
-    duration    callback_time{0};
-    duration    progress_time{0};
-    duration    completion_time{0};
-    duration    queue_time{};
-    duration    total_time{0};
-    duration    life_time{0};
-    duration    thread_time{0};
-  };
+  static constexpr auto high_watermark =
+      std::string_view("Tcomm.high_watermark");
+  static constexpr auto iterations = kCommRounds;
+  static constexpr auto nreqs_completion =
+      std::string_view("Tcomm.nreqs_completion");
+  static constexpr auto dispatch_time =
+      std::string_view("Tcomm.dispatch_time");
+  static constexpr auto callback_time =
+      std::string_view("Tcomm.callback_time");
+  static constexpr auto progress_time =
+      std::string_view("Tcomm.progress_time");
+  static constexpr auto completion_time =
+      std::string_view("Tcomm.completion_time");
+  static constexpr auto total_time = std::string_view("Tcomm.total_time");
 
+  using Statistics = MultiTrace;
+
+ public:
   using channel = SPSCNChannel<CommTask>;
 
  private:
@@ -252,7 +255,7 @@ class CommDispatcher {
   std::array<signal_list, n_types>   signals_{};
   std::array<callback_list, n_types> callbacks_{};
 
-  Statistics stats_{};
+  MultiTrace stats_{""};
 
   // Mutex to protect work sharing variables
   mutable std::mutex mutex_;
@@ -260,9 +263,6 @@ class CommDispatcher {
   std::condition_variable cv_tasks_;
   // Condition to signal a finished task
   std::condition_variable cv_finished_;
-
-  typename std::chrono::steady_clock::time_point start_tp_{duration{0}};
-  typename std::chrono::steady_clock::time_point life_tp_{duration{0}};
 
   // flag if dispatcher is busy
   bool busy_{true};
@@ -317,7 +317,7 @@ class CommDispatcher {
 
   void pinToCore(int coreId);
 
-  Statistics stats() const;
+  Statistics& stats() noexcept;
 
  private:
   std::size_t req_count() const noexcept;
@@ -404,9 +404,6 @@ template <typename mpi::reqsome_op testReqs>
 inline CommDispatcher<testReqs>::CommDispatcher(
     std::shared_ptr<channel> chan, std::size_t winsz)
   : task_channel_(std::move(chan)) {
-  using clock = typename rtlx::ChooseClockType::type;
-  life_tp_    = clock::now();
-
   do_reset(winsz);
 }
 
@@ -417,9 +414,6 @@ inline CommDispatcher<testReqs>::~CommDispatcher() {
 
 template <typename mpi::reqsome_op testReqs>
 inline void CommDispatcher<testReqs>::start_worker() {
-  using clock = typename rtlx::ChooseClockType::type;
-  start_tp_   = clock::now();
-
   thread_ = std::thread([this]() { worker(); });
 }
 
@@ -441,7 +435,7 @@ inline void CommDispatcher<testReqs>::worker() {
     }
   };
 
-  Timer t_total{stats_.total_time};
+  Timer t_total{stats_.duration(total_time)};
 
   while (auto const tasks =
              HasTasks{backlog_.size(), !task_channel_->done()}) {
@@ -458,10 +452,10 @@ inline void CommDispatcher<testReqs>::worker() {
           backlog_.pop(req_type);
         }
       }
-      stats_.high_watermark = std::max(stats_.high_watermark, n_backlog);
+      auto& hw = stats_.value<int64_t>(high_watermark);
+      hw       = std::max<int64_t>(hw, n_backlog);
     }
     while (req_capacity()) {
-      Timer t_queue{stats_.queue_time};
       CommTask task{};
       // if we fail, there are two reasons...
       // either the timeout is hit without popping an element
@@ -484,8 +478,8 @@ inline void CommDispatcher<testReqs>::worker() {
   }
 
   {
-    constexpr auto force_progress = true;
-    stats_.nreqs_completion       = req_count();
+    constexpr auto force_progress           = true;
+    stats_.value<int64_t>(nreqs_completion) = req_count();
     do_progress(force_progress);
   }
 
@@ -501,7 +495,7 @@ inline void CommDispatcher<testReqs>::worker() {
 
 template <typename mpi::reqsome_op testReqs>
 void CommDispatcher<testReqs>::do_dispatch(CommTask task) {
-  Timer t_dispatch{stats_.dispatch_time};
+  Timer t_dispatch{stats_.duration(dispatch_time)};
 
   auto const req_type = rtlx::to_underlying(task.type);
 
@@ -533,7 +527,8 @@ void CommDispatcher<testReqs>::do_progress(bool force) {
 template <typename mpi::reqsome_op testReqs>
 inline typename CommDispatcher<testReqs>::idx_ranges_t
 CommDispatcher<testReqs>::progress_network(bool force) {
-  Timer t_progress{force ? stats_.completion_time : stats_.progress_time};
+  Timer t_progress{force ? stats_.duration(completion_time)
+                         : stats_.duration(progress_time)};
 
   auto const nreqs = req_count();
 
@@ -543,7 +538,7 @@ CommDispatcher<testReqs>::progress_network(bool force) {
     return empty_ranges;
   }
 
-  stats_.iterations++;
+  stats_.value<int64_t>(iterations)++;
 
   auto op = force ? detail::dispatch_waitall : testReqs;
 
@@ -585,7 +580,7 @@ CommDispatcher<testReqs>::progress_network(bool force) {
 template <typename mpi::reqsome_op testReqs>
 inline void CommDispatcher<testReqs>::trigger_callbacks(
     idx_ranges_t completed) {
-  Timer t_callback{stats_.callback_time};
+  Timer t_callback{stats_.duration(callback_time)};
   for (auto&& type : range(n_types)) {
     auto first = type == 0 ? std::begin(indices_) : completed[type - 1];
     auto last  = completed[type];
@@ -611,8 +606,8 @@ inline void CommDispatcher<testReqs>::pinToCore(int coreId) {
 }
 
 template <mpi::reqsome_op testReqs>
-typename CommDispatcher<testReqs>::Statistics
-CommDispatcher<testReqs>::stats() const {
+typename CommDispatcher<testReqs>::Statistics&
+CommDispatcher<testReqs>::stats() noexcept {
   return stats_;
 }
 
@@ -627,17 +622,11 @@ inline void CommDispatcher<testReqs>::loop_until_done() {
 
 template <mpi::reqsome_op testReqs>
 inline void CommDispatcher<testReqs>::stop_worker() {
-  using clock = typename rtlx::ChooseClockType::type;
-
   loop_until_done();
-
-  stats_.thread_time = clock::now() - start_tp_;
 
   if (thread_.joinable()) {
     thread_.join();
   }
-
-  stats_.life_time = clock::now() - life_tp_;
 }
 
 template <mpi::reqsome_op testReqs>
