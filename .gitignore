@@ -6,3 +6,4 @@ logs
 results
 plots
 compile_commands.json
+log.*
