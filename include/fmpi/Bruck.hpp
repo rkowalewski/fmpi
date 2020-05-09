@@ -3,7 +3,7 @@
 
 #include <mpi.h>
 
-#include <fmpi/Constants.hpp>
+#include <fmpi/Config.hpp>
 #include <fmpi/Function.hpp>
 #include <fmpi/Math.hpp>
 #include <fmpi/Message.hpp>

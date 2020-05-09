@@ -8,7 +8,7 @@
 #include <queue>
 #include <utility>
 
-#include <fmpi/Constants.hpp>
+#include <fmpi/Config.hpp>
 #include <fmpi/Function.hpp>
 #include <fmpi/Message.hpp>
 #include <fmpi/Pinning.hpp>

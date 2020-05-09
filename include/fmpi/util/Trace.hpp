@@ -9,7 +9,7 @@
 
 #include <rtlx/Timer.hpp>
 
-#include <fmpi/Constants.hpp>
+#include <fmpi/Config.hpp>
 
 namespace fmpi {
 

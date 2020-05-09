@@ -1,4 +1,4 @@
-#include <fmpi/Constants.hpp>
+#include <fmpi/Config.hpp>
 #include <fmpi/Operation.hpp>
 
 namespace fmpi {

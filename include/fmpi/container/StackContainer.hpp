@@ -3,7 +3,7 @@
 
 #include <vector>
 
-#include <fmpi/Constants.hpp>
+#include <fmpi/Config.hpp>
 
 #include <tlx/stack_allocator.hpp>
 

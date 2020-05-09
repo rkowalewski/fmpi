@@ -3,7 +3,7 @@
 
 #include <vector>
 
-#include <fmpi/Constants.hpp>
+#include <fmpi/Config.hpp>
 #include <fmpi/mpi/Algorithm.hpp>
 #include <fmpi/mpi/Environment.hpp>
 #include <fmpi/util/Trace.hpp>
