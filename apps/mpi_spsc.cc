@@ -9,6 +9,7 @@
 #include <boost/lockfree/spsc_queue.hpp>
 #include <fmpi/Dispatcher.hpp>
 #include <fmpi/NumericRange.hpp>
+#include <fmpi/Pinning.hpp>
 #include <fmpi/allocator/ContiguousPoolAllocator.hpp>
 #include <fmpi/allocator/HeapAllocator.hpp>
 #include <fmpi/concurrency/Async.hpp>
@@ -86,7 +87,7 @@ int main(int argc, char* argv[]) {
 int run() {
   mpi::Context const world{MPI_COMM_WORLD};
 
-  auto const& pinning = fmpi::Config::instance();
+  auto const& pinning = fmpi::Pinning::instance();
 
   FMPI_DBG(pinning);
 

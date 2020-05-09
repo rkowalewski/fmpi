@@ -11,8 +11,6 @@
 #include <fmpi/container/StackContainer.hpp>
 #include <fmpi/container/buffered_channel.hpp>
 
-#include <rtlx/Trace.hpp>
-
 #include <tlx/container/ring_buffer.hpp>
 
 namespace fmpi {
@@ -128,7 +126,6 @@ inline void ring_waitsome(
   }
 
   using namespace std::literals::string_view_literals;
-  using steady_timer = rtlx::Timer<>;
 
   steady_timer t_init{trace.duration("initialize"sv)};
 

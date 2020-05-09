@@ -103,7 +103,7 @@ int main(int argc, char* argv[]) {
 
     if (me < ppn) {
       os << "  MPI Rank " << me << "\n";
-      fmpi::print_config(os);
+      fmpi::print_pinning(os);
     }
 
     std::cout << os.str();

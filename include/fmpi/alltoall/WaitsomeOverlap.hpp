@@ -5,7 +5,7 @@
 #include <utility>
 
 #include <boost/container/flat_map.hpp>
-#include <fmpi/Config.hpp>
+#include <fmpi/Pinning.hpp>
 #include <fmpi/Dispatcher.hpp>
 #include <fmpi/allocator/HeapAllocator.hpp>
 #include <fmpi/alltoall/Detail.hpp>
@@ -137,11 +137,10 @@ inline void ring_waitsome_overlap(
     int                 blocksize,
     mpi::Context const& ctx,
     Op&&                op) {
-  using steady_timer = rtlx::Timer<>;
 
   constexpr auto algorithm_name = std::string_view("WaitsomeOverlap");
 
-  auto const& config = Config::instance();
+  auto const& config = Pinning::instance();
 
   using value_type = typename std::iterator_traits<InputIt>::value_type;
 

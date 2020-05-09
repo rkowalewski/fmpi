@@ -31,7 +31,6 @@ class Timer {
 
   typename Clock::duration& _mark;
   timepoint                 _start;
-  timepoint                 _stop;
   state                     _state;
 
  public:
@@ -54,29 +53,25 @@ class Timer {
   }
 
   void pause() noexcept {
-    RTLX_ASSERT(_state == state::running);
+    if (_state != state::running) return;
 
-    _mark += elapsed();
+    _mark += Clock::now() - _start;
     _state = state::paused;
   }
 
   void resume() noexcept {
-    RTLX_ASSERT(_state == state::paused);
+    if (_state != state::paused) return;
 
     _start = Clock::now();
     _state = state::running;
   }
 
-  void finish() noexcept {
+  void finish() {
     if (_state == state::stopped) {
       return;
+    } else if (_state == state::running) {
+      _mark += Clock::now() - _start;
     }
-
-    RTLX_ASSERT(_state == state::running);
-
-    _stop = Clock::now();
-
-    _mark += elapsed();
 
     _state = state::stopped;
   }
@@ -84,25 +79,30 @@ class Timer {
     return _state == state::stopped;
   }
 
- private:
-  duration elapsed() const noexcept {
-    return std::chrono::duration_cast<duration>(Clock::now() - _start);
+  [[nodiscard]] bool running() const noexcept {
+    return _state == state::running;
   }
 };
 
 template <class Timer>
-class TimerPauseResume {
-  Timer& timer_;
+class ScopedTimerSwitch {
+  Timer& current_;
+  Timer& other_;
 
  public:
-  TimerPauseResume(Timer& timer)
-    : timer_(timer) {
-    timer_.pause();
+  ScopedTimerSwitch(Timer& current, Timer& other) noexcept
+    : current_(current)
+    , other_(other) {
+    current_.pause();
+    other_.resume();
   }
-  ~TimerPauseResume() {
-    timer_.resume();
+  ~ScopedTimerSwitch() {
+    other_.pause();
+    current_.resume();
   }
 };
+
+using steady_timer = Timer<>;
 
 template <class Rep, class Period>
 constexpr double to_seconds(const std::chrono::duration<Rep, Period>& d) {

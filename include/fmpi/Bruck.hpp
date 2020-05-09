@@ -18,8 +18,6 @@
 #include <tlx/math/integer_log2.hpp>
 #include <tlx/simple_vector.hpp>
 
-#include <rtlx/Trace.hpp>
-
 namespace fmpi {
 
 namespace detail {
@@ -76,8 +74,6 @@ inline void bruck(
 
   using namespace std::literals::string_view_literals;
   auto trace = MultiTrace{"Bruck"sv};
-
-  using steady_timer = rtlx::Timer<>;
 
   // Phase 1: Process i rotates local elements by i blocks to the left in a
   // cyclic manner.
@@ -245,8 +241,6 @@ inline void bruck_indexed(
 
   using namespace std::literals::string_view_literals;
   auto trace = MultiTrace{"Bruck_indexed"sv};
-
-  using steady_timer = rtlx::Timer<>;
 
   // Phase 1: Process i rotates local elements by i blocks to the left in a
   // cyclic manner.
@@ -423,8 +417,6 @@ inline void bruck_interleave(
 
   using namespace std::literals::string_view_literals;
   auto trace = MultiTrace{"Bruck_interleave"sv};
-
-  using steady_timer = rtlx::Timer<>;
 
   if (nr < 3) {
     detail::ring_pairwise_lt3(
@@ -661,8 +653,6 @@ inline void bruck_interleave_dispatch(
   using namespace std::literals::string_view_literals;
   auto trace = MultiTrace{"Bruck_interleave_dispatch"sv};
 
-  using steady_timer = rtlx::Timer<>;
-
   if (nr < 3) {
     detail::ring_pairwise_lt3(
         begin, out, blocksize, ctx, std::forward<Op&&>(op), trace);
@@ -888,8 +878,6 @@ inline void bruck_mod(
 
   using namespace std::literals::string_view_literals;
   auto trace = MultiTrace{"Bruck_Mod"sv};
-
-  using steady_timer = rtlx::Timer<>;
 
   auto const nels = size_t(nr) * blocksize;
 

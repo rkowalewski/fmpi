@@ -5,7 +5,6 @@
 #include <regex>
 
 #include <rtlx/Timer.hpp>
-#include <rtlx/Trace.hpp>
 #include <rtlx/UnorderedMap.hpp>
 
 #include <fmpi/AlltoAll.hpp>

@@ -2,9 +2,9 @@
 
 #include "benchmark.hpp"
 
-#include <fmpi/Config.hpp>
 #include <fmpi/Debug.hpp>
 #include <fmpi/NumericRange.hpp>
+#include <fmpi/Pinning.hpp>
 #include <fmpi/mpi/Environment.hpp>
 
 #include <tlx/algorithm.hpp>
@@ -69,7 +69,7 @@ static void BM_TlxMergeSequential(benchmark::State& state) {
 static void BM_TlxMergeParallel(benchmark::State& state) {
   using iterator = typename container::iterator;
 
-  auto const& config = fmpi::Config::instance();
+  auto const& config = fmpi::Pinning::instance();
 
   auto const nthreads = config.num_threads;
 

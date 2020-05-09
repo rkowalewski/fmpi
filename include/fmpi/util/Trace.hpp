@@ -2,11 +2,12 @@
 #define FMPI_UTIL_TRACE_HPP
 #include <chrono>
 #include <string>
+#include <tuple>
 #include <variant>
 
 #include <boost/container/flat_map.hpp>
 
-#include <fmpi/Debug.hpp>
+#include <rtlx/Timer.hpp>
 
 namespace fmpi {
 
@@ -32,7 +33,7 @@ class TraceStore {
   TraceStore& operator=(const TraceStore& rhs) = delete;
 
   static constexpr auto enabled() noexcept -> bool {
-#ifdef RTLX_ENABLE_TRACE
+#ifdef FMPI_ENABLE_TRACE
     return true;
 #else
     return false;
@@ -105,6 +106,8 @@ class MultiTrace {
   cache            values_{};
   std::string_view name_;
 };
+
+using steady_timer = rtlx::steady_timer;
 
 }  // namespace fmpi
 #endif

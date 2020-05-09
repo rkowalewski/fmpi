@@ -5,8 +5,8 @@
 #include <thread>
 #include <vector>
 
-#include <fmpi/Config.hpp>
 #include <fmpi/Debug.hpp>
+#include <fmpi/Pinning.hpp>
 #include <fmpi/common/Porting.hpp>
 #include <fmpi/mpi/Environment.hpp>
 
@@ -29,12 +29,12 @@ static uint32_t num_world_nodes() {
   return nodes;
 }
 
-fmpi::Config const& fmpi::Config::instance() {
-  static fmpi::Config config{};
+fmpi::Pinning const& fmpi::Pinning::instance() {
+  static fmpi::Pinning config{};
   return config;
 }
 
-fmpi::Config::Config() {
+fmpi::Pinning::Pinning() {
   {
     int flag;
     FMPI_CHECK_MPI(MPI_Initialized(&flag));
@@ -88,7 +88,7 @@ fmpi::Config::Config() {
   }
 }
 
-std::ostream& fmpi::operator<<(std::ostream& os, const Config& pinning) {
+std::ostream& fmpi::operator<<(std::ostream& os, const Pinning& pinning) {
   os << "{ rank: " << pinning.main_core;
   os << ", dispatcher: " << pinning.dispatcher_core;
   // os << ", scheduler: " << pinning.scheduler_core;
@@ -97,8 +97,8 @@ std::ostream& fmpi::operator<<(std::ostream& os, const Config& pinning) {
   return os;
 }
 
-void fmpi::print_config(std::ostream& os) {
-  auto const& config = Config::instance();
+void fmpi::print_pinning(std::ostream& os) {
+  auto const& config = Pinning::instance();
 
   constexpr int width = 20;
 

@@ -32,7 +32,6 @@ inline void mpi_alltoall(
   auto nr = ctx.size();
 
   auto trace         = MultiTrace{kAlltoall};
-  using steady_timer = rtlx::Timer<>;
 
   std::unique_ptr<value_type[]> rbuf;
 

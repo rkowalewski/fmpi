@@ -24,7 +24,6 @@ inline void ring_pairwise_lt3(
     Op&&                op,
     MultiTrace&         multi_trace) {
   using value_type   = typename std::iterator_traits<OutputIt>::value_type;
-  using steady_timer = rtlx::Timer<>;
 
   using merge_buffer_t =
       tlx::SimpleVector<value_type, tlx::SimpleVectorMode::NoInitNoDestroy>;

@@ -4,6 +4,7 @@
 #include <rtlx/Assert.hpp>
 
 #ifndef NDEBUG
+
 #include <dbg.h>
 #include <mpi.h>
 

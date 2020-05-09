@@ -8,10 +8,10 @@
 #include <queue>
 #include <utility>
 
-#include <fmpi/Config.hpp>
 #include <fmpi/Constants.hpp>
 #include <fmpi/Function.hpp>
 #include <fmpi/Message.hpp>
+#include <fmpi/Pinning.hpp>
 #include <fmpi/concurrency/UnlockGuard.hpp>
 #include <fmpi/mpi/TypeMapper.hpp>
 
@@ -49,7 +49,7 @@ class SimpleDispatcher {
 
 SimpleDispatcher::SimpleDispatcher() {
   thread_ = std::thread(&SimpleDispatcher::dispatch_thread_handler, this);
-  auto const& config = Config::instance();
+  auto const& config = Pinning::instance();
   pinThreadToCore(thread_, config.dispatcher_core);
 }
 

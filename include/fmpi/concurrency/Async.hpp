@@ -3,7 +3,7 @@
 
 #include <future>
 
-#include <fmpi/Config.hpp>
+//#include <fmpi/Pinning.hpp>
 #include <fmpi/Debug.hpp>
 #include <fmpi/Function.hpp>
 #include <fmpi/common/Porting.hpp>

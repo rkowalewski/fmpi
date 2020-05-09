@@ -3,7 +3,6 @@
 
 #include <mpi.h>
 
-#include <fmpi/Config.hpp>
 #include <fmpi/Debug.hpp>
 #include <fmpi/NumericRange.hpp>
 
@@ -13,7 +12,6 @@
 #include <tlx/simple_vector.hpp>
 
 #include <rtlx/Assert.hpp>
-#include <rtlx/Trace.hpp>
 
 // Other AllToAll Algorithms
 

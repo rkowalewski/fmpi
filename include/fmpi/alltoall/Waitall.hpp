@@ -10,8 +10,6 @@
 #include <fmpi/mpi/Environment.hpp>
 #include <fmpi/mpi/Request.hpp>
 
-#include <rtlx/Trace.hpp>
-
 #include <tlx/math/div_ceil.hpp>
 #include <tlx/simple_vector.hpp>
 
@@ -44,8 +42,6 @@ inline void ring_waitall(
   auto nr = ctx.size();
 
   auto const schedule = Schedule{};
-
-  using steady_timer = rtlx::Timer<>;
 
   auto const name = std::string{Schedule::NAME} +
                     std::string{algorithm_name} + std::to_string(NReqs);
