@@ -9,6 +9,8 @@
 
 #include <rtlx/Timer.hpp>
 
+#include <fmpi/Constants.hpp>
+
 namespace fmpi {
 
 class TraceStore {
@@ -32,18 +34,12 @@ class TraceStore {
   TraceStore(const TraceStore& src) = delete;
   TraceStore& operator=(const TraceStore& rhs) = delete;
 
-  static constexpr auto enabled() noexcept -> bool {
-#ifdef FMPI_ENABLE_TRACE
-    return true;
-#else
-    return false;
-#endif
-  }
-
   template <class InputIterator>
   void insert(std::string_view ctx, InputIterator first, InputIterator last) {
-    if (enabled() && std::distance(first, last) > 0) {
-      m_traces[context(ctx)].insert(first, last);
+    if constexpr(kEnableTrace) {
+      if (std::distance(first, last) > 0) {
+        m_traces[context(ctx)].insert(first, last);
+      }
     }
   }
 

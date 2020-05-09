@@ -1,0 +1,12 @@
+#ifndef FMPI_IMPL_IN_CONFIG_HPP
+#error "do not include this file directly, use config.hpp"
+#endif
+
+#include <cstddef>
+
+//=== options ===//
+// clang-format off
+#cmakedefine01 FMPI_ENABLE_TRACE
+#cmakedefine FMPI_CACHELEVEL2_SIZE ${FMPI_CACHELEVEL2_SIZE}
+#cmakedefine FMPI_CACHELEVEL3_SIZE ${FMPI_CACHELEVEL3_SIZE}
+// clang-format on

@@ -16,26 +16,25 @@ add_library(fmpi
 
 set(MI_OVERRIDE OFF)
 
-target_include_directories(fmpi PUBLIC ../include)
+target_include_directories(fmpi PUBLIC ../include ${CMAKE_CURRENT_BINARY_DIR})
 
-target_link_libraries(fmpi PUBLIC MPI::MPI_CXX OpenMP::OpenMP_CXX Boost::boost dbg_macro GSL tlx rtlx)
+target_link_libraries(fmpi PUBLIC
+    MPI::MPI_CXX
+    OpenMP::OpenMP_CXX
+    Boost::boost
+    dbg_macro
+    GSL
+    tlx
+    rtlx)
+
 target_compile_options(fmpi PUBLIC ${OpenMP_CXX_FLAGS})
 
 target_link_libraries(fmpi PRIVATE snmalloc_lib)
 
-if(HWLOC_FOUND)
-    target_link_libraries(fmpi PRIVATE fmpi::hwloc)
-    target_compile_definitions (fmpi PRIVATE FMPI_USEHWLOC)
-endif()
-
-if (UNIX)
-    execute_process(COMMAND getconf LEVEL3_CACHE_SIZE
-        OUTPUT_VARIABLE _l3CacheSize OUTPUT_STRIP_TRAILING_WHITESPACE)
-    execute_process(COMMAND getconf LEVEL2_CACHE_SIZE
-        OUTPUT_VARIABLE _l2CacheSize OUTPUT_STRIP_TRAILING_WHITESPACE)
-    target_compile_definitions (fmpi PRIVATE FMPI_CACHELEVEL3_SIZE=${_l3CacheSize})
-    target_compile_definitions (fmpi PRIVATE FMPI_CACHELEVEL2_SIZE=${_l2CacheSize})
-endif()
+execute_process(COMMAND getconf LEVEL3_CACHE_SIZE
+    OUTPUT_VARIABLE FMPI_CACHELEVEL3_SIZE OUTPUT_STRIP_TRAILING_WHITESPACE)
+execute_process(COMMAND getconf LEVEL2_CACHE_SIZE
+    OUTPUT_VARIABLE FMPI_CACHELEVEL2_SIZE OUTPUT_STRIP_TRAILING_WHITESPACE)
 
 if ("${CMAKE_BUILD_TYPE}" MATCHES ".*(D|d)ebug$")
     target_compile_definitions (fmpi PRIVATE DBG_MACRO_NO_WARNING)
@@ -59,6 +58,9 @@ endif()
 if (OVERLOADED_VIRTUAL_SUPPORTED)
     target_compile_options(fmpi PUBLIC -Woverloaded-virtual)
 endif()
+
+# configure config file
+configure_file("Config.hpp.in" "${CMAKE_CURRENT_BINARY_DIR}/config_impl.hpp")
 
 #if (REDUNDANT_DECLS_SUPPORTED)
 #    target_compile_options(fmpi PUBLIC -Wredundant-decls)
