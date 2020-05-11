@@ -5,25 +5,36 @@
 nprocs="$1"
 
 # Number of cores
-np="$(getconf _NPROCESSORS_ONLN)"
-ncores="${2:-$((np/2))}"
+ncores="${2:-$(getconf _NPROCESSORS_ONLN)}"
+ncpus="$((ncores / 2))"
 
-comp_threads="$(((ncores / nprocs) - 1))"
-comm_threads="1"
+hyperthreading="${3:-0}"
 
-domain_size="$((comp_threads + comm_threads))"
+rank="$4"
+
+# comp_cpus="$(((ncores / nprocs) - 1 - hyperthreading))"
+
+domain_size="$((ncpus / nprocs))"
+comm_cpus="1"
+comp_cpus="$((domain_size - comm_cpus))"
+
+# echo "$ncpus, $nprocs, $comp_cpus, $domain_size"
 
 _places=""
-for d in $(seq 0 $((nprocs-1)))
-do
-  first_place="$((d*domain_size + comm_threads))"
-  for p in $(seq $first_place $((first_place + comp_threads-1)))
+  first_place="$((rank*domain_size + comm_cpus))"
+  last_place="$((first_place + comp_cpus -1))"
+  for p in $(seq $first_place $last_place)
   do
-    _places="$_places,{$p,$((p+$ncores))}"
+    ht="$((p+$ncpus))"
+    if [[ "$hyperthreading" -eq 0 ]]; then
+      _places="$_places,{$p,$ht}"
+    else
+      _places="$_places,{$p},{$ht}"
+    fi
   done
-done
 
 echo "${_places#?}"
+
 
 
 

@@ -24,25 +24,29 @@
 #SBATCH --nodes=<<NUM_NODES>>
 #SBATCH --ntasks-per-node=<<NUM_PROCS>>
 
-#Important
-module load slurm_setup
-module load hwloc
-module unload gcc
-module load gcc/9
+. ./jobs/env.impi.gcc9.sh
 
 unset KMP_AFFINITY
 
-#export OMP_NUM_THREADS=<<NUM_THREADS>>
+num_procs="<<NUM_PROCS>>"
+num_nodes="<<NUM_NODES>>"
+num_comp_threads="<<NUM_THREADS>>"
 
-export FMPI_DOMAIN_SIZE="$((48 / <<NUM_PROCS>>))"
-export OMP_NUM_THREADS="$((FMPI_DOMAIN_SIZE - 1))"
-export OMP_PROC_BIND="true"
-export OMP_PLACES="$(./scripts/genPlaces.sh <<NUM_PROCS>>)"
+num_mgmt_threads="1"
+num_threads_domain="$((num_comp_threads + num_mgmt_threads))"
 
+ncores="$(getconf _NPROCESSORS_ONLN)"
 
-mpiexec \
-    -env I_MPI_PIN_DOMAIN $((96 / <<NUM_PROCS>>)) \
-    -env I_MPI_PIN_ORDER compact \
-    -n $SLURM_NTASKS  \
-    build.release/benchmark/twoSidedAlgorithms \
-    $SLURM_JOB_NUM_NODES <<ARGS>>
+ht_enabled="0"
+
+if [[ "$((num_procs * num_threads_domain))" -gt "$((ncores / 2))" ]]; then
+  ht_enabled="1"
+fi
+
+mpiexec -n $((num_procs * num_nodes)) \
+    -genv OMP_NUM_THREADS="$num_comp_threads" \
+    -genv FMPI_ENABLE_HT="$ht_enabled" \
+    -genv FMPI_HW_CORES="$ncores" \
+    ./jobs/impi_omp.sh \
+    "build.release/benchmark/twoSidedAlgorithms" \
+    <<ARGS>>

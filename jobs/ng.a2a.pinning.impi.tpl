@@ -25,23 +25,14 @@
 #SBATCH --ntasks-per-node=<<NUM_PROCS>>
 
 #Important
-module load slurm_setup
-module load hwloc
 
-# Note: We do not need any additional pinning here.
-# Intel MPI is smart enough and can handle both hyperthreading and
-# non hyperthreading cases here
+. ./jobs/env.impi.gcc9.sh
 
 unset KMP_AFFINITY
 
-export OMP_NUM_THREADS="<<NUM_THREADS>>"
-export OMP_PROC_BIND="true"
-export OMP_PLACES="$(./scripts/genPlaces.sh <<NUM_PROCS>>)"
-echo "places: $OMP_PLACES"
-export I_MPI_DEBUG="4"
-
 mpiexec -n $((<<NUM_PROCS>> * <<NUM_NODES>>)) \
-    -env I_MPI_PIN_DOMAIN $((96 / <<NUM_PROCS>>)) \
-    -env I_MPI_PIN_ORDER spread \
-    ./build.release/apps/mpiPinning
+    -genv OMP_NUM_THREADS=<<NUM_THREADS>> \
+    -genv FMPI_ENABLE_HT=0 \
+    -genv FMPI_HW_CORES="$(getconf _NPROCESSORS_ONLN)" \
+    ./jobs/impi_omp.sh "./build.release/apps/mpiPinning"
 

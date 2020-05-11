@@ -28,6 +28,7 @@ int main(int argc, char** argv) {
 
   int nplaces = omp_get_num_places();
   printf("omp_get_num_places: %d\n", nplaces);
+  printf("omp_get_max_threads: %d\n", omp_get_max_threads());
 
   std::vector<int> myprocs;
   for (int i = 0; i < nplaces; ++i) {
