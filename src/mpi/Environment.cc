@@ -1,9 +1,8 @@
 #include <mpi.h>
 
-#include <fmpi/Debug.hpp>
+#include <fmpi/detail/Assert.hpp>
 #include <fmpi/mpi/Environment.hpp>
 
-#include <rtlx/Assert.hpp>
 #include <rtlx/Enum.hpp>
 
 namespace mpi {
@@ -17,24 +16,22 @@ Context::Context(MPI_Comm comm)
   int sz;
 
   int rank;
-  RTLX_ASSERT_RETURNS(MPI_Comm_size(m_comm, &sz), MPI_SUCCESS);
+  FMPI_CHECK_MPI(MPI_Comm_size(m_comm, &sz));
   m_size = sz;
 
-  RTLX_ASSERT_RETURNS(MPI_Comm_rank(m_comm, &rank), MPI_SUCCESS);
+  FMPI_CHECK_MPI(MPI_Comm_rank(m_comm, &rank));
   m_rank = Rank{rank};
 }
 
 auto splitSharedComm(Context const& baseComm) -> Context {
   MPI_Comm sharedComm;
   // split world into shared memory communicator
-  RTLX_ASSERT_RETURNS(
-      MPI_Comm_split_type(
-          baseComm.mpiComm(),
-          MPI_COMM_TYPE_SHARED,
-          0,
-          MPI_INFO_NULL,
-          &sharedComm),
-      MPI_SUCCESS);
+  FMPI_CHECK_MPI(MPI_Comm_split_type(
+      baseComm.mpiComm(),
+      MPI_COMM_TYPE_SHARED,
+      0,
+      MPI_INFO_NULL,
+      &sharedComm));
 
   return Context{sharedComm};
 }
@@ -68,7 +65,7 @@ bool initialize(int* argc, char*** argv, ThreadLevel level) {
 }
 
 void finalize() {
-  RTLX_ASSERT_RETURNS(MPI_Comm_free(&comm_world), MPI_SUCCESS);
-  RTLX_ASSERT_RETURNS(MPI_Finalize(), MPI_SUCCESS);
+  FMPI_CHECK_MPI(MPI_Comm_free(&comm_world));
+  FMPI_CHECK_MPI(MPI_Finalize());
 }
 }  // namespace mpi

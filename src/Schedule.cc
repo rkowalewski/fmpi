@@ -20,7 +20,7 @@ auto FlatHandshake::recvRank(Context const& comm, uint32_t phase) -> Rank {
 }
 
 auto FlatHandshake::hypercube(Context const& comm, uint32_t phase) -> Rank {
-  RTLX_ASSERT(isPow2(comm.size()));
+  FMPI_ASSERT(isPow2(comm.size()));
   return comm.rank() ^ static_cast<Rank>(phase);
 }
 

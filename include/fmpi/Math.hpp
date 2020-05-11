@@ -2,8 +2,9 @@
 #define FMPI_MATH_HPP
 
 #include <climits>
-#include <rtlx/Assert.hpp>
 #include <type_traits>
+
+#include <fmpi/detail/Assert.hpp>
 
 namespace fmpi {
 
@@ -14,7 +15,7 @@ inline constexpr auto mod(T a, T b, std::true_type /*unused*/) -> T
 {
   static_assert(std::is_signed<T>::value, "only signed types allowed");
   auto const zero = T{0};
-  RTLX_ASSERT(b > zero);
+  FMPI_ASSERT(b > zero);
   return (a < zero) ? (a % b + b) : (a % b);
 }
 

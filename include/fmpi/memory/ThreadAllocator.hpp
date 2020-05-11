@@ -1,9 +1,9 @@
-#ifndef FMPI_MEMORY_STDALLOCATOR_HPP
-#define FMPI_MEMORY_STDALLOCATOR_HPP
+#ifndef FMPI_MEMORY_THREADALLOCATOR_HPP
+#define FMPI_MEMORY_THREADALLOCATOR_HPP
 
 #include <cstddef>
 
-#include <fmpi/Debug.hpp>
+#include <fmpi/detail/Assert.hpp>
 #include <fmpi/memory/detail/pointer_arithmetic.hpp>
 
 namespace fmpi {
@@ -30,7 +30,8 @@ class ThreadAllocator {
     snmalloc_free(p, size * sizeof(T));
   }
 
-  [[nodiscard]] ThreadAllocator select_on_container_copy_construction() const noexcept {
+  [[nodiscard]] ThreadAllocator select_on_container_copy_construction() const
+      noexcept {
     return *this;
   }
 

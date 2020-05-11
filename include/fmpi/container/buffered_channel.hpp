@@ -22,7 +22,7 @@
 #include <tlx/math.hpp>
 
 #include <fmpi/Config.hpp>
-#include <fmpi/Debug.hpp>
+#include <fmpi/detail/Assert.hpp>
 
 namespace fmpi {
 

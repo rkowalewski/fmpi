@@ -1,12 +1,13 @@
 #include <omp.h>
 
 #include <iomanip>
+#include <iterator>
 #include <thread>
 #include <vector>
 
-#include <fmpi/Debug.hpp>
 #include <fmpi/Pinning.hpp>
 #include <fmpi/common/Porting.hpp>
+#include <fmpi/detail/Assert.hpp>
 #include <fmpi/mpi/Environment.hpp>
 
 #include <fmpi/concurrency/CacheLocality.hpp>

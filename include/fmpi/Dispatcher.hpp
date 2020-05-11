@@ -602,7 +602,7 @@ inline void CommDispatcher<testReqs>::trigger_callbacks(
 template <mpi::reqsome_op testReqs>
 inline void CommDispatcher<testReqs>::pinToCore(int coreId) {
   auto const pin_success = pinThreadToCore(thread_, coreId);
-  RTLX_ASSERT(pin_success);
+  FMPI_ASSERT(pin_success);
 }
 
 template <mpi::reqsome_op testReqs>

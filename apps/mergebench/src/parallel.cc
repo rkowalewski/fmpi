@@ -2,6 +2,8 @@
 
 #include "benchmark.hpp"
 
+#include <cassert>
+
 #include <fmpi/Debug.hpp>
 #include <fmpi/NumericRange.hpp>
 #include <fmpi/Pinning.hpp>
@@ -61,8 +63,8 @@ static void BM_TlxMergeSequential(benchmark::State& state) {
 
     benchmark::DoNotOptimize(res);
 
-    FMPI_ASSERT(res == std::end(target));
-    FMPI_ASSERT(std::is_sorted(std::begin(target), std::end(target)));
+    assert(res == std::end(target));
+    assert(std::is_sorted(std::begin(target), std::end(target)));
   }
 }
 
@@ -110,8 +112,8 @@ static void BM_TlxMergeParallel(benchmark::State& state) {
 
     benchmark::DoNotOptimize(res);
 
-    FMPI_ASSERT(res == std::end(target));
-    FMPI_ASSERT(std::is_sorted(std::begin(target), std::end(target)));
+    assert(res == std::end(target));
+    assert(std::is_sorted(std::begin(target), std::end(target)));
   }
 }
 
@@ -141,8 +143,8 @@ static void BM_StdSort(benchmark::State& state) {
 
     benchmark::DoNotOptimize(res);
 
-    FMPI_ASSERT(res == std::end(target));
-    FMPI_ASSERT(std::is_sorted(std::begin(target), std::end(target)));
+    assert(res == std::end(target));
+    assert(std::is_sorted(std::begin(target), std::end(target)));
   }
 }
 

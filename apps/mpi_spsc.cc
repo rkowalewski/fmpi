@@ -7,6 +7,15 @@
 #include <gsl/span>
 
 #include <boost/lockfree/spsc_queue.hpp>
+#include <cassert>
+#include <future>
+#include <iostream>
+#include <numeric>
+#include <random>
+#include <rtlx/ScopedLambda.hpp>
+#include <sstream>
+#include <thread>
+
 #include <fmpi/Dispatcher.hpp>
 #include <fmpi/NumericRange.hpp>
 #include <fmpi/Pinning.hpp>
@@ -17,14 +26,6 @@
 #include <fmpi/mpi/Algorithm.hpp>
 #include <fmpi/mpi/Environment.hpp>
 #include <fmpi/mpi/Request.hpp>
-#include <future>
-#include <iostream>
-#include <numeric>
-#include <random>
-#include <rtlx/Assert.hpp>
-#include <rtlx/ScopedLambda.hpp>
-#include <sstream>
-#include <thread>
 
 const unsigned long QUEUE_SIZE     = 5L;
 const unsigned long TOTAL_ELEMENTS = QUEUE_SIZE * 10L;
@@ -169,7 +170,7 @@ int run() {
             message.comm(),
             &req);
 
-        FMPI_ASSERT(ret == MPI_SUCCESS);
+        assert(ret == MPI_SUCCESS);
         return ret;
       });
 
@@ -241,7 +242,7 @@ int run() {
     std::cout << "computation done...\n";
   }
 
-  FMPI_ASSERT(ret == rbuf.end());
+  assert(ret == rbuf.end());
 
   if (!std::equal(std::begin(rbuf), std::end(rbuf), std::begin(expect))) {
     throw std::runtime_error("invalid result");

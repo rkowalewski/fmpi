@@ -4,9 +4,8 @@
 #include <mpi.h>
 
 #include <fmpi/Config.hpp>
-#include <fmpi/Debug.hpp>
 #include <fmpi/NumericRange.hpp>
-
+#include <fmpi/detail/Assert.hpp>
 #include <fmpi/mpi/Algorithm.hpp>
 #include <fmpi/mpi/Environment.hpp>
 #include <fmpi/util/Trace.hpp>
@@ -31,7 +30,7 @@ inline void mpi_alltoall(
 
   auto nr = ctx.size();
 
-  auto trace         = MultiTrace{kAlltoall};
+  auto trace = MultiTrace{kAlltoall};
 
   std::unique_ptr<value_type[]> rbuf;
 

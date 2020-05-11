@@ -86,8 +86,8 @@ static void BM_TlxMergeSequentialRecursive(benchmark::State& state) {
       std::swap(first, last_it);
     }
 
-    FMPI_ASSERT(first == std::end(target));
-    FMPI_ASSERT(first == std::end(target));
+    assert(first == std::end(target));
+    assert(first == std::end(target));
 
     using simple_vector =
         tlx::SimpleVector<value_t, tlx::SimpleVectorMode::NoInitNoDestroy>;
@@ -100,15 +100,15 @@ static void BM_TlxMergeSequentialRecursive(benchmark::State& state) {
         std::begin(buffer),
         params.arraysize);
 
-    FMPI_ASSERT(last_it == std::end(buffer));
+    assert(last_it == std::end(buffer));
 
     auto res =
         std::move(std::begin(buffer), std::end(buffer), std::begin(target));
 
     benchmark::DoNotOptimize(res);
 
-    FMPI_ASSERT(res == std::end(target));
-    FMPI_ASSERT(std::is_sorted(std::begin(target), std::end(target)));
+    assert(res == std::end(target));
+    assert(std::is_sorted(std::begin(target), std::end(target)));
   }
 }
 
@@ -180,7 +180,7 @@ static void BM_TlxMergeParallelRecursive(benchmark::State& state) {
       std::swap(first, last_it);
     }
 
-    FMPI_ASSERT(first == std::end(target));
+    assert(first == std::end(target));
 
     using simple_vector =
         tlx::SimpleVector<value_t, tlx::SimpleVectorMode::NoInitNoDestroy>;
@@ -197,13 +197,13 @@ static void BM_TlxMergeParallelRecursive(benchmark::State& state) {
         tlx::MultiwayMergeSplittingAlgorithm::MWMSA_DEFAULT,
         nthreads);
 
-    FMPI_ASSERT(last_it == std::end(buffer));
+    assert(last_it == std::end(buffer));
 
     auto res =
         std::move(std::begin(buffer), std::end(buffer), std::begin(target));
 
-    FMPI_ASSERT(res == std::end(target));
-    FMPI_ASSERT(std::is_sorted(std::begin(target), std::end(target)));
+    assert(res == std::end(target));
+    assert(std::is_sorted(std::begin(target), std::end(target)));
 
     benchmark::DoNotOptimize(res);
   }

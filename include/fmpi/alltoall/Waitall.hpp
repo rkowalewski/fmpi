@@ -3,10 +3,10 @@
 
 #include <sstream>
 
-#include <fmpi/Debug.hpp>
 #include <fmpi/NumericRange.hpp>
 #include <fmpi/Schedule.hpp>
 #include <fmpi/alltoall/Detail.hpp>
+#include <fmpi/detail/Assert.hpp>
 #include <fmpi/mpi/Environment.hpp>
 #include <fmpi/mpi/Request.hpp>
 

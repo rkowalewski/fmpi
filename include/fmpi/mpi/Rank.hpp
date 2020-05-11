@@ -6,7 +6,7 @@
 #include <iosfwd>
 #include <type_traits>
 
-#include <rtlx/Assert.hpp>
+#include <fmpi/detail/Assert.hpp>
 
 namespace mpi {
 
@@ -34,7 +34,7 @@ class Rank {
 
 constexpr Rank operator+(Rank const& lhs, Rank const& rhs) noexcept;
 constexpr Rank operator-(Rank const& lhs, Rank const& rhs) noexcept;
-constexpr Rank operator^(Rank const& lhs, Rank const& rhs) RTLX_NOEXCEPT;
+constexpr Rank operator^(Rank const& lhs, Rank const& rhs) FMPI_NOEXCEPT;
 constexpr Rank operator%(Rank const& lhs, Rank const& rhs) noexcept;
 
 constexpr bool operator==(Rank const& lhs, Rank const& rhs) noexcept;
@@ -113,9 +113,9 @@ constexpr Rank operator-(Rank const& lhs, Rank const& rhs) noexcept {
   return Rank{lhs.mpiRank() - rhs.mpiRank()};
 }
 
-constexpr Rank operator^(Rank const& lhs, Rank const& rhs) RTLX_NOEXCEPT {
-  RTLX_ASSERT(lhs.mpiRank() >= 0);
-  RTLX_ASSERT(rhs.mpiRank() >= 0);
+constexpr Rank operator^(Rank const& lhs, Rank const& rhs) FMPI_NOEXCEPT {
+  FMPI_ASSERT(lhs.mpiRank() >= 0);
+  FMPI_ASSERT(rhs.mpiRank() >= 0);
 
   auto xor_res = static_cast<unsigned>(lhs.mpiRank()) ^
                  static_cast<unsigned>(rhs.mpiRank());

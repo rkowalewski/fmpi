@@ -21,25 +21,25 @@ void handle_warning(
 #define FMPI_ASSERT(Expr)                                                   \
   static_cast<void>(                                                        \
       (Expr) ||                                                             \
-      (detail::handle_failed_assert(                                        \
+      (fmpi::detail::handle_failed_assert(                                  \
            "Assertion \"" #Expr "\" failed", __FILE__, __LINE__, __func__), \
        true))
 
 #define FMPI_ASSERT_MSG(Expr, Msg)                           \
   static_cast<void>(                                         \
-      (Expr) || (detail::handle_failed_assert(               \
+      (Expr) || (fmpi::detail::handle_failed_assert(         \
                      "Assertion \"" #Expr "\" failed: " Msg, \
                      __FILE__,                               \
                      __LINE__,                               \
                      __func__),                              \
                  true))
 
-#define FMPI_UNREACHABLE(Msg)   \
-  detail::handle_failed_assert( \
+#define FMPI_UNREACHABLE(Msg)         \
+  fmpi::detail::handle_failed_assert( \
       "Unreachable code reached: " Msg, __FILE__, __LINE__, __func__)
 
 #define FMPI_WARNING(Msg) \
-  detail::handle_warning(Msg, __FILE__, __LINE__, __func__)
+  fmpi::detail::handle_warning(Msg, __FILE__, __LINE__, __func__)
 
 #elif !defined(FMPI_ASSERT)
 #define FMPI_ASSERT(Expr)
@@ -47,7 +47,16 @@ void handle_warning(
 #define FMPI_UNREACHABLE(Msg) std::abort()
 #define FMPI_WARNING(Msg)
 #endif
+
 }  // namespace detail
 }  // namespace fmpi
+
+#define FMPI_CHECK_MPI(expr)                                           \
+  do {                                                                 \
+    auto success_ = (expr);                                            \
+    static_assert(                                                     \
+        std::is_same<decltype(success_), int>::value, "invalid type"); \
+    FMPI_ASSERT(success_ == MPI_SUCCESS);                              \
+  } while (0)
 
 #endif  // FMPI_DETAIL_ASSERT_HPP_INCLUDED

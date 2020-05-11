@@ -49,7 +49,7 @@
   (RTLX_PREDICT_TRUE((expr)) ? static_cast<void>(0) : [] { \
     throw std::runtime_error{#expr};                       \
   }())  // NOLINT
-#define RTLX_ASSERT_RETURNS(expr, ret) RTLX_ASSERT(((expr) == (ret)))
+/* #define RTLX_ASSERT_RETURNS(expr, ret) RTLX_ASSERT(((expr) == (ret))) */
 #endif
 
 #ifdef NDEBUG

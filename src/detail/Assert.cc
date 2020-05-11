@@ -4,9 +4,7 @@
 #include <cstdlib>
 
 
-using namespace fmpi;
-
-void detail::handle_failed_assert(
+void fmpi::detail::handle_failed_assert(
     const char* msg, const char* file, int line, const char* fnc) noexcept {
   std::fprintf(
       stderr,
@@ -18,7 +16,7 @@ void detail::handle_failed_assert(
       msg);
 }
 
-void detail::handle_warning(
+void fmpi::detail::handle_warning(
     const char* msg, const char* file, int line, const char* fnc) noexcept {
   std::fprintf(
       stderr,

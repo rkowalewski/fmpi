@@ -92,7 +92,7 @@ class ShmSegment : private detail::MemorySegmentBase {
 
     MPI_Info_set(info, "alloc_shared_noncontig", "true");
 
-    RTLX_ASSERT_RETURNS(
+    FMPI_ASSERT_RETURNS(
         MPI_Win_allocate_shared(
             m_nbytes,
             m_disp_unit,
@@ -108,11 +108,11 @@ class ShmSegment : private detail::MemorySegmentBase {
       size_type       sz;
       difference_type disp;
 
-      RTLX_ASSERT_RETURNS(
+      FMPI_ASSERT_RETURNS(
           MPI_Win_shared_query(m_win, idx, &sz, &disp, &m_baseptrs[idx]),
           MPI_SUCCESS);
-      RTLX_ASSERT(disp == m_disp_unit);
-      RTLX_ASSERT(m_nbytes == sz);
+      FMPI_ASSERT(disp == m_disp_unit);
+      FMPI_ASSERT(m_nbytes == sz);
     };
 
     for (mpi::rank_t r = 0; r < me; ++r) {
@@ -123,7 +123,7 @@ class ShmSegment : private detail::MemorySegmentBase {
       queryShmPtrs(r);
     }
 
-    RTLX_ASSERT_RETURNS(MPI_Info_free(&info), MPI_SUCCESS);
+    FMPI_ASSERT_RETURNS(MPI_Info_free(&info), MPI_SUCCESS);
   }
 
   ShmSegment& operator=(ShmSegment&& other) noexcept
@@ -184,7 +184,7 @@ struct GlobalSegment : private detail::MemorySegmentBase {
     }
 
     // world window
-    RTLX_ASSERT_RETURNS(
+    FMPI_ASSERT_RETURNS(
         MPI_Win_allocate(
             m_nbytes,
             m_disp_unit,

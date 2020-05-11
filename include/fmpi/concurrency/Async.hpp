@@ -1,5 +1,5 @@
-#ifndef FMPI_DETAIL_ASYNC_HPP
-#define FMPI_DETAIL_ASYNC_HPP
+#ifndef FMPI_CONCURRENCY_ASYNC_HPP
+#define FMPI_CONCURRENCY_ASYNC_HPP
 
 #include <future>
 

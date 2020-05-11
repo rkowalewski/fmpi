@@ -1,5 +1,5 @@
-#ifndef FMPI_OPENMP_HPP
-#define FMPI_OPENMP_HPP
+#ifndef FMPI_CONCURRENCY_OPENMP_HPP
+#define FMPI_CONCURRENCY_OPENMP_HPP
 #if defined(_OPENMP)
 #include <omp.h>
 #else

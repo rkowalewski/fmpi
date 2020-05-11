@@ -1,3 +1,5 @@
+#include <ostream>
+
 #include <fmpi/mpi/Rank.hpp>
 
 namespace mpi {

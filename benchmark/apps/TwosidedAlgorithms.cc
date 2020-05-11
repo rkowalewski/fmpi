@@ -66,8 +66,8 @@ int main(int argc, char* argv[]) {
                    iterator_t                                     res) {
     // parallel merge does not support inplace merging
     // nels must be the number of elements in all sequences
-    RTLX_ASSERT(seqs.size());
-    RTLX_ASSERT(res);
+    assert(seqs.size());
+    assert(res);
 
     auto const size = std::accumulate(
         std::begin(seqs),
@@ -116,29 +116,29 @@ int main(int argc, char* argv[]) {
   }
 
   int wait = 0;
-  while(wait);
-
+  while (wait)
+    ;
 
   // calibrate clock
   auto clock           = SynchronizedClock{};
   bool is_clock_synced = clock.Init(world.mpiComm());
-  RTLX_ASSERT(is_clock_synced);
+  assert(is_clock_synced);
 
   FMPI_DBG(params.niters);
 
   for (std::size_t step = 0; step < params.sizes.size(); ++step) {
     auto const blocksize = params.sizes[step];
-    RTLX_ASSERT(blocksize >= sizeof(value_t));
-    RTLX_ASSERT(blocksize % sizeof(value_t) == 0);
+    assert(blocksize >= sizeof(value_t));
+    assert(blocksize % sizeof(value_t) == 0);
 
     auto const sendcount = blocksize / sizeof(value_t);
 
     FMPI_DBG(sendcount);
 
-    RTLX_ASSERT(blocksize % sizeof(value_t) == 0);
+    assert(blocksize % sizeof(value_t) == 0);
 
     // Required by good old 32-bit MPI
-    RTLX_ASSERT(sendcount > 0 && sendcount < std::numeric_limits<int>::max());
+    assert(sendcount > 0 && sendcount < std::numeric_limits<int>::max());
 
     auto const nels = sendcount * nr;
 
@@ -203,8 +203,9 @@ int main(int argc, char* argv[]) {
 
         // We always want to guarantee that all processors start at the same
         // time, so this is a real barrier
-        auto barrier = clock.Barrier(world.mpiComm());
-        RTLX_ASSERT(barrier.Success(world.mpiComm()));
+        auto       barrier         = clock.Barrier(world.mpiComm());
+        auto const barrier_success = barrier.Success(world.mpiComm());
+        assert(barrier_success);
 
         auto total = run_algorithm(
 
@@ -238,7 +239,7 @@ int main(int argc, char* argv[]) {
 
         traceStore.erase(algo.first);
       }
-      FMPI_ASSERT(traceStore.empty());
+      assert(traceStore.empty());
     }
   }
 

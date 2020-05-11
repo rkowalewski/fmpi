@@ -33,7 +33,7 @@ constexpr
         std::size_t blocksize,
         OutputIt    d_first) {
   auto const n = std::distance(first, last);
-  RTLX_ASSERT(n % blocksize == 0);
+  FMPI_ASSERT(n % blocksize == 0);
 
   auto const nb = n / blocksize;
 
@@ -347,7 +347,7 @@ inline void bruck_indexed(
 
       FMPI_CHECK_MPI(MPI_Type_size_x(packed, &mysize));
 
-      RTLX_ASSERT(
+      FMPI_ASSERT(
           static_cast<size_t>(mysize) ==
           blocks.size() * blocksize * sizeof(value_t));
     }
@@ -619,7 +619,7 @@ inline void bruck_interleave(
 #if 0
     auto last_chunk = std::max(2, std::int32_t(nchunks) - 1);
 
-    RTLX_ASSERT(2 <= last_chunk);
+    FMPI_ASSERT(2 <= last_chunk);
 
     for (auto&& r : range<std::size_t>(2, last_chunk)) {
       auto f    = (one << r) * blocksize;
@@ -850,7 +850,7 @@ inline void bruck_interleave_dispatch(
 #if 0
     auto last_chunk = std::max(2, std::int32_t(nchunks) - 1);
 
-    RTLX_ASSERT(2 <= last_chunk);
+    FMPI_ASSERT(2 <= last_chunk);
 
     for (auto&& r : range<std::size_t>(2, last_chunk)) {
       auto f    = (one << r) * blocksize;

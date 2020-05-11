@@ -1,8 +1,6 @@
 #ifndef FMPI_DEBUG_HPP
 #define FMPI_DEBUG_HPP
 
-#include <rtlx/Assert.hpp>
-
 #ifndef NDEBUG
 
 #include <dbg.h>
@@ -149,6 +147,7 @@ auto operator<<(std::ostream& os, std::pair<F, T> const& p) -> std::ostream& {
 #define FMPI_DBG_STREAM(...)
 #endif
 
+#if 0
 #if defined(NDEBUG)
 #define FMPI_ASSERT(expr) \
   (false ? static_cast<void>(expr) : static_cast<void>(0))
@@ -163,13 +162,6 @@ auto operator<<(std::ostream& os, std::pair<F, T> const& p) -> std::ostream& {
     throw std::runtime_error{os.str()};                    \
   }())  // NOLINT
 #endif
-
-#define FMPI_CHECK_MPI(expr)                                           \
-  do {                                                                 \
-    auto success_ = (expr);                                            \
-    static_assert(                                                     \
-        std::is_same<decltype(success_), int>::value, "invalid type"); \
-    FMPI_ASSERT(success_ == MPI_SUCCESS);                              \
-  } while (0)
+#endif
 
 #endif

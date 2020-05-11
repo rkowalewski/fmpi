@@ -3,8 +3,6 @@
 
 #include <chrono>
 
-#include <rtlx/Assert.hpp>
-
 namespace rtlx {
 
 struct ChooseClockType {

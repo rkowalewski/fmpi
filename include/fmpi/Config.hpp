@@ -12,6 +12,12 @@
 
 #define FMPI_LOG_PREFIX "fmpi"
 
+#ifdef FMPI_DEBUG_ASSERT
+#define FMPI_NOEXCEPT
+#else
+#define FMPI_NOEXCEPT noexcept
+#endif
+
 namespace fmpi {
 
 constexpr bool kEnableTrace = FMPI_ENABLE_TRACE;
