@@ -1,7 +1,6 @@
 #include <omp.h>
 
 #include <iomanip>
-#include <iosfwd>
 #include <thread>
 #include <vector>
 

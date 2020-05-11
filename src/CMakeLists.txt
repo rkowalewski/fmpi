@@ -1,5 +1,6 @@
 add_library(fmpi
     concurrency/CacheLocality.cc
+    detail/Assert.cc
     memory/BlockAllocator.cc
     memory/ThreadAllocator.cc
     mpi/Algorithm.cc
@@ -40,6 +41,9 @@ execute_process(COMMAND getconf LEVEL1_DCACHE_SIZE
 
 if ("${CMAKE_BUILD_TYPE}" MATCHES ".*(D|d)ebug$")
     target_compile_definitions (fmpi PRIVATE DBG_MACRO_NO_WARNING)
+    set(FMPI_DEBUG_ASSERT ON CACHE BOOL "" FORCE)
+else()
+    set(FMPI_DEBUG_ASSERT OFF CACHE BOOL "" FORCE)
 endif()
 
 

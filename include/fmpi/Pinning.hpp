@@ -1,5 +1,5 @@
-#ifndef FMPI_CONFIG_HPP
-#define FMPI_CONFIG_HPP
+#ifndef FMPI_PINNING_HPP
+#define FMPI_PINNING_HPP
 
 #include <mpi.h>
 

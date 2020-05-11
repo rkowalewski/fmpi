@@ -1,5 +1,5 @@
-#ifndef FMPI_CONSTANTS_HPP
-#define FMPI_CONSTANTS_HPP
+#ifndef FMPI_CONFIG_HPP
+#define FMPI_CONFIG_HPP
 
 #include <cstddef>
 #include <string_view>
@@ -9,6 +9,8 @@
 #define FMPI_IMPL_IN_CONFIG_HPP
 #include "config_impl.hpp"
 #undef FMPI_IMPL_IN_CONFIG_HPP
+
+#define FMPI_LOG_PREFIX "fmpi"
 
 namespace fmpi {
 
