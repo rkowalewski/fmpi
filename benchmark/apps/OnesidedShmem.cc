@@ -16,7 +16,6 @@
 #include <iterator>
 #include <memory>
 #include <parallel/algorithm>
-#include <rtlx/Assert.hpp>
 #include <rtlx/ScopedLambda.hpp>
 #include <rtlx/Timer.hpp>
 #include <rtlx/Trace.hpp>

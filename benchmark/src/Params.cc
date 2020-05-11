@@ -7,7 +7,6 @@
 #include <ctime>
 #include <fmpi/NumericRange.hpp>
 #include <iomanip>
-#include <rtlx/Assert.hpp>
 #include <string>
 #include <tlx/cmdline_parser.hpp>
 

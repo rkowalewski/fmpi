@@ -319,7 +319,7 @@ inline void bruck_indexed(
       }
 #if 0
 
-    RTLX_ASSERT_RETURNS(
+FMPI_CHECK_MPI(
         MPI_Sendrecv(
             out,
             1,
@@ -332,8 +332,7 @@ inline void bruck_indexed(
             me,
             kTagBruck,
             ctx.mpiComm(),
-            MPI_STATUS_IGNORE),
-        MPI_SUCCESS);
+            MPI_STATUS_IGNORE));
 #endif
 
       FMPI_CHECK_MPI(MPI_Type_create_indexed_block(

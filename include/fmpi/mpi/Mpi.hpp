@@ -5,7 +5,6 @@
 
 #include <array>
 #include <fmpi/mpi/Algorithm.hpp>
-#include <rtlx/Assert.hpp>
 #include <tlx/simple_vector.hpp>
 #include <tuple>
 #include <type_traits>

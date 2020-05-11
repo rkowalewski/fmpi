@@ -12,7 +12,6 @@
 
 #include <tlx/simple_vector.hpp>
 
-#include <rtlx/Assert.hpp>
 #include <rtlx/Timer.hpp>
 
 namespace fmpi {

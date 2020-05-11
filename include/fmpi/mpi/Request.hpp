@@ -6,7 +6,6 @@
 #include <array>
 #include <fmpi/Debug.hpp>
 #include <iterator>
-#include <rtlx/Assert.hpp>
 #include <vector>
 
 namespace mpi {

@@ -11,7 +11,6 @@
 
 #include <tlx/simple_vector.hpp>
 
-#include <rtlx/Assert.hpp>
 
 // Other AllToAll Algorithms
 

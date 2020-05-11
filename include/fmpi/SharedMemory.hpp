@@ -6,7 +6,6 @@
 #include <cstdlib>
 #include <fmpi/Math.hpp>
 #include <fmpi/mpi/Mpi.hpp>
-#include <rtlx/Assert.hpp>
 #include <tlx/math/integer_log2.hpp>
 #include <tlx/simple_vector.hpp>
 
