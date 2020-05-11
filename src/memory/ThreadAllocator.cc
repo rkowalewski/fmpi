@@ -1,8 +1,8 @@
 #include <fmpi/memory/ThreadAllocator.hpp>
 
-//#ifdef INTEL_COMPILER
-//#pragma warning(disable: 2196)  // warning #2196: routine is both "inline" and "noinline"
-//#endif
+#ifdef __INTEL_COMPILER
+#pragma warning(disable: 2196)  // warning #2196: routine is both "inline" and "noinline"
+#endif
 
 #include <snmalloc.h>
 

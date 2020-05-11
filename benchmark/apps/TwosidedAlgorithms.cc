@@ -147,7 +147,7 @@ int main(int argc, char* argv[]) {
     auto correct = container(0);
 
     for (auto it = 0; it < static_cast<int>(params.niters) + nwarmup; ++it) {
-#pragma omp parallel default(none) shared(data) firstprivate(nr, sendcount)
+#pragma omp parallel default(none) shared(data) firstprivate(nr, sendcount, me, nels)
       {
         std::random_device r;
         std::seed_seq      seed_seq{r(), r(), r(), r(), r(), r()};

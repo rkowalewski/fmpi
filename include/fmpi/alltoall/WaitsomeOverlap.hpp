@@ -320,11 +320,6 @@ inline void ring_waitsome_overlap(
     auto enough_work = [&config](
                            typename pieces_t::const_iterator c_first,
                            typename pieces_t::const_iterator c_last) -> bool {
-    // minimum number of chunks to merge: ideally we have a full level2
-    // cache
-    // constexpr auto op_threshold = (NReqs / 2);
-    // return static_cast<std::size_t>(std::distance(c_first, c_last)) > 1
-    //        op_threshold;
 #if 0
       constexpr auto l2cachesize = std::size_t(1048576);
 
