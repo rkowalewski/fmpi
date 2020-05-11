@@ -4,12 +4,8 @@
 #include <cstdint>
 #include <numeric>
 
-#include <fmpi/Dispatcher.hpp>
-
-#include <fmpi/allocator/HeapAllocator.hpp>
 #include <fmpi/alltoall/Detail.hpp>
 #include <fmpi/container/StackContainer.hpp>
-#include <fmpi/container/buffered_channel.hpp>
 
 #include <tlx/container/ring_buffer.hpp>
 

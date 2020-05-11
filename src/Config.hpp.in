@@ -7,6 +7,7 @@
 //=== options ===//
 // clang-format off
 #cmakedefine01 FMPI_ENABLE_TRACE
+#cmakedefine FMPI_CACHELEVEL1_SIZE ${FMPI_CACHELEVEL1_SIZE}
 #cmakedefine FMPI_CACHELEVEL2_SIZE ${FMPI_CACHELEVEL2_SIZE}
 #cmakedefine FMPI_CACHELEVEL3_SIZE ${FMPI_CACHELEVEL3_SIZE}
 // clang-format on

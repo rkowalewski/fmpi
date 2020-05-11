@@ -36,7 +36,7 @@ class TraceStore {
 
   template <class InputIterator>
   void insert(std::string_view ctx, InputIterator first, InputIterator last) {
-    if constexpr(kEnableTrace) {
+    if constexpr (kEnableTrace) {
       if (std::distance(first, last) > 0) {
         m_traces[context(ctx)].insert(first, last);
       }

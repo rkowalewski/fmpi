@@ -4,16 +4,12 @@
 #include <string_view>
 #include <utility>
 
-#include <boost/container/flat_map.hpp>
-#include <fmpi/Pinning.hpp>
 #include <fmpi/Dispatcher.hpp>
-#include <fmpi/allocator/HeapAllocator.hpp>
+#include <fmpi/Pinning.hpp>
 #include <fmpi/alltoall/Detail.hpp>
-#include <fmpi/container/StackContainer.hpp>
 #include <fmpi/container/buffered_channel.hpp>
 #include <fmpi/memory/ThreadAllocator.hpp>
 #include <fmpi/util/Trace.hpp>
-#include <tlx/container/ring_buffer.hpp>
 
 namespace fmpi {
 
@@ -137,7 +133,6 @@ inline void ring_waitsome_overlap(
     int                 blocksize,
     mpi::Context const& ctx,
     Op&&                op) {
-
   constexpr auto algorithm_name = std::string_view("WaitsomeOverlap");
 
   auto const& config = Pinning::instance();
@@ -457,7 +452,7 @@ inline void ring_waitsome_overlap(
     steady_timer t_idle{trace.duration(detail::idle)};
     // We definitely have to wait here because although all data has arrived
     // there might still be pending tasks for other peers (e.g. sends)
-    comm_dispatcher.stop_worker();
+    comm_dispatcher.loop_until_done();
   }
 
   steady_timer t_comp{trace.duration(detail::shutdown)};

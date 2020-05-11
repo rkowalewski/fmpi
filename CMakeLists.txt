@@ -44,6 +44,7 @@ else()
 endif()
 
 # Options
+option(FMPI_ENABLE_TRACE "enable detail time trace" ON)
 option(MPI_CXX_SKIP_MPICXX "" ON)
 option(WITH_HWLOC           "Enable hwloc support" OFF)
 

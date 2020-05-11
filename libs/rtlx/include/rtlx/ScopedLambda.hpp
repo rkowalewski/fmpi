@@ -13,8 +13,7 @@ class lambda_call {
   lambda_call& operator=(lambda_call&& other) = delete;
 
   explicit lambda_call(LambdaT&& lambda) noexcept
-    : m_lambda(std::move(lambda))
-  {
+    : m_lambda(std::move(lambda)) {
     static_assert(
         std::is_same<decltype(lambda()), void>::value,
         "scope_exit lambdas must not have a return value");
@@ -26,26 +25,22 @@ class lambda_call {
 
   lambda_call(lambda_call&& other) noexcept
     : m_lambda(std::move(other.m_lambda))
-    , m_call(other.m_call)
-  {
+    , m_call(other.m_call) {
     other.m_call = false;
   }
 
-  ~lambda_call() noexcept
-  {
+  ~lambda_call() noexcept {
     reset();
   }
 
   // Ensures the scope_exit lambda will not be called
-  void release() noexcept
-  {
+  void release() noexcept {
     m_call = false;
   }
 
   // Executes the scope_exit lambda immediately if not yet run; ensures it
   // will not run again
-  void reset() noexcept
-  {
+  void reset() noexcept {
     if (m_call) {
       m_call = false;
       m_lambda();
@@ -53,8 +48,7 @@ class lambda_call {
   }
 
   // Returns true if the scope_exit lambda is still going to be executed
-  explicit operator bool() const noexcept
-  {
+  explicit operator bool() const noexcept {
     return m_call;
   }
 
@@ -65,8 +59,7 @@ class lambda_call {
 }  // namespace detail
 
 template <typename LambdaT>
-inline auto scope_exit(LambdaT&& lambda) noexcept
-{
+inline auto scope_exit(LambdaT&& lambda) noexcept {
   return detail::lambda_call<LambdaT>(std::forward<LambdaT>(lambda));
 }
 }  // namespace rtlx
