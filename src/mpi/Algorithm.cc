@@ -10,7 +10,7 @@ int isend(
     int          tag,
     MPI_Comm     comm,
     MPI_Request* req) {
-  FMPI_ASSERT(count < std::numeric_limits<int>::max());
+  FMPI_ASSERT(count < max_int);
 
   return MPI_Isend(
       buf, static_cast<int>(count), type, target, tag, comm, req);
@@ -24,7 +24,7 @@ int irecv(
     int          tag,
     MPI_Comm     comm,
     MPI_Request* req) {
-  FMPI_ASSERT(count < std::numeric_limits<int>::max());
+  FMPI_ASSERT(count < max_int);
 
   return MPI_Irecv(
       buf, static_cast<int>(count), type, source, tag, comm, req);
