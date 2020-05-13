@@ -42,7 +42,10 @@ void handle_warning(
   fmpi::detail::handle_warning(Msg, __FILE__, __LINE__, __func__)
 
 #elif !defined(FMPI_ASSERT)
-#define FMPI_ASSERT(Expr)
+#define FMPI_ASSERT(Expr) \
+  do {                    \
+    (void)sizeof(Expr);      \
+  } while (0)
 #define FMPI_ASSERT_MSG(Expr, Msg)
 #define FMPI_UNREACHABLE(Msg) std::abort()
 #define FMPI_WARNING(Msg)
