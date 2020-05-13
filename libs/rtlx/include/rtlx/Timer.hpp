@@ -65,9 +65,7 @@ class Timer {
   }
 
   void finish() {
-    if (_state == state::stopped) {
-      return;
-    } else if (_state == state::running) {
+    if (_state == state::running) {
       _mark += Clock::now() - _start;
     }
 

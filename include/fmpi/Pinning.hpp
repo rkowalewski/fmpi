@@ -17,6 +17,7 @@ struct Pinning {
   // uint32_t comp_core{};
   uint32_t domain_size{};
   uint32_t num_threads{};
+  bool     smt_enabled{};
 
   static Pinning const& instance();
 

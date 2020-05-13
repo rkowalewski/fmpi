@@ -322,22 +322,21 @@ inline void ring_waitsome_overlap(
     auto enough_work = [&config](
                            typename pieces_t::const_iterator c_first,
                            typename pieces_t::const_iterator c_last) -> bool {
-#if 0
-      constexpr auto l2cachesize = std::size_t(1048576);
+      auto const     npieces    = std::distance(c_first, c_last);
+      constexpr auto min_pieces = 1;
 
-      auto const nels = std::accumulate(
+      auto const nbytes = std::accumulate(
           c_first, c_last, std::size_t(0), [](auto acc, auto const& piece) {
             return acc + std::visit(
-                             [](auto&& v) -> std::size_t { return v.size(); },
+                             [](auto&& v) -> std::size_t {
+                               return v.size() * sizeof(value_type);
+                             },
                              piece);
           });
-      return nels >= (l2cachesize * config.num_threads);
-#else
-      static_cast<void>(config);
-      FMPI_ASSERT(c_first <= c_last);
-      constexpr auto op_threshold = (NReqs / 2);
-      return std::size_t(std::distance(c_first, c_last)) > op_threshold;
-#endif
+
+      auto const ncpus_rank = std::size_t(config.domain_size);
+
+      return npieces > min_pieces && (nbytes >= (kCacheSizeL2 * ncpus_rank));
     };
 
     {
