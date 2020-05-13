@@ -37,7 +37,7 @@ class Piece {
 
   constexpr Piece() = default;
 
-  constexpr Piece(gsl::span<T> span) noexcept
+  constexpr explicit Piece(gsl::span<T> span) noexcept
     : Piece(span, nullptr) {
   }
 
@@ -344,7 +344,7 @@ inline void ring_waitsome_overlap(
           gsl::span{std::next(begin, ctx.rank() * blocksize),
                     std::next(begin, (ctx.rank() + 1) * blocksize)};
 
-      pieces.emplace_back(local_span);
+      pieces.emplace_back(piece{local_span});
 
       chunk task{};
       while (data_channel->wait_dequeue(task)) {
