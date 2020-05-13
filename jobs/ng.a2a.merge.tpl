@@ -24,18 +24,30 @@
 #SBATCH --nodes=<<NUM_NODES>>
 #SBATCH --ntasks-per-node=<<NUM_PROCS>>
 
-#Important
-module load slurm_setup
-
-# Note: We do not need any additional pinning here.
-# Intel MPI is smart enough and can handle both hyperthreading and
-# non hyperthreading cases here
-
-numactl -H
+. ./jobs/env.impi.gcc9.sh
 
 unset KMP_AFFINITY
 
-export OMP_NUM_THREADS="<<NUM_THREADS>>"
-export OMP_PLACES="{0:<<NUM_THREADS>>:1}"
+num_comp_threads="<<NUM_THREADS>>"
 
-./build.release/apps/mergebench
+num_procs="$SLURM_NTASKS_PER_NODE"
+
+num_mgmt_threads="1"
+num_threads_domain="$((num_comp_threads + num_mgmt_threads))"
+
+ncores="$(getconf _NPROCESSORS_ONLN)"
+
+ht_enabled="0"
+
+if [[ "$((num_procs * num_threads_domain))" -gt "$((ncores / 2))" ]]; then
+  ht_enabled="1"
+fi
+
+mpiexec -n $SLURM_NTASKS \
+    -genv OMP_NUM_THREADS="$num_comp_threads" \
+    -genv FMPI_ENABLE_HT="$ht_enabled" \
+    -genv FMPI_HW_CORES="$ncores" \
+    -genv FMPI_MGMT_CPUS="$num_mgmt_threads" \
+    ./jobs/impi_omp.sh \
+    "./build.release/apps/mergebench/parallel" \
+    $SLURM_JOB_NUM_NODES <<ARGS>>

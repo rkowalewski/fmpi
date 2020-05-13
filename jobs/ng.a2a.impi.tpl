@@ -28,9 +28,9 @@
 
 unset KMP_AFFINITY
 
-num_procs="<<NUM_PROCS>>"
-num_nodes="<<NUM_NODES>>"
 num_comp_threads="<<NUM_THREADS>>"
+
+num_procs="$SLURM_NTASKS_PER_NODE"
 
 num_mgmt_threads="1"
 num_threads_domain="$((num_comp_threads + num_mgmt_threads))"
@@ -43,10 +43,11 @@ if [[ "$((num_procs * num_threads_domain))" -gt "$((ncores / 2))" ]]; then
   ht_enabled="1"
 fi
 
-mpiexec -n $((num_procs * num_nodes)) \
+mpiexec -n $SLURM_NTASKS \
     -genv OMP_NUM_THREADS="$num_comp_threads" \
     -genv FMPI_ENABLE_HT="$ht_enabled" \
     -genv FMPI_HW_CORES="$ncores" \
+    -genv FMPI_MGMT_CPUS="$num_mgmt_threads" \
     ./jobs/impi_omp.sh \
     "build.release/benchmark/twoSidedAlgorithms" \
-    <<ARGS>>
+    $SLURM_JOB_NUM_NODES <<ARGS>>

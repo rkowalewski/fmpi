@@ -6,7 +6,7 @@ shift
 ncpus="$((FMPI_HW_CORES / 2))"
 
 domain_size="$((ncpus / SLURM_NTASKS_PER_NODE))"
-comm_cpus="1"
+comm_cpus="$FMPI_MGMT_CPUS"
 
 offset="$comm_cpus"
 
@@ -39,6 +39,6 @@ export OMP_PLACES="$omp_place_spec"
 export OMP_PROC_BIND="true"
 export FMPI_DOMAIN_SIZE="$domain_size"
 
-echo "$global_rank: ${OMP_PLACES}"
+cat <<< "$global_rank: ${OMP_PLACES}" 1>&2
 
 "$my_command" "$@"
