@@ -3,9 +3,17 @@
 
 #include <mpi.h>
 
+#include <limits>
 #include <type_traits>
 
 namespace mpi {
+
+using return_code = int;
+using Comm        = MPI_Comm;
+using Tag         = int;
+
+constexpr auto max_int =
+    static_cast<std::size_t>(std::numeric_limits<int>::max());
 
 namespace detail {
 
@@ -75,10 +83,6 @@ struct type_mapper {
     return detail::type_mapper<T>::factor();
   }
 };
-
-using return_code = int;
-using Comm        = MPI_Comm;
-using Tag         = int;
 
 }  // namespace mpi
 #endif

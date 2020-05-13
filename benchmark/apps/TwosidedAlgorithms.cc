@@ -140,7 +140,7 @@ int main(int argc, char* argv[]) {
     assert(blocksize % sizeof(value_t) == 0);
 
     // Required by good old 32-bit MPI
-    assert(sendcount > 0 && sendcount < std::numeric_limits<int>::max());
+    assert(sendcount > 0 && sendcount < mpi::max_int);
 
     auto const nels = sendcount * nr;
 

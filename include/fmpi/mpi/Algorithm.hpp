@@ -19,7 +19,7 @@ inline int irecv(
 {
   auto type = mpi::type_mapper<T>::type();
 
-  FMPI_ASSERT(count < std::numeric_limits<int>::max());
+  FMPI_ASSERT(count < max_int);
 
   return MPI_Irecv(
       buf, static_cast<int>(count), type, source, tag, ctx.mpiComm(), req);
@@ -37,7 +37,7 @@ inline int isend(
 {
   auto type = mpi::type_mapper<T>::type();
 
-  FMPI_ASSERT(count < std::numeric_limits<int>::max());
+  FMPI_ASSERT(count < max_int);
 
   return MPI_Isend(
       buf, static_cast<int>(count), type, target, tag, ctx.mpiComm(), req);
@@ -72,8 +72,8 @@ inline int sendrecv(
     Rank           source,
     int            recvtag,
     Context const& ctx) {
-  FMPI_ASSERT(sendcount < std::numeric_limits<int>::max());
-  FMPI_ASSERT(recvcount < std::numeric_limits<int>::max());
+  FMPI_ASSERT(sendcount < max_int);
+  FMPI_ASSERT(recvcount < max_int);
 
   return MPI_Sendrecv(
       sendbuf,
@@ -97,8 +97,8 @@ inline int alltoall(
     U*             recvbuf,
     std::size_t    recvcount,
     Context const& ctx) {
-  FMPI_ASSERT(sendcount < std::numeric_limits<int>::max());
-  FMPI_ASSERT(recvcount < std::numeric_limits<int>::max());
+  FMPI_ASSERT(sendcount < max_int);
+  FMPI_ASSERT(recvcount < max_int);
 
   return MPI_Alltoall(
       sendbuf,
