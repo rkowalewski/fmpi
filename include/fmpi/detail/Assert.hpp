@@ -1,5 +1,5 @@
-#ifndef FMPI_DETAIL_ASSERT_HPP_INCLUDED
-#define FMPI_DETAIL_ASSERT_HPP_INCLUDED
+#ifndef FMPI_DETAIL_ASSERT_HPP
+#define FMPI_DETAIL_ASSERT_HPP
 
 #include <cstdlib>
 
@@ -62,4 +62,4 @@ void handle_warning(
     FMPI_ASSERT(success_ == MPI_SUCCESS);                              \
   } while (0)
 
-#endif  // FMPI_DETAIL_ASSERT_HPP_INCLUDED
+#endif // FMPI_DETAIL_ASSERT_HPP
