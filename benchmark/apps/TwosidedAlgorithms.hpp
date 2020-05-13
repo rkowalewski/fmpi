@@ -295,27 +295,14 @@ void validate(
     Iter2               expected,
     mpi::Context const& ctx,
     std::string const&  algo) {
-  auto check = std::equal(first, last, expected);
+  auto const is_equal = std::equal(first, last, expected);
 
-  auto const n = std::distance(first, last);
-
-  if (!check) {
+  if (!is_equal) {
     std::ostringstream os;
     os << "[ERROR] [Rank " << ctx.rank() << "] " << algo
-       << ": incorrect sequence (";
-    std::copy(
-        first,
-        last,
-        std::ostream_iterator<
-            typename std::iterator_traits<Iter1>::value_type>(os, ", "));
-    os << ") vs. (";
-    std::copy(
-        expected,
-        std::next(expected, n),
-        std::ostream_iterator<
-            typename std::iterator_traits<Iter2>::value_type>(os, ", "));
-    os << ")\n";
+       << ": incorrect sequence";
     std::cerr << os.str();
+    std::terminate();
   }
 }
 

@@ -216,6 +216,7 @@ inline void ring_waitsome_overlap(
 
   comm_dispatcher.register_signal(
       message_type::IRECV, [](Message& message, MPI_Request& req) -> int {
+        // FMPI_DBG_STREAM("receiving message:" << message);
         auto ret = mpi::irecv(
             message.writable_buffer(),
             message.count(),
@@ -232,6 +233,7 @@ inline void ring_waitsome_overlap(
 
   comm_dispatcher.register_signal(
       message_type::ISEND, [](Message& message, MPI_Request& req) -> int {
+        // FMPI_DBG_STREAM("sending message:" << message);
         auto ret = mpi::isend(
             message.readable_buffer(),
             message.count(),
@@ -348,6 +350,10 @@ inline void ring_waitsome_overlap(
       chunk task{};
       while (data_channel->wait_dequeue(task)) {
         auto [source, span] = task;
+
+        FMPI_DBG_STREAM(
+            "receiving chunk: " << std::make_pair(source, span.data()));
+
         pieces.emplace_back(piece{span, &buf_alloc});
 
         if (enough_work(pieces.begin(), pieces.end())) {
@@ -398,6 +404,7 @@ inline void ring_waitsome_overlap(
             pieces.emplace_back(std::move(buffer));
           }
 
+          FMPI_DBG_STREAM("clearing " << pieces.size() << "pieces");
           pieces.erase(std::begin(pieces), std::prev(std::end(pieces)));
         }
       }
@@ -452,8 +459,8 @@ inline void ring_waitsome_overlap(
 
   steady_timer t_comp{trace.duration(detail::shutdown)};
 
-  auto& dispatcher_stats = comm_dispatcher.stats();
-  trace.merge(std::move(dispatcher_stats));
+  auto const& dispatcher_stats = comm_dispatcher.stats();
+  trace.merge(dispatcher_stats.begin(), dispatcher_stats.end());
 
   auto const recv_stats = data_channel->statistics();
   auto const comm_stats = comm_channel->statistics();

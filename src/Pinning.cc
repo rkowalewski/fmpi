@@ -50,7 +50,7 @@ fmpi::Pinning::Pinning() {
     }
   }
 
-  num_nodes = num_world_nodes();
+  //num_nodes = num_world_nodes();
 
   domain_size = 1;
   {

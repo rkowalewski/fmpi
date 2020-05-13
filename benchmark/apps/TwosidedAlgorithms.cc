@@ -32,8 +32,6 @@
 #include <Params.hpp>
 #include <TwosidedAlgorithms.hpp>
 
-#include <fmpi/concurrency/CacheLocality.hpp>
-
 // The container where we store our
 using value_t = int;
 using container =
@@ -96,10 +94,18 @@ int main(int argc, char* argv[]) {
     std::ostringstream os;
 
     if (me == 0) {
-      os << "Node Topology:\n";
+      os << "Algorithms:\n";
+
+      for (auto&& kv : ALGORITHMS) {
+        os << kv.first << "\n";
+      }
+
+      os << "\nNode Topology:\n";
     }
 
     int32_t const ppn = nr / params.nhosts;
+
+    FMPI_DBG(ppn);
 
     if (me < ppn) {
       os << "  MPI Rank " << me << "\n";
@@ -114,10 +120,6 @@ int main(int argc, char* argv[]) {
     fmpi::benchmark::printBenchmarkPreamble(std::cout, "++ ", "\n");
     write_csv_header(std::cout);
   }
-
-  int wait = 0;
-  while (wait)
-    ;
 
   // calibrate clock
   auto clock           = SynchronizedClock{};
@@ -147,7 +149,8 @@ int main(int argc, char* argv[]) {
     auto correct = container(0);
 
     for (auto it = 0; it < static_cast<int>(params.niters) + nwarmup; ++it) {
-#pragma omp parallel default(none) shared(data) firstprivate(nr, sendcount, me, nels)
+#pragma omp parallel default(none) shared(data) \
+    firstprivate(nr, sendcount, me, nels)
       {
         std::random_device r;
         std::seed_seq      seed_seq{r(), r(), r(), r(), r(), r()};
@@ -187,6 +190,7 @@ int main(int argc, char* argv[]) {
             world,
             merger);
         traceStore.erase(fmpi::kAlltoall);
+        assert(traceStore.empty());
       }
 
       Measurement m{};
@@ -225,7 +229,7 @@ int main(int argc, char* argv[]) {
           m.algorithm = algo.first;
           m.iter      = it - nwarmup + 1;
 
-          auto traces = traceStore.traces(algo.first);
+          auto const& traces = traceStore.traces(algo.first);
 
           write_csv_line(
               std::cout,

@@ -1,6 +1,7 @@
 #include <fmpi/util/Trace.hpp>
 
 #include <fmpi/detail/Assert.hpp>
+#include <fmpi/Debug.hpp>
 
 namespace fmpi {
 
@@ -20,6 +21,11 @@ void TraceStore::erase(std::string_view ctx) {
   m_traces.erase(std::string(ctx));
 }
 
+
+MultiTrace::MultiTrace()
+  : MultiTrace(anonymous) {
+}
+
 MultiTrace::MultiTrace(std::string_view ctx)
   : name_(ctx) {
 }
@@ -32,6 +38,8 @@ std::string_view MultiTrace::name() const noexcept {
   return name_;
 }
 
+
+#if 0
 void MultiTrace::merge(MultiTrace&& source) {
   for (auto&& s : source.values_) {
     FMPI_ASSERT(values_.find(s.first) == std::end(values_));
@@ -40,11 +48,15 @@ void MultiTrace::merge(MultiTrace&& source) {
   values_.insert(std::begin(source.values_), std::end(source.values_));
   source.values_.clear();
 }
+#endif
 
 MultiTrace::~MultiTrace() {
-  auto& global_instance = TraceStore::instance();
-  FMPI_ASSERT(!global_instance.contains(name_));
-  global_instance.insert(name_, std::begin(values_), std::end(values_));
+  FMPI_DBG_STREAM("destroying multitrace: " << name_);
+  if (!name_.empty() && name_ != anonymous) {
+    auto& global_instance = TraceStore::instance();
+    FMPI_ASSERT(!global_instance.contains(name_));
+    global_instance.insert(name_, std::begin(values_), std::end(values_));
+  }
 }
 
 }  // namespace fmpi

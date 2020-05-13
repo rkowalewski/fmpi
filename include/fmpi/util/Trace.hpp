@@ -4,12 +4,15 @@
 #include <string>
 #include <tuple>
 #include <variant>
+#include <unordered_map>
 
 #include <boost/container/flat_map.hpp>
 
 #include <rtlx/Timer.hpp>
 
 #include <fmpi/Config.hpp>
+#include <fmpi/detail/Assert.hpp>
+#include <fmpi/Debug.hpp>
 
 namespace fmpi {
 
@@ -19,7 +22,7 @@ class TraceStore {
   using duration_t = std::chrono::nanoseconds;
   using integer_t  = int64_t;
 
-  using key_type    = std::string_view;
+  using key_type    = std::string;
   using mapped_type = std::variant<duration_t, integer_t>;
 
  private:
@@ -69,9 +72,12 @@ class MultiTrace {
 
   using mapped_type = TraceStore::mapped_type;
 
-  using cache = boost::container::flat_map<TraceStore::key_type, mapped_type>;
+  static constexpr auto anonymous = std::string_view("<anonymous>");
 
  public:
+  using cache = std::unordered_map<std::string_view, mapped_type>;
+
+  explicit MultiTrace();
   explicit MultiTrace(std::string_view ctx);
 
   MultiTrace(const MultiTrace& other) = delete;
@@ -83,24 +89,32 @@ class MultiTrace {
 
   template <class T>
   T& value(std::string_view key) {
-    auto it = values_.find(key);
+      auto it_bool = values_.insert(std::make_pair(key, mapped_type{T{}}));
+      auto &v = (it_bool.first)->second;
 
-    if (it == std::end(values_)) {
-      std::tie(it, std::ignore) = values_.insert_or_assign(key, T{});
-    }
+      FMPI_ASSERT(std::holds_alternative<T>(v));
 
-    return std::get<T>(it->second);
+      return std::get<T>(v);
   }
 
   duration_t& duration(std::string_view key);
 
   [[nodiscard]] std::string_view name() const noexcept;
 
-  void merge(MultiTrace&& source);
+  cache const& values() const noexcept {
+    return values_;
+  }
+
+  template <class InputIterator>
+  void merge(InputIterator first, InputIterator last) {
+  // TODO: use flat_map::merge(T&&) instead of copy
+    values_.insert(first, last);
+  }
 
  private:
   cache            values_{};
-  std::string_view name_;
+  //Yes we can use a string view here because
+  std::string_view const name_;
 };
 
 using steady_timer = rtlx::steady_timer;

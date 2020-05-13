@@ -113,6 +113,14 @@ class Message {
   Envelope     envelope_{};
 };
 
+#if 0
+std::ostream& operator<<(std::ostream& os, Message const& message) {
+  os << "{Message: { " << message.readable_buffer() << ", " << message.count()
+     << ", " << message.peer() << ", " << message.tag() << "}";
+  return os;
+}
+#endif
+
 static_assert(sizeof(Envelope) == 12);
 static_assert(sizeof(MPI_Datatype) == 4);
 static_assert(alignof(Message) == 8);
@@ -222,9 +230,7 @@ struct RecvMessage {
   Envelope     envelope_{};
 };
 
-class DefaultMessgeHandler {
-
-};
+class DefaultMessgeHandler {};
 
 }  // namespace fmpi
 

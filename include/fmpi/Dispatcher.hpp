@@ -94,18 +94,14 @@ int dispatch_waitall(
 
 template <class T>
 class SPSCNChannel {
-  using timer = rtlx::Timer<>;
-
-  using duration = std::chrono::microseconds;
-
-  using timer_duration = typename timer::duration;
+  using duration = typename steady_timer::duration;
 
  public:
   struct Stats {
     // consumer
-    alignas(kCacheAlignment) timer_duration dequeue_time{0};
+    alignas(kCacheAlignment) duration dequeue_time{0};
     // producer
-    alignas(kCacheAlignment) timer_duration enqueue_time{0};
+    alignas(kCacheAlignment) duration enqueue_time{0};
   };
 
  public:
@@ -126,7 +122,7 @@ class SPSCNChannel {
   SPSCNChannel& operator=(SPSCNChannel const&) = delete;
 
   bool wait_dequeue(value_type& val) {
-    timer t_dequeue{stats_.dequeue_time};
+    steady_timer t_dequeue{stats_.dequeue_time};
     if (!count_.load(std::memory_order_relaxed)) {
       return false;
     }
@@ -138,7 +134,7 @@ class SPSCNChannel {
   template <class Rep, class Period>
   bool wait_dequeue(
       value_type& val, std::chrono::duration<Rep, Period> const& timeout) {
-    timer t_enqueue{stats_.dequeue_time};
+    steady_timer t_enqueue{stats_.dequeue_time};
     if (!count_.load(std::memory_order_relaxed)) {
       return false;
     }
@@ -148,9 +144,9 @@ class SPSCNChannel {
   }
 
   bool enqueue(value_type const& task) {
-    timer      t_enqueue{stats_.enqueue_time};
-    auto const status = channel_.push(task);
-    auto const ret    = status == channel_op_status::success;
+    steady_timer t_enqueue{stats_.enqueue_time};
+    auto const   status = channel_.push(task);
+    auto const   ret    = status == channel_op_status::success;
 
     if ((nproduced_ += ret) == high_watermark_) {
       // channel_.close();
@@ -196,9 +192,6 @@ class SPSCNChannel {
 
 template <mpi::reqsome_op testReqs = mpi::testsome>
 class CommDispatcher {
-  using Timer    = rtlx::Timer<>;
-  using duration = typename Timer::duration;
-
   static constexpr auto n_types = rtlx::to_underlying(message_type::INVALID);
   static_assert(n_types == 2, "only two request types supported for now");
 
@@ -236,11 +229,9 @@ class CommDispatcher {
       std::string_view("Tcomm.callback_time");
   static constexpr auto progress_time =
       std::string_view("Tcomm.progress_time");
-  static constexpr auto completion_time =
-      std::string_view("Tcomm.completion_time");
+  //static constexpr auto completion_time =
+  //    std::string_view("Tcomm.completion_time");
   static constexpr auto total_time = std::string_view("Tcomm.total_time");
-
-  using Statistics = MultiTrace;
 
  public:
   using channel = SPSCNChannel<CommTask>;
@@ -255,7 +246,7 @@ class CommDispatcher {
   std::array<signal_list, n_types>   signals_{};
   std::array<callback_list, n_types> callbacks_{};
 
-  MultiTrace stats_{""};
+  MultiTrace stats_{};
 
   // Mutex to protect work sharing variables
   mutable std::mutex mutex_;
@@ -317,7 +308,7 @@ class CommDispatcher {
 
   void pinToCore(int coreId);
 
-  Statistics& stats() noexcept;
+  typename MultiTrace::cache const& stats() const noexcept;
 
  private:
   std::size_t req_count() const noexcept;
@@ -404,6 +395,7 @@ template <typename mpi::reqsome_op testReqs>
 inline CommDispatcher<testReqs>::CommDispatcher(
     std::shared_ptr<channel> chan, std::size_t winsz)
   : task_channel_(std::move(chan)) {
+  FMPI_DBG_STREAM("CommDispatcher(winsz)" << winsz);
   do_reset(winsz);
 }
 
@@ -435,7 +427,7 @@ inline void CommDispatcher<testReqs>::worker() {
     }
   };
 
-  Timer t_total{stats_.duration(total_time)};
+  steady_timer t_total{stats_.duration(total_time)};
 
   while (auto const tasks =
              HasTasks{backlog_.size(), !task_channel_->done()}) {
@@ -495,7 +487,7 @@ inline void CommDispatcher<testReqs>::worker() {
 
 template <typename mpi::reqsome_op testReqs>
 void CommDispatcher<testReqs>::do_dispatch(CommTask task) {
-  Timer t_dispatch{stats_.duration(dispatch_time)};
+  steady_timer t_dispatch{stats_.duration(dispatch_time)};
 
   auto const req_type = rtlx::to_underlying(task.type);
 
@@ -527,8 +519,7 @@ void CommDispatcher<testReqs>::do_progress(bool force) {
 template <typename mpi::reqsome_op testReqs>
 inline typename CommDispatcher<testReqs>::idx_ranges_t
 CommDispatcher<testReqs>::progress_network(bool force) {
-  Timer t_progress{force ? stats_.duration(completion_time)
-                         : stats_.duration(progress_time)};
+  steady_timer t_progress{stats_.duration(progress_time)};
 
   auto const nreqs = req_count();
 
@@ -580,7 +571,7 @@ CommDispatcher<testReqs>::progress_network(bool force) {
 template <typename mpi::reqsome_op testReqs>
 inline void CommDispatcher<testReqs>::trigger_callbacks(
     idx_ranges_t completed) {
-  Timer t_callback{stats_.duration(callback_time)};
+  steady_timer t_callback{stats_.duration(callback_time)};
   for (auto&& type : range(n_types)) {
     auto first = type == 0 ? std::begin(indices_) : completed[type - 1];
     auto last  = completed[type];
@@ -606,9 +597,9 @@ inline void CommDispatcher<testReqs>::pinToCore(int coreId) {
 }
 
 template <mpi::reqsome_op testReqs>
-typename CommDispatcher<testReqs>::Statistics&
-CommDispatcher<testReqs>::stats() noexcept {
-  return stats_;
+typename MultiTrace::cache const&
+CommDispatcher<testReqs>::stats() const noexcept {
+  return stats_.values();
 }
 
 template <mpi::reqsome_op testReqs>

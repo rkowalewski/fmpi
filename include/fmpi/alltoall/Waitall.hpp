@@ -215,7 +215,7 @@ inline void ring_waitall(
 
     op(reqWin.ready_pieces(), target);
 
-    FMPI_DBG(reqWin.ready_pieces());
+    //FMPI_DBG(reqWin.ready_pieces());
 
     if (target != &*out) {
       std::move(target, target + nels, out);
