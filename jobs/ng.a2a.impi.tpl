@@ -45,7 +45,7 @@ fi
 
 mpiexec -n $SLURM_NTASKS \
     -genv OMP_NUM_THREADS="$num_comp_threads" \
-    -genv FMPI_ENABLE_HT="$ht_enabled" \
+    -genv FMPI_ENABLE_SMT="$ht_enabled" \
     -genv FMPI_HW_CORES="$ncores" \
     -genv FMPI_MGMT_CPUS="$num_mgmt_threads" \
     ./jobs/impi_omp.sh \

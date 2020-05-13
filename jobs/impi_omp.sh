@@ -15,7 +15,7 @@ local_rank=$((global_rank % SLURM_NTASKS_PER_NODE))
 
 omp_fst_place="$((local_rank * domain_size + offset))"
 
-if [[ "$FMPI_ENABLE_HT" -eq "0" ]]
+if [[ "$FMPI_ENABLE_SMT" -eq "0" ]]
 then
   omp_snd_place="$((omp_fst_place + ncpus))"
   omp_stride="1"

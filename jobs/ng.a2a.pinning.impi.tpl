@@ -32,7 +32,7 @@ unset KMP_AFFINITY
 
 mpiexec -n $((<<NUM_PROCS>> * <<NUM_NODES>>)) \
     -genv OMP_NUM_THREADS=<<NUM_THREADS>> \
-    -genv FMPI_ENABLE_HT=0 \
+    -genv FMPI_ENABLE_SMT=0 \
     -genv FMPI_HW_CORES="$(getconf _NPROCESSORS_ONLN)" \
     ./jobs/impi_omp.sh "./build.release/apps/mpiPinning"
 
