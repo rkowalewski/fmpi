@@ -43,6 +43,11 @@ if (argv$input == "-") {
     data <- read.csv(file = argv$input, header = TRUE, sep = ",")
 }
 
+# data <- data %>% group_by(Procs, Blocksize) %>%
+#     top_n(-6, Time) %>% ungroup()
+#
+# cat(format_csv(data))
+
 mylimit <- function(x) {
     limits <- c(min(x) - .2, max(x) + .2)
     limits

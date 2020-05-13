@@ -25,7 +25,7 @@ void CustomArguments(benchmark::internal::Benchmark* b) {
 
       constexpr long ws = 0;
 
-      b->Args({np, blocksz, ws});
+      b->Args({np, blocksz, ws, static_cast<long>(omp_get_max_threads())});
     }
   }
 }

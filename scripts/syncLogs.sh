@@ -12,5 +12,5 @@ proj_dst="$root/logs/projekt03/"
 mkdir -p "$smuc_dst"
 mkdir -p "$proj_dst"
 
-#rsync -avzP --cvs-exclude --progress --delete --exclude="**~" "$smuc_src/logs/" "$smuc_dst"
+rsync -avzP --cvs-exclude --progress --delete --exclude="**~" "$smuc_src/logs/" "$smuc_dst"
 rsync -avzP --cvs-exclude --progress --delete --exclude="**~" "$proj_src/logs/" "$proj_dst"

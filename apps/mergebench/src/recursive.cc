@@ -24,7 +24,7 @@ void CustomArguments(benchmark::internal::Benchmark* b) {
       long const blocksz = block_bytes / sizeof(value_t);
 
       for (long ws = min_winsz; ws <= max_winsz; ws *= 2) {
-        b->Args({np, blocksz, ws});
+        b->Args({np, blocksz, ws, static_cast<long>(omp_get_max_threads())});
       }
     }
   }
