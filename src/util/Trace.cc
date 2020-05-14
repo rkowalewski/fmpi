@@ -21,7 +21,6 @@ void TraceStore::erase(std::string_view ctx) {
   m_traces.erase(std::string(ctx));
 }
 
-
 MultiTrace::MultiTrace()
   : MultiTrace(anonymous) {
 }
@@ -38,7 +37,6 @@ std::string_view MultiTrace::name() const noexcept {
   return name_;
 }
 
-
 #if 0
 void MultiTrace::merge(MultiTrace&& source) {
   for (auto&& s : source.values_) {
@@ -52,10 +50,12 @@ void MultiTrace::merge(MultiTrace&& source) {
 
 MultiTrace::~MultiTrace() {
   FMPI_DBG_STREAM("destroying multitrace: " << name_);
-  if (!name_.empty() && name_ != anonymous) {
-    auto& global_instance = TraceStore::instance();
-    FMPI_ASSERT(!global_instance.contains(name_));
-    global_instance.insert(name_, std::begin(values_), std::end(values_));
+  if constexpr (kEnableTrace) {
+    if (!name_.empty() && name_ != anonymous) {
+      auto& global_instance = TraceStore::instance();
+      FMPI_ASSERT(!global_instance.contains(name_));
+      global_instance.insert(name_, std::begin(values_), std::end(values_));
+    }
   }
 }
 
