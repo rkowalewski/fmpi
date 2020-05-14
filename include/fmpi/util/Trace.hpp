@@ -3,16 +3,16 @@
 #include <chrono>
 #include <string>
 #include <tuple>
-#include <variant>
 #include <unordered_map>
+#include <variant>
 
 #include <boost/container/flat_map.hpp>
 
 #include <rtlx/Timer.hpp>
 
 #include <fmpi/Config.hpp>
-#include <fmpi/detail/Assert.hpp>
 #include <fmpi/Debug.hpp>
+#include <fmpi/detail/Assert.hpp>
 
 namespace fmpi {
 

@@ -1,5 +1,5 @@
-#include <fmpi/concurrency/OpenMP.hpp>
 #include <fmpi/common/Porting.hpp>
+#include <fmpi/concurrency/OpenMP.hpp>
 
 #include <thread>
 

@@ -1,7 +1,7 @@
 #include <fmpi/util/Trace.hpp>
 
-#include <fmpi/detail/Assert.hpp>
 #include <fmpi/Debug.hpp>
+#include <fmpi/detail/Assert.hpp>
 
 namespace fmpi {
 

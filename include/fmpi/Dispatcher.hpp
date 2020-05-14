@@ -23,9 +23,9 @@
 #include <fmpi/Function.hpp>
 #include <fmpi/Message.hpp>
 #include <fmpi/NumericRange.hpp>
-#include <fmpi/allocator/HeapAllocator.hpp>
 #include <fmpi/common/Porting.hpp>
 #include <fmpi/container/buffered_channel.hpp>
+#include <fmpi/memory/HeapAllocator.hpp>
 #include <fmpi/mpi/Request.hpp>
 #include <fmpi/util/Trace.hpp>
 

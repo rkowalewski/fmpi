@@ -1,24 +1,9 @@
-#ifndef FMPI_ALLOCATOR_CONTIGUOUSPOOLALLOCATOR_HPP
-#define FMPI_ALLOCATOR_CONTIGUOUSPOOLALLOCATOR_HPP
+#ifndef FMPI_MEMORY_CONTIGUOUSPOOLALLOCATOR_HPP
+#define FMPI_MEMORY_CONTIGUOUSPOOLALLOCATOR_HPP
 
 #include <memory>
-#include <mutex>
 
 namespace fmpi {
-
-namespace detail {
-
-template <bool ThreadSafe>
-struct LockGuard : public std::lock_guard<std::mutex> {
-  using std::lock_guard<std::mutex>::lock_guard;
-};
-
-template <>
-struct LockGuard<false> {
-  explicit LockGuard(std::mutex& /*unused*/) {
-  }
-};
-}  // namespace detail
 
 //==============================================================================
 //                        struct ContiguousPoolAllocator
@@ -124,7 +109,6 @@ struct ContiguousPoolAllocator {
     index_type*        _freeBlocks{nullptr};
     ssize_t            _freeBlockIndex{-1};
     size_t             _numHeapAllocatedBlocks{0};
-    mutable std::mutex _mutex;
   };
   std::shared_ptr<Control> _control;
 };
@@ -241,7 +225,6 @@ ContiguousPoolAllocator<T, ThreadSafe>::allocate(
     size_type n, const_pointer /*unused*/) {
   assert(bufferStart());
   {
-    detail::LockGuard<ThreadSafe> lock(_control->_mutex);
     constexpr auto max_n = std::size_t{std::numeric_limits<index_type>::max()};
     if (n < max_n && findContiguous(static_cast<index_type>(n))) {
       _control->_freeBlockIndex -= (n - 1);
@@ -263,7 +246,6 @@ void ContiguousPoolAllocator<T, ThreadSafe>::deallocate(
   }
   assert(bufferStart());
   if (isManaged(p)) {
-    detail::LockGuard<ThreadSafe> lock(_control->_mutex);
     // find index of the block and return the individual blocks to the free
     // pool
     for (size_type i = 0; i < n; ++i) {
@@ -272,7 +254,6 @@ void ContiguousPoolAllocator<T, ThreadSafe>::deallocate(
   } else {
     ::operator delete(p);
 
-    detail::LockGuard<ThreadSafe> lock(_control->_mutex);
     --_control->_numHeapAllocatedBlocks;
   }
 }

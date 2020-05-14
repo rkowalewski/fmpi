@@ -19,10 +19,9 @@
 #include <fmpi/Dispatcher.hpp>
 #include <fmpi/NumericRange.hpp>
 #include <fmpi/Pinning.hpp>
-#include <fmpi/allocator/ContiguousPoolAllocator.hpp>
-#include <fmpi/allocator/HeapAllocator.hpp>
 #include <fmpi/concurrency/Async.hpp>
 #include <fmpi/container/buffered_channel.hpp>
+#include <fmpi/memory/ThreadAllocator.hpp>
 #include <fmpi/mpi/Algorithm.hpp>
 #include <fmpi/mpi/Environment.hpp>
 #include <fmpi/mpi/Request.hpp>
@@ -122,10 +121,7 @@ int run() {
 
   auto ready_tasks = fmpi::buffered_channel<rank_data_pair>{world.size()};
 
-  uint16_t const size = std::min<uint16_t>(winsz, world.size()) * blocksize;
-
-  auto buf_alloc =
-      fmpi::HeapAllocator<value_type, true /*thread_safe*/>{size};
+  auto buf_alloc = fmpi::ThreadAllocator<value_type>{};
 
   auto const nreqs = 2 * world.size();
 
@@ -218,9 +214,6 @@ int run() {
       [&ready_tasks, &rbuf, &buf_alloc, ntasks = world.size()]() -> iterator {
         auto n = ntasks;
         while ((n--) != 0u) {
-          FMPI_DBG(buf_alloc.allocatedBlocks());
-          FMPI_DBG(buf_alloc.allocatedHeapBlocks());
-          FMPI_DBG(buf_alloc.isFull());
           auto ready = ready_tasks.value_pop();
 
           auto const [peer, s] = ready;
@@ -229,7 +222,7 @@ int run() {
           std::copy(
               s.begin(), s.end(), std::next(rbuf.begin(), peer * blocksize));
           // release memory
-          buf_alloc.dispose(s.data());
+          buf_alloc.deallocate(s.data(), blocksize);
         }
         return rbuf.end();
       });

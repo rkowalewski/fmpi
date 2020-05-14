@@ -1,7 +1,7 @@
-#ifndef FMPI_ALLOCATOR_HEAPALLOCATOR_HPP
-#define FMPI_ALLOCATOR_HEAPALLOCATOR_HPP
+#ifndef FMPI_MEMORY_HEAPALLOCATOR_HPP
+#define FMPI_MEMORY_HEAPALLOCATOR_HPP
 
-#include <fmpi/allocator/ContiguousPoolAllocator.hpp>
+#include <fmpi/memory/ContiguousPoolAllocator.hpp>
 
 namespace fmpi {
 
