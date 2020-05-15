@@ -1,30 +1,40 @@
 #!/usr/bin/env python3
 
-import os,stat
+import pathlib
+import os
+import stat
 import subprocess
 import argparse
+import pathlib
+from string import Template
+
 
 def getGitRoot():
-    return subprocess.Popen(['git', 'rev-parse', '--show-toplevel'], stdout=subprocess.PIPE).communicate()[0].rstrip().decode('utf-8')
+    return subprocess.Popen(['git', 'rev-parse', '--show-toplevel'],
+                            stdout=subprocess.PIPE).communicate()[0].rstrip().decode('utf-8')
+
 
 def mkdir_p(dir):
     '''make a directory (dir) if it doesn't exist'''
-    if not os.path.exists(dir):
-        os.mkdir(dir)
+    pathlib.Path(dir).mkdir(parents=True, exist_ok=True)
 
 
-parser = argparse.ArgumentParser(description='Job submission.')
+parser = argparse.ArgumentParser(description='Job submission.',
+                                 formatter_class=argparse.ArgumentDefaultsHelpFormatter
+                                 )
 parser.add_argument('nodes', type=int,
-                            help='number of nodes')
+                    help='number of nodes')
 parser.add_argument('ntasks', type=int,
-                            help='number of tasks per node')
+                    help='number of tasks per node')
 parser.add_argument('threads', type=int,
-                            help='number of threads per task')
-parser.add_argument('application', help='the binary to execute via mpirun')
-parser.add_argument("jobname", help="jobname")
-parser.add_argument("--binary-args", help="arguments passed to the binary via mpirun")
-parser.add_argument("--class", help="job class", default="test")
-parser.add_argument("--time", help="wallclock time for job")
+                    help='number of threads per task')
+parser.add_argument('application', help='the binary to execute via mpiexec')
+parser.add_argument('jobname', help='jobname')
+parser.add_argument('--partition', help='job partition', default='test')
+parser.add_argument(
+    '--time', help='wallclock time for job')
+parser.add_argument(
+    '--binary-args', help='arguments passed to the binary via mpirun')
 
 args = parser.parse_args()
 
@@ -32,7 +42,7 @@ if not os.path.exists(args.application):
     print("invalid path to binary: %s" % args.application)
     exit(1)
 
-canonical_path=os.path.abspath(args.application)
+canonical_path = os.path.abspath(args.application)
 
 if not (stat.S_IXUSR & os.stat(canonical_path)[stat.ST_MODE]):
     print("binary not executable", args.application)
@@ -41,12 +51,41 @@ if not (stat.S_IXUSR & os.stat(canonical_path)[stat.ST_MODE]):
 if not args.jobname:
     args.jobname = os.path.basename(canonical_path)
 
-root=getGitRoot()
+cwd = getGitRoot()
 
-scratch = os.environ['SCRATCH']
-data_dir="{root}/logs/{project}/{job}".format(root=scratch, project="fmpi", job=args.jobname)
+scratch = os.environ.get('SCRATCH')
 
-print(data_dir)
+if scratch is None:
+    scratch = os.path.join(cwd, '.logs')
+else:
+    scratch = os.path.join(cwd, 'logs')
+
+datadir = "{scratch}/{project}/{job}".format(
+    scratch=scratch, project="fmpi", job=args.jobname)
+
+jobdir = os.path.join(cwd, '.jobs')
+
+if args.binary_args is None:
+    args.binary_args = ""
+
+options = {}
+
+options['nodes'] = args.nodes
+options['ntasks'] = args.ntasks
+options['threads'] = args.threads
+options['partition'] = args.partition
+options['time'] = args.time
+options['jobname'] = args.jobname
+options['directory'] = cwd
+options['datadir'] = datadir
+options['binary_args'] = args.binary_args
+
+
+filein = open(os.path.join(cwd, 'jobs/sbatch.tpl'))
+
+src = Template(filein.read())
+result = src.substitute(options)
+print(result)
 
 # # Make top level directories
 # mkdir_p(job_directory)
@@ -75,4 +114,3 @@ print(data_dir)
 #         fh.writelines("Rscript $HOME/project/LizardLips/run.R %s potato shiabato\n" %lizard_data)
 #
 #     os.system("sbatch %s" %job_file)
-
