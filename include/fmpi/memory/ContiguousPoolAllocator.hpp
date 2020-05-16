@@ -104,11 +104,11 @@ struct ContiguousPoolAllocator {
     ~Control() {
       delete[] _freeBlocks;
     }
-    index_type         _size{0};
-    aligned_type*      _buffer{nullptr};  // non-owning
-    index_type*        _freeBlocks{nullptr};
-    ssize_t            _freeBlockIndex{-1};
-    size_t             _numHeapAllocatedBlocks{0};
+    index_type    _size{0};
+    aligned_type* _buffer{nullptr};  // non-owning
+    index_type*   _freeBlocks{nullptr};
+    ssize_t       _freeBlockIndex{-1};
+    size_t        _numHeapAllocatedBlocks{0};
   };
   std::shared_ptr<Control> _control;
 };
@@ -225,7 +225,8 @@ ContiguousPoolAllocator<T, ThreadSafe>::allocate(
     size_type n, const_pointer /*unused*/) {
   assert(bufferStart());
   {
-    constexpr auto max_n = std::size_t{std::numeric_limits<index_type>::max()};
+    constexpr auto max_n =
+        std::size_t{std::numeric_limits<index_type>::max()};
     if (n < max_n && findContiguous(static_cast<index_type>(n))) {
       _control->_freeBlockIndex -= (n - 1);
       return reinterpret_cast<pointer>(
