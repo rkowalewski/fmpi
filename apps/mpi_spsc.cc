@@ -16,11 +16,11 @@
 #include <sstream>
 #include <thread>
 
-#include <fmpi/Dispatcher.hpp>
 #include <fmpi/NumericRange.hpp>
 #include <fmpi/Pinning.hpp>
 #include <fmpi/concurrency/Async.hpp>
-#include <fmpi/container/buffered_channel.hpp>
+#include <fmpi/concurrency/BufferedChannel.hpp>
+#include <fmpi/concurrency/Dispatcher.hpp>
 #include <fmpi/memory/ThreadAllocator.hpp>
 #include <fmpi/mpi/Algorithm.hpp>
 #include <fmpi/mpi/Environment.hpp>

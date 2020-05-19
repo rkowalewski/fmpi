@@ -6,8 +6,8 @@
 // based on Dmitry Vyukov's MPMC queue
 // (http://www.1024cores.net/home/lock-free-algorithms/queues/bounded-mpmc-queue)
 
-#ifndef FMPI_CONTAINER_BUFFERED_CHANNEL_HPP
-#define FMPI_CONTAINER_BUFFERED_CHANNEL_HPP
+#ifndef FMPI_CONCURRENCY_BUFFEREDCHANNEL_HPP
+#define FMPI_CONCURRENCY_BUFFEREDCHANNEL_HPP
 
 #include <atomic>
 #include <chrono>
@@ -287,4 +287,4 @@ class buffered_channel {
 };
 }  // namespace fmpi
 
-#endif  // FMPI_CONTAINER_BUFFERED_CHANNEL_HPP
+#endif // FMPI_CONCURRENCY_BUFFEREDCHANNEL_HPP

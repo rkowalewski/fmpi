@@ -1,4 +1,5 @@
 #include <fmpi/mpi/Request.hpp>
+#include <iterator>
 
 namespace mpi {
 

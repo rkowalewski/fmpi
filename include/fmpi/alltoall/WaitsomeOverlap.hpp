@@ -4,10 +4,10 @@
 #include <string_view>
 #include <utility>
 
-#include <fmpi/Dispatcher.hpp>
 #include <fmpi/Pinning.hpp>
 #include <fmpi/alltoall/Detail.hpp>
-#include <fmpi/container/buffered_channel.hpp>
+#include <fmpi/concurrency/BufferedChannel.hpp>
+#include <fmpi/concurrency/Dispatcher.hpp>
 #include <fmpi/memory/ThreadAllocator.hpp>
 #include <fmpi/util/Trace.hpp>
 
@@ -262,8 +262,8 @@ inline void ring_waitsome_overlap(
         pieces.emplace_back(piece{span, &buf_alloc});
 
         if (enough_work(pieces.begin(), pieces.end())) {
-          steady_timer        t_comp{trace.duration(kComputationTime)};
-          //we temporarily pause t_receive and run t_comp.
+          steady_timer t_comp{trace.duration(kComputationTime)};
+          // we temporarily pause t_receive and run t_comp.
           scoped_timer_switch switcher{t_receive, t_comp};
           // merge all chunks
           std::vector<iter_pair> chunks;

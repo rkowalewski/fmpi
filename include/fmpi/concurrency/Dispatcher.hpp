@@ -1,5 +1,5 @@
-#ifndef FMPI_DISPATCHER_HPP
-#define FMPI_DISPATCHER_HPP
+#ifndef FMPI_CONCURRENCY_DISPATCHER_HPP
+#define FMPI_CONCURRENCY_DISPATCHER_HPP
 
 #include <mpi.h>
 
@@ -24,12 +24,24 @@
 #include <fmpi/Message.hpp>
 #include <fmpi/NumericRange.hpp>
 #include <fmpi/common/Porting.hpp>
-#include <fmpi/container/buffered_channel.hpp>
+#include <fmpi/concurrency/BufferedChannel.hpp>
+#include <fmpi/concurrency/SPSC.hpp>
 #include <fmpi/memory/HeapAllocator.hpp>
 #include <fmpi/mpi/Request.hpp>
 #include <fmpi/util/Trace.hpp>
 
 namespace fmpi {
+
+namespace detail {
+
+int dispatch_waitall(
+    MPI_Request* begin,
+    MPI_Request* end,
+    int*         indices,
+    MPI_Status*  statuses,
+    int*&        last);
+
+}  // namespace detail
 
 enum class status
 {
@@ -37,15 +49,6 @@ enum class status
   running,
   resolved,
   rejected
-};
-
-/// request type
-enum class message_type : uint8_t
-{
-  IRECV = 0,
-  ISEND,
-
-  INVALID
 };
 
 struct CommTask {
@@ -60,148 +63,12 @@ struct CommTask {
   message_type type{};
 };
 
-namespace detail {
-
-int dispatch_waitall(
-    MPI_Request* begin,
-    MPI_Request* end,
-    int*         indices,
-    MPI_Status*  statuses,
-    int*&        last) {
-  auto const n = std::distance(begin, end);
-  last         = indices;
-
-  std::vector<int> pending_indices;
-  pending_indices.reserve(n);
-
-  for (auto&& idx : range(n)) {
-    if (*std::next(begin, idx) != MPI_REQUEST_NULL) {
-      pending_indices.emplace_back(idx);
-    }
-  }
-
-  auto ret = MPI_Waitall(n, begin, statuses);
-
-  if (ret == MPI_SUCCESS) {
-    last = std::copy(
-        std::begin(pending_indices), std::end(pending_indices), indices);
-  }
-
-  return ret;
-}
-
-}  // namespace detail
-
-template <class T>
-class SPSCNChannel {
-  using duration = typename steady_timer::duration;
-
- public:
-  struct Stats {
-    // consumer
-    alignas(kCacheAlignment) duration dequeue_time{0};
-    // producer
-    alignas(kCacheAlignment) duration enqueue_time{0};
-  };
-
- public:
-  using value_type = T;
-  using channel    = buffered_channel<value_type>;
-
-  SPSCNChannel() = default;
-
-  SPSCNChannel(std::size_t n) noexcept
-    : channel_(n)
-    , high_watermark_(n)
-    , count_(n) {
-    FMPI_DBG("< SPSCNChannel(chan, n)");
-    FMPI_DBG(task_count());
-  }
-
-  SPSCNChannel(SPSCNChannel const&) = delete;
-  SPSCNChannel& operator=(SPSCNChannel const&) = delete;
-
-  bool wait_dequeue(value_type& val) {
-    steady_timer t_dequeue{stats_.dequeue_time};
-    if (!count_.load(std::memory_order_relaxed)) {
-      return false;
-    }
-    val = channel_.value_pop();
-    count_.fetch_sub(1, std::memory_order_release);
-    return true;
-  }
-
-  template <class Rep, class Period>
-  bool wait_dequeue(
-      value_type& val, std::chrono::duration<Rep, Period> const& timeout) {
-    steady_timer t_enqueue{stats_.dequeue_time};
-    if (!count_.load(std::memory_order_relaxed)) {
-      return false;
-    }
-    auto const ret = channel_.pop(val, timeout);
-    count_.fetch_sub(ret, std::memory_order_release);
-    return ret;
-  }
-
-  bool enqueue(value_type const& task) {
-    steady_timer t_enqueue{stats_.enqueue_time};
-    auto const   status = channel_.push(task);
-    auto const   ret    = status == channel_op_status::success;
-
-    if ((nproduced_ += ret) == high_watermark_) {
-      // channel_.close();
-    }
-
-    return ret;
-  }
-
-  [[nodiscard]] bool done() const noexcept {
-    return task_count() == 0u;
-  }
-
-  [[nodiscard]] std::size_t task_count() const noexcept {
-    return count_.load(std::memory_order_acquire);
-  }
-
-  Stats statistics() const noexcept {
-    FMPI_ASSERT(done());
-    return stats_;
-  }
-
-  [[nodiscard]] std::size_t high_watermark() const noexcept {
-    return high_watermark_;
-  }
-
- private:
-  channel channel_{0};
-
-  // two separate write cachelines
-  // L1: consumer
-  // L2: producer
-  Stats stats_{};
-
-  // private access in producer
-  std::size_t nproduced_{0};
-
-  // shared read cacheline
-  alignas(kCacheAlignment) std::size_t const high_watermark_{0};
-
-  // shared write cacheline
-  alignas(kCacheAlignment) std::atomic<std::size_t> count_{0};
-};
-
 template <mpi::reqsome_op testReqs = mpi::testsome>
 class CommDispatcher {
   static constexpr auto n_types = rtlx::to_underlying(message_type::INVALID);
   static_assert(n_types == 2, "only two request types supported for now");
 
   class TaskQueue;
-
-  template <class T>
-  struct ContiguousList {
-    using allocator = HeapAllocator<T, false>;
-    using container = std::list<T, ContiguousPoolAllocator<T, false>>;
-  };
 
   template <class _T>
   using simple_vector =
@@ -229,7 +96,7 @@ class CommDispatcher {
       std::string_view("Tcomm.callback_time");
   static constexpr auto progress_time =
       std::string_view("Tcomm.progress_time");
-  //static constexpr auto completion_time =
+  // static constexpr auto completion_time =
   //    std::string_view("Tcomm.completion_time");
   static constexpr auto total_time = std::string_view("Tcomm.total_time");
 
@@ -242,9 +109,6 @@ class CommDispatcher {
   //////////////////////////////
 
   std::shared_ptr<channel> task_channel_{};
-
-  std::array<signal_list, n_types>   signals_{};
-  std::array<callback_list, n_types> callbacks_{};
 
   MultiTrace stats_{};
 
@@ -265,9 +129,6 @@ class CommDispatcher {
   // Sliding Window Worker Thread //
   //////////////////////////////////
 
-  // Task Cache
-  TaskQueue backlog_{};
-
   // Window Size
   std::size_t winsz_{};
   // Requests in flight for each type, currently: winsz / n_types
@@ -282,6 +143,13 @@ class CommDispatcher {
   req_idx_t indices_{};
   // free slots for each request type
   simple_vector<tlx::RingBuffer<int>> req_slots_{n_types};
+
+  // Task Cache
+  TaskQueue backlog_{};
+
+  // Signals
+  std::array<signal_list, n_types>   signals_{};
+  std::array<callback_list, n_types> callbacks_{};
 
   std::thread thread_;
 
@@ -327,15 +195,21 @@ class CommDispatcher {
 
   void discard_signals();
 
-  void do_reset(std::size_t winsz);
+  void do_init(std::size_t winsz);
 
   void trigger_callbacks(idx_ranges_t ranges);
 
   class TaskQueue {
-    using value_type      = CommTask;
-    using contiguous_list = ContiguousList<value_type>;
-    using allocator       = typename contiguous_list::allocator;
-    using list            = typename contiguous_list::container;
+    template <class T>
+    struct ContiguousList {
+      using allocator = HeapAllocator<T, false>;
+      using container = std::list<T, ContiguousPoolAllocator<T, false>>;
+    };
+
+    using value_type = CommTask;
+    using container  = ContiguousList<value_type>;
+    using allocator  = typename container::allocator;
+    using list       = typename container::container;
 
     using task_queue = std::queue<value_type, list>;
 
@@ -396,7 +270,7 @@ inline CommDispatcher<testReqs>::CommDispatcher(
     std::shared_ptr<channel> chan, std::size_t winsz)
   : task_channel_(std::move(chan)) {
   FMPI_DBG_STREAM("CommDispatcher(winsz)" << winsz);
-  do_reset(winsz);
+  do_init(winsz);
 }
 
 template <typename mpi::reqsome_op testReqs>
@@ -597,8 +471,8 @@ inline void CommDispatcher<testReqs>::pinToCore(int coreId) {
 }
 
 template <mpi::reqsome_op testReqs>
-typename MultiTrace::cache const&
-CommDispatcher<testReqs>::stats() const noexcept {
+typename MultiTrace::cache const& CommDispatcher<testReqs>::stats() const
+    noexcept {
   return stats_.values();
 }
 
@@ -660,7 +534,7 @@ inline void CommDispatcher<testReqs>::discard_signals() {
 }
 
 template <mpi::reqsome_op testReqs>
-inline void CommDispatcher<testReqs>::do_reset(std::size_t winsz) {
+inline void CommDispatcher<testReqs>::do_init(std::size_t winsz) {
   discard_signals();
 
   winsz_          = winsz;
@@ -710,6 +584,37 @@ template <mpi::reqsome_op testReqs>
 inline bool CommDispatcher<testReqs>::has_active_requests() const noexcept {
   return req_count() > 0;
 }
+
+namespace detail {
+
+int dispatch_waitall(
+    MPI_Request* begin,
+    MPI_Request* end,
+    int*         indices,
+    MPI_Status*  statuses,
+    int*&        last) {
+  auto const n = std::distance(begin, end);
+  last         = indices;
+
+  std::vector<int> pending_indices;
+  pending_indices.reserve(n);
+
+  for (auto&& idx : range(n)) {
+    if (*std::next(begin, idx) != MPI_REQUEST_NULL) {
+      pending_indices.emplace_back(idx);
+    }
+  }
+
+  auto ret = MPI_Waitall(n, begin, statuses);
+
+  if (ret == MPI_SUCCESS) {
+    last = std::copy(
+        std::begin(pending_indices), std::end(pending_indices), indices);
+  }
+
+  return ret;
+}
+}  // namespace detail
 
 }  // namespace fmpi
 

@@ -3,19 +3,16 @@
 
 #include <mpi.h>
 
-#include <array>
-#include <fmpi/Debug.hpp>
-#include <iterator>
-#include <vector>
+#include <type_traits>
 
 namespace mpi {
 
-typedef int (*reqsome_op)(
-    MPI_Request* begin,
-    MPI_Request* end,
+using reqsome_op = typename std::add_pointer_t<int(
+    MPI_Request* first,
+    MPI_Request* last,
     int*         indices,
     MPI_Status*  statuses,
-    int*&        last);
+    int*&        last_index)>;
 
 int testsome(
     MPI_Request* begin,

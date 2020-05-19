@@ -24,7 +24,8 @@ BlockAllocator::BlockAllocator(
 
   _initial_adjustment = detail::alignForwardAdjustment(start, _alignment);
 
-  _free_blocks = (BlockHeader*)detail::add(start, _initial_adjustment);
+  _free_blocks =
+      static_cast<BlockHeader*>(detail::add(start, _initial_adjustment));
 
   FMPI_ASSERT(detail::isAligned(_free_blocks));
 
@@ -109,8 +110,9 @@ void* BlockAllocator::allocate(size_t size, std::size_t alignment) {
       _free_blocks = best_fit->next_free_block;
   } else {
     // Else create a new block containing remaining memory
-    auto* new_block = (BlockHeader*)(detail::add(best_fit + 1, size));
-    new_block->size = best_fit->size - size - _header_size;
+    auto* new_block =
+        static_cast<BlockHeader*>(detail::add(best_fit + 1, size));
+    new_block->size            = best_fit->size - size - _header_size;
     new_block->next_free_block = best_fit->next_free_block;
 
     if (best_fit_prev != nullptr)
@@ -137,7 +139,7 @@ void* BlockAllocator::allocate(size_t size, std::size_t alignment) {
 void BlockAllocator::deallocate(void* p) {
   FMPI_ASSERT(p != nullptr);
 
-  auto* header = (BlockHeader*)detail::sub(p, _header_size);
+  auto* header = static_cast<BlockHeader*>(detail::sub(p, _header_size));
 
   auto           block_start = reinterpret_cast<std::uintptr_t>(header);
   size_t         block_size  = header->size;
@@ -154,8 +156,8 @@ void BlockAllocator::deallocate(void* p) {
   }
 
   if (prev_free_block == nullptr) {
-    prev_free_block                  = (BlockHeader*)block_start;
-    prev_free_block->size            = block_size;
+    prev_free_block       = reinterpret_cast<BlockHeader*>(block_start);
+    prev_free_block->size = block_size;
     prev_free_block->next_free_block = _free_blocks;
 
     _free_blocks = prev_free_block;
