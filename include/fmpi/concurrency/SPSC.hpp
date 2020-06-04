@@ -24,7 +24,7 @@ class SPSCNChannel {
 
   SPSCNChannel() = default;
 
-  SPSCNChannel(std::size_t n) noexcept
+  explicit SPSCNChannel(std::size_t n) noexcept
     : channel_(n)
     , high_watermark_(n)
     , count_(n) {
@@ -70,7 +70,7 @@ class SPSCNChannel {
   }
 
   [[nodiscard]] bool done() const noexcept {
-    return task_count() == 0u;
+    return task_count() == 0U;
   }
 
   [[nodiscard]] std::size_t task_count() const noexcept {

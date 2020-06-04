@@ -16,7 +16,7 @@ class FlatHandshake {
 
   constexpr FlatHandshake() = default;
 
-  constexpr FlatHandshake(Context const& ctx) FMPI_NOEXCEPT
+  constexpr explicit FlatHandshake(Context const& ctx) FMPI_NOEXCEPT
     : FlatHandshake(ctx.size(), ctx.rank()) {
   }
 
@@ -25,21 +25,21 @@ class FlatHandshake {
       nodes_(nodes) {
   }
 
-  constexpr Rank sendRank(uint32_t phase) const FMPI_NOEXCEPT {
+  [[nodiscard]] constexpr Rank sendRank(uint32_t phase) const FMPI_NOEXCEPT {
     auto const r_phase = static_cast<Rank>(phase);
     auto const r_nodes = static_cast<Rank>(nodes_);
 
     return isPow2(nodes_) ? rank_ xor r_phase : mod(rank_ + r_phase, r_nodes);
   }
 
-  constexpr Rank recvRank(uint32_t phase) const FMPI_NOEXCEPT {
+  [[nodiscard]] constexpr Rank recvRank(uint32_t phase) const FMPI_NOEXCEPT {
     auto const r_phase = static_cast<Rank>(phase);
     auto const r_nodes = static_cast<Rank>(nodes_);
 
     return isPow2(nodes_) ? rank_ xor r_phase : mod(rank_ - r_phase, r_nodes);
   }
 
-  constexpr uint32_t phaseCount() const FMPI_NOEXCEPT {
+  [[nodiscard]] constexpr uint32_t phaseCount() const FMPI_NOEXCEPT {
     return nodes_;
   }
 
@@ -54,7 +54,7 @@ class OneFactor {
 
   constexpr OneFactor() = default;
 
-  constexpr OneFactor(Context const& ctx) FMPI_NOEXCEPT
+  constexpr explicit OneFactor(Context const& ctx) FMPI_NOEXCEPT
     : OneFactor(ctx.size(), ctx.rank()) {
   }
 
@@ -63,20 +63,21 @@ class OneFactor {
       nodes_(nodes) {
   }
 
-  constexpr Rank sendRank(uint32_t phase) const FMPI_NOEXCEPT {
+  [[nodiscard]] constexpr Rank sendRank(uint32_t phase) const FMPI_NOEXCEPT {
     return (nodes_ % 2) != 0U ? factor_odd(phase) : factor_even(phase);
   }
 
-  constexpr Rank recvRank(uint32_t phase) const FMPI_NOEXCEPT {
+  [[nodiscard]] constexpr Rank recvRank(uint32_t phase) const FMPI_NOEXCEPT {
     return sendRank(phase);
   }
 
-  constexpr uint32_t phaseCount() const FMPI_NOEXCEPT {
+  [[nodiscard]] constexpr uint32_t phaseCount() const FMPI_NOEXCEPT {
     return (nodes_ % 2) != 0U ? nodes_ : nodes_ - 1;
   }
 
  private:
-  constexpr Rank factor_even(uint32_t phase) const FMPI_NOEXCEPT {
+  [[nodiscard]] constexpr Rank factor_even(uint32_t phase) const
+      FMPI_NOEXCEPT {
     auto const count = static_cast<Rank>(nodes_ - 1);
     auto const idle  = mod(static_cast<Rank>(nodes_ * phase / 2), count);
 
@@ -91,7 +92,8 @@ class OneFactor {
     return mod(static_cast<Rank>(phase) - rank_, count);
   }
 
-  constexpr Rank factor_odd(uint32_t phase) const FMPI_NOEXCEPT {
+  [[nodiscard]] constexpr Rank factor_odd(uint32_t phase) const
+      FMPI_NOEXCEPT {
     return mod(static_cast<Rank>(phase) - rank_, static_cast<Rank>(nodes_));
   }
 

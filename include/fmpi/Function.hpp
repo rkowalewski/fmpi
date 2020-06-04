@@ -66,7 +66,7 @@ class Function<RET(ARGS...), STORAGE_SIZE> {
   // Ctors
   explicit Function(RET (*ptr)(ARGS...));  // construct with function pointer
   template <typename FUNCTOR>
-  Function(FUNCTOR&& functor) noexcept(
+  explicit Function(FUNCTOR&& functor) noexcept(
       std::is_nothrow_move_constructible_v<FUNCTOR>);  // NOLINT
   Function(const Function<RET(ARGS...)>& other) = delete;
   Function(Function<RET(ARGS...)>&& other);  // NOLINT

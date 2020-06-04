@@ -418,7 +418,9 @@ class Piece {
   Piece& operator=(Piece const&) = delete;
 
   constexpr Piece& operator=(Piece&& other) noexcept {
-    if (this == &other) return *this;
+    if (this == &other) {
+      return *this;
+    }
 
     using std::swap;
     swap(span_, other.span_);

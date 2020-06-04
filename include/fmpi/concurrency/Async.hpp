@@ -19,8 +19,10 @@ template <typename R, typename F, typename... Args>
 constexpr void set_promise_value(std::promise<R>& p, F&& f, Args&&... args) {
   if constexpr (std::is_void_v<R>) {
     {
-      std::forward<F>(f)(std::forward<Args...>(args)...);
-      p.set_value();
+      {
+        std::forward<F>(f)(std::forward<Args...>(args)...);
+        p.set_value();
+      }
     }
   } else {
     auto value = std::forward<F>(f)(std::forward<Args...>(args)...);

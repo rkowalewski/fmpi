@@ -194,7 +194,7 @@ class CommDispatcher {
 
   void do_init(std::size_t winsz);
 
-  void trigger_callbacks(idx_ranges_t ranges);
+  void trigger_callbacks(idx_ranges_t completed);
 
   class TaskQueue {
     template <class T>
@@ -293,7 +293,7 @@ inline void CommDispatcher<testReqs>::worker() {
       : task_count(std::make_pair(first, second)) {
     }
 
-    constexpr operator bool() const noexcept {
+    constexpr explicit operator bool() const noexcept {
       return task_count.first || task_count.second;
     }
   };
@@ -584,7 +584,7 @@ inline bool CommDispatcher<testReqs>::has_active_requests() const noexcept {
 
 namespace detail {
 
-int dispatch_waitall(
+inline int dispatch_waitall(
     MPI_Request* begin,
     MPI_Request* end,
     int*         indices,

@@ -51,14 +51,18 @@ class Timer {
   }
 
   void pause() noexcept {
-    if (_state != state::running) return;
+    if (_state != state::running) {
+      return;
+    }
 
     _mark += Clock::now() - _start;
     _state = state::paused;
   }
 
   void resume() noexcept {
-    if (_state != state::paused) return;
+    if (_state != state::paused) {
+      return;
+    }
 
     _start = Clock::now();
     _state = state::running;

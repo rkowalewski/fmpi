@@ -46,7 +46,7 @@ class TraceStore {
     }
   }
 
-  void erase(std::string_view);
+  void erase(std::string_view /*ctx*/);
 
   [[nodiscard]] bool empty() const noexcept {
     return m_traces.empty();

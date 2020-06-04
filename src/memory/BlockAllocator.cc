@@ -20,7 +20,9 @@ BlockAllocator::BlockAllocator(
 
   auto const rem = sizeof(BlockHeader) % _alignment;
 
-  if (rem != 0) _header_size += _alignment - rem;
+  if (rem != 0) {
+    _header_size += _alignment - rem;
+  }
 
   _initial_adjustment = detail::alignForwardAdjustment(start, _alignment);
 
@@ -97,17 +99,20 @@ void* BlockAllocator::allocate(size_t size, std::size_t alignment) {
     free_block      = free_block->next_free_block;
   }
 
-  if (best_fit == nullptr) return nullptr;
+  if (best_fit == nullptr) {
+    return nullptr;
+  }
 
   // If allocations in the remaining memory will be impossible
   if (best_fit->size - size < _header_size + _block_size) {
     // Increase allocation size instead of creating a new block
     size = best_fit->size;
 
-    if (best_fit_prev != nullptr)
+    if (best_fit_prev != nullptr) {
       best_fit_prev->next_free_block = best_fit->next_free_block;
-    else
+    } else {
       _free_blocks = best_fit->next_free_block;
+    }
   } else {
     // Else create a new block containing remaining memory
     auto* new_block =
@@ -115,10 +120,11 @@ void* BlockAllocator::allocate(size_t size, std::size_t alignment) {
     new_block->size            = best_fit->size - size - _header_size;
     new_block->next_free_block = best_fit->next_free_block;
 
-    if (best_fit_prev != nullptr)
+    if (best_fit_prev != nullptr) {
       best_fit_prev->next_free_block = new_block;
-    else
+    } else {
       _free_blocks = new_block;
+    }
 
     _used_memory += _header_size;
   }
@@ -149,7 +155,9 @@ void BlockAllocator::deallocate(void* p) {
   BlockHeader* free_block      = _free_blocks;
 
   while (free_block != nullptr) {
-    if ((std::uintptr_t)free_block >= block_end) break;
+    if ((std::uintptr_t)free_block >= block_end) {
+      break;
+    }
 
     prev_free_block = free_block;
     free_block      = free_block->next_free_block;

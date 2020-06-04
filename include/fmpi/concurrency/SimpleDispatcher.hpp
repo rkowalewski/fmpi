@@ -27,9 +27,9 @@ class SimpleDispatcher {
   ~SimpleDispatcher();
 
   // dispatch and copy
-  std::future<mpi::return_code> dispatch(const message&);
+  std::future<mpi::return_code> dispatch(const message& /*message*/);
   // dispatch and move
-  std::future<mpi::return_code> dispatch(message&&);
+  std::future<mpi::return_code> dispatch(message&& /*message*/);
 
   // Deleted operations
   SimpleDispatcher(const SimpleDispatcher&) = delete;
@@ -64,7 +64,7 @@ SimpleDispatcher::~SimpleDispatcher() {
   thread_.join();
 }
 
-std::future<mpi::return_code> SimpleDispatcher::dispatch(
+inline std::future<mpi::return_code> SimpleDispatcher::dispatch(
     const message& message) {
   auto promise = std::make_unique<std::promise<mpi::return_code>>();
 
@@ -99,7 +99,8 @@ std::future<mpi::return_code> SimpleDispatcher::dispatch(
   return future;
 }
 
-std::future<mpi::return_code> SimpleDispatcher::dispatch(message&& message) {
+inline std::future<mpi::return_code> SimpleDispatcher::dispatch(
+    message&& message) {
   auto promise = std::make_unique<std::promise<mpi::return_code>>();
 
   auto future = promise->get_future();
@@ -133,15 +134,15 @@ std::future<mpi::return_code> SimpleDispatcher::dispatch(message&& message) {
   return future;
 }
 
-void SimpleDispatcher::dispatch_thread_handler() {
+inline void SimpleDispatcher::dispatch_thread_handler() {
   std::unique_lock<std::mutex> lock(lock_);
 
   do {
     // Wait until we have data or a quit signal
-    cv_.wait(lock, [this] { return (q_.size() || quit_); });
+    cv_.wait(lock, [this] { return ((!q_.empty() != 0u) || quit_); });
 
     // after wait, we own the lock
-    if (!quit_ && q_.size()) {
+    if (!quit_ && (!q_.empty() != 0u)) {
       auto op = std::move(q_.front());
       q_.pop();
 

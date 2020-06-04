@@ -32,7 +32,7 @@ struct Pinning {
   Pinning& operator=(Pinning&&) = delete;
 };
 
-std::ostream& operator<<(std::ostream&, const Pinning&);
+std::ostream& operator<<(std::ostream& /*os*/, const Pinning& /*pinning*/);
 
 void print_pinning(std::ostream& os);
 

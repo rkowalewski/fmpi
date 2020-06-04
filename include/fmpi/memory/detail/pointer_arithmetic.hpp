@@ -26,7 +26,7 @@ inline std::size_t alignForwardAdjustment(
   auto const uptraddr   = reinterpret_cast<std::uintptr_t>(address);
   auto const misaligned = uptraddr & (alignment - 1);
 
-  return misaligned ? alignment - misaligned : 0;
+  return misaligned != 0u ? alignment - misaligned : 0;
 }
 
 inline bool isAligned(const void* address, std::size_t alignment) {

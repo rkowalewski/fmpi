@@ -10,8 +10,7 @@
 #include <string>
 #include <tlx/cmdline_parser.hpp>
 
-namespace fmpi {
-namespace benchmark {
+namespace fmpi::benchmark {
 
 template <class cT, class traits = std::char_traits<cT> >
 class basic_nullbuf : public std::basic_streambuf<cT, traits> {
@@ -207,5 +206,4 @@ void printBenchmarkPreamble(
 
   os << oss.str();
 }
-}  // namespace benchmark
-}  // namespace fmpi
+}  // namespace fmpi::benchmark

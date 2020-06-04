@@ -42,8 +42,9 @@ static void BM_TlxMergeSequentialRecursive(benchmark::State& state) {
   auto processed =
       std::vector<std::pair<iterator, iterator>>(params.windowsz);
 
-  std::size_t mergedepth = params.nblocks / params.windowsz +
-                           ((params.nblocks % params.windowsz) > 0);
+  std::size_t mergedepth =
+      params.nblocks / params.windowsz +
+      static_cast<unsigned long>((params.nblocks % params.windowsz) > 0);
   FMPI_DBG(mergedepth);
 
   auto const window_nels = params.windowsz * params.blocksz;
@@ -129,8 +130,9 @@ static void BM_TlxMergeParallelRecursive(benchmark::State& state) {
   auto processed =
       std::vector<std::pair<iterator, iterator>>(params.windowsz);
 
-  std::size_t mergedepth = params.nblocks / params.windowsz +
-                           ((params.nblocks % params.windowsz) > 0);
+  std::size_t mergedepth =
+      params.nblocks / params.windowsz +
+      static_cast<unsigned long>((params.nblocks % params.windowsz) > 0);
   FMPI_DBG(mergedepth);
 
   auto const window_nels = params.windowsz * params.blocksz;

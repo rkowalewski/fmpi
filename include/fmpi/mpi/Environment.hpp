@@ -32,7 +32,7 @@ class Context {
     return m_size;
   }
 
-  [[nodiscard]] constexpr operator MPI_Comm() const noexcept {
+  [[nodiscard]] constexpr explicit operator MPI_Comm() const noexcept {
     return mpiComm();
   }
 

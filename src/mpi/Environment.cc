@@ -48,7 +48,9 @@ bool is_thread_main() {
 }
 
 bool initialize(int* argc, char*** argv, ThreadLevel level) {
-  if (initialized) return true;
+  if (initialized) {
+    return true;
+  }
 
   auto const required = rtlx::to_underlying(level);
   int        provided;

@@ -43,7 +43,8 @@ class ThreadAllocator {
 
 template <class T, class U>
 constexpr bool operator==(
-    ThreadAllocator<T> const&, ThreadAllocator<U> const&) noexcept {
+    ThreadAllocator<T> const& /*unused*/,
+    ThreadAllocator<U> const& /*unused*/) noexcept {
   return true;
 }
 

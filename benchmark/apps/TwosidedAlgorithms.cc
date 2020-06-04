@@ -64,7 +64,7 @@ int main(int argc, char* argv[]) {
                    iterator_t                                     res) {
     // parallel merge does not support inplace merging
     // nels must be the number of elements in all sequences
-    assert(seqs.size());
+    assert(!seqs.empty());
     assert(res);
 
     auto const size = std::accumulate(

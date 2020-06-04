@@ -40,10 +40,10 @@ Params processParams(benchmark::State const& state) {
 class NullReporter : public ::benchmark::BenchmarkReporter {
  public:
   NullReporter() = default;
-  bool ReportContext(const Context&) override {
+  bool ReportContext(const Context& /*context*/) override {
     return true;
   }
-  void ReportRuns(const std::vector<Run>&) override {
+  void ReportRuns(const std::vector<Run>& /*report*/) override {
   }
   void Finalize() override {
   }
@@ -58,11 +58,11 @@ int main(int argc, char** argv) {
 
   auto const& world = mpi::Context::world();
 
-  if (world.rank() == 0)
+  if (world.rank() == 0) {
     // root process will use a reporter from the usual set provided by
     // ::benchmark
     ::benchmark::RunSpecifiedBenchmarks();
-  else {
+  } else {
     // reporting from other processes is disabled by passing a custom
     // reporter
     NullReporter null;
