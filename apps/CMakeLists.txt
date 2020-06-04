@@ -1,4 +1,7 @@
 add_executable(factor_serial factor_serial.cc)
+target_link_libraries(factor_serial PRIVATE
+    fmpi
+)
 
 add_executable(mpiPinning mpiPinning.cc)
 target_link_libraries(mpiPinning PRIVATE

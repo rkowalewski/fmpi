@@ -188,9 +188,10 @@ inline void ring_waitsome(
 
   FMPI_ASSERT(2 * reqsInFlight <= reqs->size());
 
-  auto rschedule = [&ctx](auto phase) {
-    Schedule commAlgo{};
-    return commAlgo.recvRank(ctx, phase);
+  auto const commAlgo = Schedule{ctx};
+
+  auto rschedule = [commAlgo](auto phase) {
+    return commAlgo.recvRank(phase);
   };
 
   auto rbufAlloc = [&occupied, &freelist](auto /*peer*/, auto reqIdx) {
@@ -207,9 +208,8 @@ inline void ring_waitsome(
         &*chunk.first, nels, peer, kTagRing, ctx, &reqs[reqIdx]);
   };
 
-  auto sschedule = [&ctx](auto phase) {
-    Schedule commAlgo{};
-    return commAlgo.sendRank(ctx, phase);
+  auto sschedule = [commAlgo](auto phase) {
+    return commAlgo.sendRank(phase);
   };
 
   auto sbufAlloc = [begin, blocksize](auto peer, auto /*reqIdx*/) {

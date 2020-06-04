@@ -8,120 +8,45 @@
 #include <utility>
 #include <vector>
 
-struct RankPair : std::pair<int, int> {
-  using std::pair<int, int>::pair;
-};
-std::ostream& operator<<(std::ostream& os, RankPair const& p)
-{
-  os << "{" << p.first << ", " << p.second << "}";
-  return os;
-}
+#include <fmpi/Math.hpp>
+#include <fmpi/NumericRange.hpp>
+#include <fmpi/Schedule.hpp>
 
-template <class T>
-inline constexpr T mod(T a, T b)
-{
-  assert(b > 0);
-  T ret = a % b;
-  return (ret >= T{0}) ? (ret) : (ret + b);
-}
+using RankPair = std::pair<mpi::Rank, mpi::Rank>;
 
-inline auto oneFactor_odd(int nr)
-{
-  assert(nr % 2);
-
-  std::vector<std::vector<RankPair>> res(nr);
-  for (int phase = 0; phase < nr; ++phase) {
-    for (int r = 0; r < nr; ++r) {
-      res[phase].push_back(RankPair(r, mod(phase - r, nr)));
-    }
-    assert(res[phase].size() == std::size_t(nr));
-  }
-  return res;
-}
-
-inline auto oneFactor_even(int nr)
-{
-  assert(nr % 2 == 0);
-
+inline auto oneFactor(int nr) {
   std::vector<std::vector<RankPair>> res(nr);
 
-  for (int phase = 0; phase < nr; ++phase) {
-    for (int me = 0; me < nr - 1; ++me) {
-      auto idle = mod(nr * me / 2, nr - 1);
-      if (phase == nr - 1) {
-        res[me + 1].push_back(RankPair{phase, idle});
-      }
-      else if (phase == idle) {
-        res[me + 1].push_back(RankPair{idle, nr - 1});
-      }
-      else {
-        res[me + 1].push_back(RankPair{phase, mod(me - phase, nr - 1)});
-      }
+  for (auto&& me : fmpi::range(mpi::Rank{0}, mpi::Rank{nr})) {
+    fmpi::OneFactor schedule{static_cast<uint32_t>(nr), me};
+    for (auto&& phase : fmpi::range(schedule.phaseCount())) {
+      res[phase].emplace_back(me, schedule.sendRank(phase));
     }
   }
-
-  // self loops
-  for (int r = 0; r < nr; ++r) {
-    res[0].push_back(RankPair(r, r));
-  }
-
-  for (auto& re : res) {
-    std::cout << "{";
-    std::copy(
-        std::begin(re),
-        std::end(re),
-        std::ostream_iterator<RankPair>(std::cout, ", "));
-    std::cout << "}\n";
+  if (nr % 2 == 0) {
+    // self loops
+    for (auto&& r : fmpi::range(nr)) {
+      res[nr - 1].emplace_back(r, r);
+    }
   }
 
   return res;
 }
 
-inline auto oneFactor(int nr)
-{
-  if ((nr % 2) != 0) {
-    return oneFactor_odd(nr);
-  }
-  return oneFactor_even(nr);
-}
-
-inline auto flatHandshake(int nr)
-{
+inline auto flatHandshake(int nr) {
   std::vector<std::vector<RankPair>> res(nr);
-  for (int i = 1; i < nr; ++i) {
-    for (int r = 0; r < nr; ++r) {
-      res[i].push_back(RankPair(mod(r + i, nr), mod(r - i, nr)));
-    }
-    assert(res[i].size() == std::size_t(nr));
-  }
 
-  // self loops
-  for (int r = 0; r < nr; ++r) {
-    res[0].push_back(RankPair(r, r));
+  for (auto&& me : fmpi::range(mpi::Rank{0}, mpi::Rank{nr})) {
+    fmpi::FlatHandshake schedule{static_cast<uint32_t>(nr), me};
+    for (auto&& phase : fmpi::range(schedule.phaseCount())) {
+      res[phase].emplace_back(
+          schedule.sendRank(phase), schedule.recvRank(phase));
+    }
   }
   return res;
 }
 
-inline auto hypercube(int nr)
-{
-  assert((nr & (nr - 1)) == 0);
-
-  std::vector<std::vector<RankPair>> res(nr);
-  for (int i = 1; i < nr; ++i) {
-    for (int r = 0; r < nr; ++r) {
-      res[i].push_back(RankPair(r, r ^ i));
-    }
-  }
-
-  for (int r = 0; r < nr; ++r) {
-    res[0].push_back(RankPair(r, r));
-  }
-
-  return res;
-}
-
-inline auto ndigits(int nr)
-{
+inline auto ndigits(int nr) {
   size_t length = 1;
   while ((nr /= 10) != 0) {
     length++;
@@ -130,8 +55,7 @@ inline auto ndigits(int nr)
 }
 
 void print_dot(
-    std::vector<std::vector<RankPair>> tournament, const std::string& title)
-{
+    std::vector<std::vector<RankPair>> tournament, const std::string& title) {
   (void)title;
   auto n_ranks = tournament.size();
   auto nd      = ndigits(n_ranks);
@@ -139,8 +63,8 @@ void print_dot(
   std::cout << "graph [rankdir=TB]\n";
   std::cout << "node [style=filled shape=circle]\n";
   std::cout << "edge [arrowhead=none]\n";
-  //std::cout << "labelloc=t\n";
-  //std::cout << "label=\"" << title << "\"\n";
+  // std::cout << "labelloc=t\n";
+  // std::cout << "label=\"" << title << "\"\n";
 
   for (std::size_t p = 0; p < n_ranks + 1; ++p) {
     std::cout << "subgraph p" << p << " {\n";
@@ -151,8 +75,7 @@ void print_dot(
       std::cout << std::setfill('0') << std::setw(nd) << r;
       if (p == 0) {
         std::cout << R"( [label="" xlabel=")" << r << "\" width=.3]\n";
-      }
-      else {
+      } else {
         std::cout << " [label=\"\" width=.3]\n";
       }
     }
@@ -194,8 +117,7 @@ void print_dot(
 }
 
 void print_dot_directed(
-    std::vector<std::vector<RankPair>> tournament, const std::string& title)
-{
+    std::vector<std::vector<RankPair>> tournament, const std::string& title) {
   (void)title;
   auto n_ranks = tournament.size();
   auto nd      = ndigits(n_ranks);
@@ -203,8 +125,8 @@ void print_dot_directed(
   std::cout << "graph [rankdir=TB]\n";
   std::cout << "node [style=filled shape=circle]\n";
   std::cout << "edge [arrowsize=0.5]\n";
-  //std::cout << "labelloc=t\n";
-  //std::cout << "label=\"" << title << "\"\n";
+  // std::cout << "labelloc=t\n";
+  // std::cout << "label=\"" << title << "\"\n";
 
   for (std::size_t p = 0; p < n_ranks + 1; ++p) {
     std::cout << "subgraph p" << p << " {\n";
@@ -215,8 +137,7 @@ void print_dot_directed(
       std::cout << std::setfill('0') << std::setw(nd) << r;
       if (p == 0) {
         std::cout << R"( [label="" xlabel=")" << r << "\" width=.3]\n";
-      }
-      else {
+      } else {
         std::cout << " [label=\"\" width=.3]\n";
       }
     }
@@ -248,10 +169,9 @@ void print_dot_directed(
         std::cout << "->r";
         std::cout << std::setfill('0') << std::setw(nd) << r + 1;
         std::cout << std::setfill('0') << std::setw(nd) << partners.first;
-        std::cout << "[color=cornflowerblue, arrowhead=none]";
+        std::cout << "[arrowhead=none]";
         std::cout << "\n";
-      }
-      else {
+      } else {
         std::cout << "r";
         std::cout << std::setfill('0') << std::setw(nd) << r;
         std::cout << std::setfill('0') << std::setw(nd) << p;
@@ -261,7 +181,7 @@ void print_dot_directed(
         std::cout << "[color=cornflowerblue";
 
         // if (p > 3) {
-        //std::cout << ",style=invis]";
+        // std::cout << ",style=invis]";
         // }
         // else {
         std::cout << "]";
@@ -289,13 +209,11 @@ static std::array<
     std::pair<
         std::string,
         std::function<std::vector<std::vector<RankPair>>(int)>>,
-    3>
+    2>
     algos = {std::make_pair("oneFactor", oneFactor),
-             std::make_pair("hypercube", hypercube),
-             std::make_pair("personalized_exchange", flatHandshake)};
+             std::make_pair("ring", flatHandshake)};
 
-void print_usage(const std::string& prog)
-{
+void print_usage(const std::string& prog) {
   std::cout << "usage: " << prog << "<algorithm> <nprocs>\n\n";
 
   std::cout << "supported algorithms: ";
@@ -304,8 +222,7 @@ void print_usage(const std::string& prog)
   }
   std::cout << "\n";
 }
-int main(int argc, char* argv[])
-{
+int main(int argc, char* argv[]) {
   if (argc < 3) {
     print_usage(std::string(argv[0]));
     return 1;
@@ -313,12 +230,6 @@ int main(int argc, char* argv[])
 
   std::string algo    = argv[1];
   auto        n_ranks = std::atoi(argv[2]);
-
-  auto isPower2 = (n_ranks & (n_ranks - 1)) == 0;
-  if (algo == "hypercube" && !isPower2) {
-    std::cout << "hypercube works only with power of 2\n";
-    return 1;
-  }
 
   auto it = std::find_if(
       std::begin(algos), std::end(algos), [&algo](auto const& pair) {
@@ -334,19 +245,10 @@ int main(int argc, char* argv[])
   auto rounds = (*it).second(n_ranks);
   assert(rounds.size() == std::size_t(n_ranks));
 
-#if 0
-  for (auto const& r : rounds) {
-    std::copy(
-        r.begin(), r.end(), std::ostream_iterator<RankPair>(std::cout, " "));
-    std::cout << "\n";
-  }
-#else
-
   auto& name = (*it).first;
-  if (name == "personalized_exchange") {
+  if (name == "ring") {
     print_dot_directed(rounds, name);
-  }
-  else {
+  } else {
     print_dot(rounds, name);
   }
 
@@ -427,7 +329,6 @@ int main(int argc, char* argv[])
     }
   }
 
-#endif
 #endif
 
   return 0;

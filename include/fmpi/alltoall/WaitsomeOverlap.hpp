@@ -70,7 +70,7 @@ inline void ring_waitsome_overlap(
 
   steady_timer t_init{trace.duration(detail::initialize)};
 
-  Schedule const commAlgo{};
+  auto const commAlgo = Schedule{ctx};
 
   // Each round is composed of an isend-irecv pair...
   constexpr std::size_t messages_per_round = 2;
@@ -78,7 +78,7 @@ inline void ring_waitsome_overlap(
   // exclude the local message to MPI_Self
   auto const n_exchanges  = ctx.size() - 1;
   auto const n_messages   = n_exchanges * messages_per_round;
-  auto const n_rounds     = commAlgo.phaseCount(ctx);
+  auto const n_rounds     = commAlgo.phaseCount();
   auto const reqsInFlight = std::min(std::size_t(n_rounds), NReqs);
   auto const winsz        = reqsInFlight * messages_per_round;
 
@@ -186,9 +186,9 @@ inline void ring_waitsome_overlap(
     FMPI_DBG("Sending essages");
     steady_timer t_dispatch{trace.duration(detail::dispatch)};
 
-    for (auto&& r : range(commAlgo.phaseCount(ctx))) {
-      auto const rpeer = commAlgo.recvRank(ctx, r);
-      auto const speer = commAlgo.sendRank(ctx, r);
+    for (auto&& r : range(commAlgo.phaseCount())) {
+      auto const rpeer = commAlgo.recvRank(r);
+      auto const speer = commAlgo.sendRank(r);
 
       if (rpeer != ctx.rank()) {
         auto recv = Message{rpeer, kTagRing, ctx.mpiComm()};

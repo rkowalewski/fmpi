@@ -9,7 +9,6 @@ add_library(fmpi
     mpi/Request.cc
     util/Trace.cc
     common/Porting.cc
-    Schedule.cc
     Pinning.cc
     Dispatcher.cc
     )

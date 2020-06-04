@@ -5,7 +5,6 @@
 
 namespace fmpi {
 
-
 template <typename F, typename... Args>
 using invoke_result_t =
     std::invoke_result_t<std::decay_t<F>, std::decay_t<Args>...>;

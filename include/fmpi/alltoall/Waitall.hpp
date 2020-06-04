@@ -41,7 +41,7 @@ inline void ring_waitall(
   auto me = ctx.rank();
   auto nr = ctx.size();
 
-  auto const schedule = Schedule{};
+  auto schedule = Schedule{ctx};
 
   auto const name = std::string{Schedule::NAME} +
                     std::string{algorithm_name} + std::to_string(NReqs);
@@ -93,7 +93,7 @@ inline void ring_waitall(
 
   auto moveReqWindow = [schedule, blocksize, &ctx, sbuffer = begin, &reqs](
                            auto initialPhases, auto& reqWin) {
-    auto const phaseCount = schedule.phaseCount(ctx);
+    auto const phaseCount = schedule.phaseCount();
     auto const winsize    = reqWin.winsize();
 
     std::size_t rphase;
@@ -105,7 +105,7 @@ inline void ring_waitall(
     for (std::size_t nrreqs = 0; nrreqs < winsize && rphase < phaseCount;
          ++rphase) {
       // receive from
-      auto recvfrom = schedule.recvRank(ctx, rphase);
+      auto recvfrom = schedule.recvRank(rphase);
 
       if (recvfrom == ctx.rank()) {
         continue;
@@ -126,7 +126,7 @@ inline void ring_waitall(
 
     for (std::size_t nsreqs = 0; nsreqs < winsize && sphase < phaseCount;
          ++sphase) {
-      auto sendto = schedule.sendRank(ctx, sphase);
+      auto sendto = schedule.sendRank(sphase);
 
       if (sendto == ctx.rank()) {
         continue;
@@ -215,7 +215,7 @@ inline void ring_waitall(
 
     op(reqWin.ready_pieces(), target);
 
-    //FMPI_DBG(reqWin.ready_pieces());
+    // FMPI_DBG(reqWin.ready_pieces());
 
     if (target != &*out) {
       std::move(target, target + nels, out);

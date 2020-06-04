@@ -82,7 +82,6 @@ class CommDispatcher {
   using signal_token   = typename signal_list::const_iterator;
   using callback_token = typename callback_list::const_iterator;
 
-  using req_idx_t    = simple_vector<int>;
   using idx_ranges_t = std::array<int*, n_types>;
 
   static constexpr auto high_watermark =
@@ -96,8 +95,6 @@ class CommDispatcher {
       std::string_view("Tcomm.callback_time");
   static constexpr auto progress_time =
       std::string_view("Tcomm.progress_time");
-  // static constexpr auto completion_time =
-  //    std::string_view("Tcomm.completion_time");
   static constexpr auto total_time = std::string_view("Tcomm.total_time");
 
  public:
@@ -140,7 +137,7 @@ class CommDispatcher {
   // MPI_Statuses - only for receive requests
   simple_vector<MPI_Status> mpi_statuses_{};
   // indices of request slots in the sliding window
-  req_idx_t indices_{};
+  simple_vector<int> indices_{};
   // free slots for each request type
   simple_vector<tlx::RingBuffer<int>> req_slots_{n_types};
 
