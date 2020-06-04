@@ -1,22 +1,12 @@
 ---
-Checks: '-*,
-bugprone-*,
-cppcoreguidelines-*,
--cppcoreguidelines-pro-bounds-array-to-pointer-decay,
-hicpp-exception-baseclass,
-hicpp-avoid-goto,
-modernize-*,
-llvm-*,
-mpi-*,
--modernize-concat-nested-namespaces,
--modernize-use-trailing-return-type,
--modernize-use-using,
-performance-*
+Checks: '*,
+ -fuchsia-*,-google-*,-zircon-*,-abseil-*,
+ -modernize-use-trailing-return-type,
+ -modernize-use-using,
+ -llvm-*
  '
 WarningsAsErrors: ''
-AnalyzeTemporaryDtors: false
-FormatStyle:     file
+FormatStyle:     none
 User:            rkowalewski
-CheckOptions:
 ...
 
