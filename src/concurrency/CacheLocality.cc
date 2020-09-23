@@ -113,8 +113,8 @@ CacheLocality CacheLocality::uniform(size_t numCpus) {
 /// if the string does not start with a number terminated by ',', '-',
 /// '\n', or eos.
 static size_t parseLeadingNumber(const std::string& line) {
-  auto          raw = line.c_str();
-  char*         end;
+  const auto*   raw = line.c_str();
+  char*         end = nullptr;
   unsigned long val = strtoul(raw, &end, 10);
   if (end == raw ||
       (*end != ',' && *end != '-' && *end != '\n' && *end != 0)) {
@@ -130,7 +130,7 @@ CacheLocality CacheLocality::readFromProcCpuinfoLines(
   std::vector<std::tuple<size_t, size_t, size_t>> cpus;
   size_t                                          maxCpu = 0;
   for (auto iter = lines.rbegin(); iter != lines.rend(); ++iter) {
-    auto& line = *iter;
+    const auto& line = *iter;
     if (!procCpuinfoLineRelevant(line)) {
       continue;
     }

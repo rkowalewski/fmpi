@@ -20,11 +20,11 @@ class Rank {
   // Prefix Increment
   constexpr Rank operator++() noexcept;
   // Postfix Increment
-  constexpr const Rank operator++(int) noexcept;
+  constexpr Rank operator++(int) noexcept;
   // Prefix Decrement
   constexpr Rank operator--() noexcept;
   // Postfix Decrement
-  constexpr const Rank operator--(int) noexcept;
+  constexpr Rank operator--(int) noexcept;
 
   [[nodiscard]] constexpr int mpiRank() const noexcept;
 
@@ -76,7 +76,7 @@ constexpr Rank Rank::operator++() noexcept {
   return *this;
 }
 
-constexpr const Rank Rank::operator++(int) noexcept {
+constexpr Rank Rank::operator++(int) noexcept {
   auto tmp = *this;
   ++m_rank;
   return tmp;
@@ -87,7 +87,7 @@ constexpr Rank Rank::operator--() noexcept {
   return *this;
 }
 
-constexpr const Rank Rank::operator--(int) noexcept {
+constexpr Rank Rank::operator--(int) noexcept {
   auto tmp = *this;
   --m_rank;
   return tmp;

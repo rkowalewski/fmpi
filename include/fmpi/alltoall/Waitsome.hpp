@@ -22,7 +22,7 @@ inline auto enqueueMpiOps(
     ReqIdx&&   reqIdx,
     BufAlloc&& bufAlloc,
     CommOp&&   commOp) {
-  uint32_t nreqs;
+  uint32_t nreqs = 0;
 
   for (nreqs = 0; nreqs < reqsInFlight; ++phase) {
     auto peer = partner(phase);
@@ -213,7 +213,7 @@ inline void ring_waitsome(
   };
 
   auto sbufAlloc = [begin, blocksize](auto peer, auto /*reqIdx*/) {
-    auto first = std::next(begin, peer * blocksize);
+    auto* first = std::next(begin, peer * blocksize);
     return std::make_pair(first, std::next(first, blocksize));
   };
 

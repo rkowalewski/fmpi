@@ -294,7 +294,7 @@ inline void CommDispatcher<testReqs>::worker() {
     }
 
     constexpr explicit operator bool() const noexcept {
-      return task_count.first || task_count.second;
+      return (task_count.first != 0u) || task_count.second;
     }
   };
 
@@ -330,7 +330,7 @@ inline void CommDispatcher<testReqs>::worker() {
       auto const req_type = rtlx::to_underlying(task.type);
       auto const nslots   = req_slots_[req_type].size();
 
-      if (!nslots) {
+      if (nslots == 0u) {
         backlog_.push(task);
       } else {
         do_dispatch(task);
@@ -404,7 +404,7 @@ CommDispatcher<testReqs>::progress_network(bool force) {
 
   auto op = force ? detail::dispatch_waitall : testReqs;
 
-  int* last;
+  int* last = nullptr;
   auto mpi_ret =
       op(&*std::begin(mpi_reqs_),
          &*std::end(mpi_reqs_),

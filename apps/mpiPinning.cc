@@ -11,16 +11,16 @@
 
 int main(int argc, char** argv) {
   // MPI_Init(&argc, &argv);
-  int provided;
+  int provided = 0;
   MPI_Init_thread(&argc, &argv, MPI_THREAD_FUNNELED, &provided);
 
   // rank
-  int me;
+  int me = 0;
   MPI_Comm_rank(MPI_COMM_WORLD, &me);
 
   // processor name
   char _hostname[MPI_MAX_PROCESSOR_NAME];
-  int  resultlen;
+  int  resultlen = 0;
   MPI_Get_processor_name(_hostname, &resultlen);
   std::string hostname(_hostname);
 
@@ -66,7 +66,7 @@ int main(int argc, char** argv) {
   MPI_Finalize();
 
   {
-    auto& sys = folly::CacheLocality::system<>();
+    const auto& sys = folly::CacheLocality::system<>();
 
     std::ostringstream os1;
 

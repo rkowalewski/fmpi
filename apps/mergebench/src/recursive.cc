@@ -95,7 +95,7 @@ static void BM_TlxMergeSequentialRecursive(benchmark::State& state) {
 
     auto buffer = simple_vector{params.arraysize};
 
-    auto last_it = tlx::multiway_merge(
+    auto* last_it = tlx::multiway_merge(
         processed.begin(),
         processed.end(),
         std::begin(buffer),
@@ -189,7 +189,7 @@ static void BM_TlxMergeParallelRecursive(benchmark::State& state) {
 
     auto buffer = simple_vector{params.arraysize};
 
-    auto last_it = tlx::parallel_multiway_merge(
+    auto* last_it = tlx::parallel_multiway_merge(
         processed.begin(),
         processed.end(),
         std::begin(buffer),

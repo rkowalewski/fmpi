@@ -31,7 +31,7 @@ class DebugOutput {
   template <typename T>
   auto print(const std::string& type, T&& value) const -> T&&  // NOLINT
   {
-    int flag;
+    int flag = 0;
 
     int me = MPI_PROC_NULL;
     MPI_Initialized(&flag);

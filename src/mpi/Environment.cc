@@ -11,9 +11,9 @@ static bool initialized = false;
 
 Context::Context(MPI_Comm comm)
   : m_comm(comm) {
-  int sz;
+  int sz = 0;
 
-  int rank;
+  int rank = 0;
   FMPI_CHECK_MPI(MPI_Comm_size(m_comm, &sz));
   m_size = sz;
 
@@ -22,7 +22,7 @@ Context::Context(MPI_Comm comm)
 }
 
 auto splitSharedComm(Context const& baseComm) -> Context {
-  MPI_Comm sharedComm;
+  MPI_Comm sharedComm = MPI_COMM_NULL;
   // split world into shared memory communicator
   FMPI_CHECK_MPI(MPI_Comm_split_type(
       baseComm.mpiComm(),
@@ -40,7 +40,7 @@ Context const& Context::world() {
 }
 
 bool is_thread_main() {
-  int flag;
+  int flag = 0;
   FMPI_CHECK_MPI(MPI_Is_thread_main(&flag));
   return flag == 1;
 }
@@ -51,7 +51,7 @@ bool initialize(int* argc, char*** argv, ThreadLevel level) {
   }
 
   auto const required = rtlx::to_underlying(level);
-  int        provided;
+  int        provided = 0;
 
   auto const init = MPI_Init_thread(argc, argv, required, &provided);
 

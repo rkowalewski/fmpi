@@ -96,8 +96,8 @@ inline void ring_waitall(
     auto const phaseCount = schedule.phaseCount();
     auto const winsize    = reqWin.winsize();
 
-    std::size_t rphase;
-    std::size_t sphase;
+    std::size_t rphase       = 0;
+    std::size_t sphase       = 0;
     std::tie(rphase, sphase) = initialPhases;
 
     FMPI_DBG(initialPhases);

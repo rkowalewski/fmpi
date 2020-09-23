@@ -18,7 +18,6 @@ class SPSCNChannel {
     alignas(kCacheAlignment) duration enqueue_time{0};
   };
 
- public:
   using value_type = T;
   using channel    = buffered_channel<value_type>;
 
@@ -37,7 +36,7 @@ class SPSCNChannel {
 
   bool wait_dequeue(value_type& val) {
     steady_timer t_dequeue{stats_.dequeue_time};
-    if (!count_.load(std::memory_order_relaxed)) {
+    if (count_.load(std::memory_order_relaxed) == 0u) {
       return false;
     }
     val = channel_.value_pop();

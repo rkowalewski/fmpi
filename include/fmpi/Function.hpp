@@ -61,7 +61,6 @@ class Function<RET(ARGS...), STORAGE_SIZE> {
  public:
   using return_type = RET;
 
- public:
   Function() = default;
   // Ctors
   explicit Function(RET (*ptr)(ARGS...));  // construct with function pointer
@@ -182,7 +181,7 @@ Function<RET(ARGS...), STORAGE_SIZE>& Function<RET(ARGS...), STORAGE_SIZE>::
 
 template <typename RET, typename... ARGS, std::size_t STORAGE_SIZE>
 Function<RET(ARGS...), STORAGE_SIZE>::~Function() {
-  if (destructor_) {
+  if (destructor_ != nullptr) {
     destructor_(callable_);
   }
 }

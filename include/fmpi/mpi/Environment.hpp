@@ -13,7 +13,6 @@ class Context {
  public:
   using size_type = std::uint32_t;
 
- public:
   explicit Context(MPI_Comm comm);
 
   Context(const Context&) = delete;

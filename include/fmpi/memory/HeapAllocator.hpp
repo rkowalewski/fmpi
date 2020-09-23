@@ -50,7 +50,7 @@ struct HeapAllocator : public ContiguousPoolAllocator<T, ThreadSafe> {
   HeapAllocator(const this_type& other)
     : HeapAllocator(other._size) {
   }
-  HeapAllocator(this_type&& other) = default;
+  HeapAllocator(this_type&& other) noexcept = default;
   HeapAllocator& operator=(const this_type&) = delete;
   HeapAllocator& operator=(this_type&& other) = delete;
 

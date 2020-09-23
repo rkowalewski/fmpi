@@ -14,9 +14,9 @@
 
 static uint32_t num_world_nodes() {
   auto const& world = mpi::Context::world();
-  MPI_Comm    shmcomm;
-  int         shmrank;
-  uint32_t    nodes;
+  MPI_Comm    shmcomm = nullptr;
+  int         shmrank = 0;
+  uint32_t    nodes   = 0;
 
   FMPI_CHECK_MPI(MPI_Comm_split_type(
       world.mpiComm(), MPI_COMM_TYPE_SHARED, 0, MPI_INFO_NULL, &shmcomm));
@@ -36,7 +36,7 @@ fmpi::Pinning const& fmpi::Pinning::instance() {
 
 fmpi::Pinning::Pinning() {
   {
-    int flag;
+    int flag = 0;
     FMPI_CHECK_MPI(MPI_Initialized(&flag));
 
     if (flag == 0) {

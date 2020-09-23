@@ -48,7 +48,7 @@ auto process(
     char*                 argv[],
     ::mpi::Context const& mpiCtx,
     struct Params&        params) -> bool {
-  bool good;
+  bool good = 0;
 
   tlx::CmdlineParser cp;
 
@@ -65,9 +65,9 @@ auto process(
       params.pattern,
       "Select specific algorithms matching a regex pattern");
 
-  std::size_t minblocksize;
+  std::size_t minblocksize = 0;
 
-  std::size_t maxblocksize;
+  std::size_t maxblocksize = 0;
   cp.add_bytes(
       'l',
       "minblocksize",
@@ -132,7 +132,7 @@ auto process(
   } else {
     std::stringstream ss(sizes_csv);
 
-    for (std::size_t i; ss >> i;) {
+    for (std::size_t i = 0; ss >> i;) {
       params.sizes.push_back(i);
       if (ss.peek() == ',') {
         ss.ignore();

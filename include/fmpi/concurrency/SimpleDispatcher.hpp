@@ -22,7 +22,6 @@ class SimpleDispatcher {
   using message = std::pair<Message, Message>;
   using task    = Function<void(void)>;
 
- public:
   SimpleDispatcher();
   ~SimpleDispatcher();
 
@@ -47,13 +46,13 @@ class SimpleDispatcher {
   void dispatch_thread_handler();
 };
 
-SimpleDispatcher::SimpleDispatcher() {
+inline SimpleDispatcher::SimpleDispatcher() {
   thread_ = std::thread(&SimpleDispatcher::dispatch_thread_handler, this);
   auto const& config = Pinning::instance();
   pinThreadToCore(thread_, config.dispatcher_core);
 }
 
-SimpleDispatcher::~SimpleDispatcher() {
+inline SimpleDispatcher::~SimpleDispatcher() {
   // Signal to dispatch threads that it's time to wrap up
   {
     std::lock_guard<std::mutex> lock(lock_);
@@ -139,10 +138,12 @@ inline void SimpleDispatcher::dispatch_thread_handler() {
 
   do {
     // Wait until we have data or a quit signal
-    cv_.wait(lock, [this] { return ((!q_.empty() != 0u) || quit_); });
+    cv_.wait(lock, [this] {
+      return ((static_cast<unsigned int>(!q_.empty()) != 0u) || quit_);
+    });
 
     // after wait, we own the lock
-    if (!quit_ && (!q_.empty() != 0u)) {
+    if (!quit_ && (static_cast<unsigned int>(!q_.empty()) != 0u)) {
       auto op = std::move(q_.front());
       q_.pop();
 

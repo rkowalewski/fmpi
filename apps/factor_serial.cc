@@ -572,7 +572,7 @@ int main(int argc, char* argv[]) {
   //  return 0;
 
   if (algo != "tree") {
-    auto it = std::find_if(
+    auto* it = std::find_if(
         std::begin(algos), std::end(algos), [&algo](auto const& pair) {
           return pair.first == algo;
         });

@@ -42,7 +42,7 @@ int main(int argc, char* argv[]) {
   mpi::initialize(&argc, &argv, mpi::ThreadLevel::Serialized);
   auto finalizer = rtlx::scope_exit([]() { mpi::finalize(); });
 
-  auto& world = mpi::Context::world();
+  const auto& world = mpi::Context::world();
 
   fmpi::benchmark::Params params{};
   if (!fmpi::benchmark::process(argc, argv, world, params)) {

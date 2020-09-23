@@ -14,7 +14,7 @@ int waitsome(
     int*         indices,
     MPI_Status*  statuses,
     int*&        last) {
-  int completed;
+  int completed = 0;
 
   auto const n = std::distance(begin, end);
 
@@ -32,7 +32,7 @@ int testsome(
     int*         indices,
     MPI_Status*  statuses,
     int*&        last) {
-  int completed;
+  int completed = 0;
 
   auto const n = std::distance(begin, end);
 

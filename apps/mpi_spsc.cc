@@ -52,7 +52,7 @@ int run();
 
 int main(int argc, char* argv[]) {
   // MPI_Init(&argc, &argv);
-  int provided;
+  int provided = 0;
   MPI_Init_thread(&argc, &argv, MPI_THREAD_SERIALIZED, &provided);
   auto finalizer = rtlx::scope_exit([]() { MPI_Finalize(); });
 
