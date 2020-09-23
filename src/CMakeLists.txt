@@ -1,4 +1,5 @@
 add_library(fmpi
+    common/Porting.cc
     concurrency/CacheLocality.cc
     detail/Assert.cc
     memory/BlockAllocator.cc
@@ -7,8 +8,9 @@ add_library(fmpi
     mpi/Environment.cc
     mpi/Rank.cc
     mpi/Request.cc
+    topo/BinaryTree.cc
+    topo/Tree.cc
     util/Trace.cc
-    common/Porting.cc
     Pinning.cc
     Dispatcher.cc
     )

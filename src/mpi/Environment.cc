@@ -1,8 +1,6 @@
 #include <mpi.h>
 
-#include <fmpi/detail/Assert.hpp>
 #include <fmpi/mpi/Environment.hpp>
-
 #include <rtlx/Enum.hpp>
 
 namespace mpi {

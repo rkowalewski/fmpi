@@ -3,6 +3,7 @@
 
 #include <climits>
 #include <type_traits>
+#include <cmath>
 
 #include <fmpi/detail/Assert.hpp>
 
@@ -33,6 +34,12 @@ inline constexpr auto mod(T a, T b) -> T
   static_assert(std::is_integral<T>::value, "only integer types supported");
 
   return detail::mod(a, b, typename std::is_signed<T>::type{});
+}
+
+template <class T>
+inline constexpr auto log(T base, T x) -> double
+{
+  return std::log(x) / std::log(base);
 }
 
 template <class T>

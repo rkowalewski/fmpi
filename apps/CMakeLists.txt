@@ -21,3 +21,4 @@ target_link_libraries(mpiSpsc PRIVATE
 )
 
 add_subdirectory(mergebench)
+

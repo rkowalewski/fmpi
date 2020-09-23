@@ -28,6 +28,10 @@ class Rank {
 
   [[nodiscard]] constexpr int mpiRank() const noexcept;
 
+  static constexpr Rank null() {
+    return mpi::Rank{MPI_PROC_NULL};
+  }
+
  private:
   int m_rank{MPI_PROC_NULL};
 };

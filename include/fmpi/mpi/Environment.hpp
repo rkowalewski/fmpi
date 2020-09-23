@@ -58,9 +58,7 @@ enum class ThreadLevel : int
 
 bool initialize(int* argc, char*** argv, ThreadLevel level);
 void finalize();
-
 bool is_thread_main();
-
 auto splitSharedComm(Context const& baseComm) -> Context;
 
 }  // namespace mpi

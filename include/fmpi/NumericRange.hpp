@@ -2,6 +2,7 @@
 #define FMPI_NUMERICRANGE_HPP
 // -*- C++ -*-
 // Copyright (c) 2017, Just Software Solutions Ltd
+// Copyright (c) 2020, Roger Kowaleski
 // All rights reserved.
 //
 // Redistribution and use in source and binary forms, with or
@@ -35,8 +36,6 @@
 // CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR
 // OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE,
 // EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
-
-// Slightly modified by the DASH contributors
 
 #include <functional>
 #include <iostream>
