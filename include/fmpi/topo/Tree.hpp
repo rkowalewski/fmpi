@@ -1,4 +1,5 @@
-#pragma once
+#ifndef FMPI_TOPO_TREE_HPP
+#define FMPI_TOPO_TREE_HPP
 
 #include <fmpi/mpi/Environment.hpp>
 #include <memory>
@@ -34,3 +35,5 @@ inline std::unique_ptr<Tree> knomial(
 }
 
 }  // namespace fmpi
+
+#endif

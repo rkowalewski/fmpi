@@ -15,25 +15,25 @@ namespace fmpi {
 ///        When the buffer is exhausted, allocation is delegated to the heap.
 /// @tparam T The type to allocate.
 /// @note This allocator is not thread safe.
-template <typename T, bool ThreadSafe = false>
+template <typename T>
 struct ContiguousPoolAllocator {
-  template <typename U, bool V>
+  template <typename U>
   friend struct ContiguousPoolAllocator;
   //------------------------------ Typedefs ----------------------------------
-  typedef ContiguousPoolAllocator<T, ThreadSafe> this_type;
-  typedef T                                      value_type;
-  typedef value_type*                            pointer;
-  typedef const value_type*                      const_pointer;
-  typedef value_type&                            reference;
-  typedef const value_type&                      const_reference;
-  typedef size_t                                 size_type;
-  typedef uint16_t                               index_type;
-  typedef std::ptrdiff_t                         difference_type;
-  typedef std::true_type  propagate_on_container_move_assignment;
-  typedef std::true_type  propagate_on_container_copy_assignment;
-  typedef std::true_type  propagate_on_container_swap;
-  typedef std::false_type is_always_equal;
-  typedef std::false_type default_constructor;
+  typedef ContiguousPoolAllocator<T> this_type;
+  typedef T                          value_type;
+  typedef value_type*                pointer;
+  typedef const value_type*          const_pointer;
+  typedef value_type&                reference;
+  typedef const value_type&          const_reference;
+  typedef size_t                     size_type;
+  typedef uint16_t                   index_type;
+  typedef std::ptrdiff_t             difference_type;
+  typedef std::true_type             propagate_on_container_move_assignment;
+  typedef std::true_type             propagate_on_container_copy_assignment;
+  typedef std::true_type             propagate_on_container_swap;
+  typedef std::false_type            is_always_equal;
+  typedef std::false_type            default_constructor;
   typedef std::aligned_storage<sizeof(T), alignof(T)> storage_type;
   typedef typename storage_type::type                 aligned_type;
 
@@ -43,21 +43,18 @@ struct ContiguousPoolAllocator {
 
   template <typename U>
   struct rebind {
-    typedef ContiguousPoolAllocator<U, ThreadSafe> other;
+    typedef ContiguousPoolAllocator<U> other;
   };
   // Rebound types
   template <typename U>
-  explicit ContiguousPoolAllocator(
-      const ContiguousPoolAllocator<U, ThreadSafe>& other);
+  explicit ContiguousPoolAllocator(const ContiguousPoolAllocator<U>& other);
   template <typename U>
-  explicit ContiguousPoolAllocator(
-      ContiguousPoolAllocator<U, ThreadSafe>&& other);
+  explicit ContiguousPoolAllocator(ContiguousPoolAllocator<U>&& other);
   template <typename U>
-  ContiguousPoolAllocator& operator                  =(
-      const ContiguousPoolAllocator<U, ThreadSafe>&) = delete;
+  ContiguousPoolAllocator& operator=(const ContiguousPoolAllocator<U>&) =
+      delete;
   template <typename U>
-  ContiguousPoolAllocator& operator             =(
-      ContiguousPoolAllocator<U, ThreadSafe>&&) = delete;
+  ContiguousPoolAllocator& operator=(ContiguousPoolAllocator<U>&&) = delete;
 
   static ContiguousPoolAllocator select_on_container_copy_construction(
       const ContiguousPoolAllocator& other) {
@@ -118,22 +115,22 @@ size_t resize(size_t t_size) {
   return (t_size * sizeof(U)) / sizeof(T);
 }
 
-template <typename T, bool ThreadSafe>
-ContiguousPoolAllocator<T, ThreadSafe>::ContiguousPoolAllocator()
+template <typename T>
+ContiguousPoolAllocator<T>::ContiguousPoolAllocator()
   : _control(std::make_shared<Control>()) {
 }
 
-template <typename T, bool ThreadSafe>
-ContiguousPoolAllocator<T, ThreadSafe>::ContiguousPoolAllocator(
+template <typename T>
+ContiguousPoolAllocator<T>::ContiguousPoolAllocator(
     aligned_type* buffer, index_type size)
   : _control(std::make_shared<Control>()) {
   setBuffer(buffer, size);
 }
 
-template <typename T, bool ThreadSafe>
+template <typename T>
 template <typename U>
-ContiguousPoolAllocator<T, ThreadSafe>::ContiguousPoolAllocator(
-    const ContiguousPoolAllocator<U, ThreadSafe>& other)
+ContiguousPoolAllocator<T>::ContiguousPoolAllocator(
+    const ContiguousPoolAllocator<U>& other)
   : _control(std::reinterpret_pointer_cast<Control>(other._control)) {
   if (!_control || !_control->_buffer) {
     throw std::runtime_error("Invalid allocator.");
@@ -145,10 +142,10 @@ ContiguousPoolAllocator<T, ThreadSafe>::ContiguousPoolAllocator(
   _control->_freeBlockIndex = newSize - 1;
 }
 
-template <typename T, bool ThreadSafe>
+template <typename T>
 template <typename U>
-ContiguousPoolAllocator<T, ThreadSafe>::ContiguousPoolAllocator(
-    ContiguousPoolAllocator<U, ThreadSafe>&& other)
+ContiguousPoolAllocator<T>::ContiguousPoolAllocator(
+    ContiguousPoolAllocator<U>&& other)
   : _control(std::move(other._control)) {
   if (!_control || !_control->_buffer) {
     throw std::runtime_error("Invalid allocator.");
@@ -160,8 +157,8 @@ ContiguousPoolAllocator<T, ThreadSafe>::ContiguousPoolAllocator(
   _control->_freeBlockIndex = newSize - 1;
 }
 
-template <typename T, bool ThreadSafe>
-void ContiguousPoolAllocator<T, ThreadSafe>::setBuffer(
+template <typename T>
+void ContiguousPoolAllocator<T>::setBuffer(
     aligned_type* buffer, index_type size) {
   if (!_control) {
     throw std::bad_alloc();
@@ -188,41 +185,40 @@ void ContiguousPoolAllocator<T, ThreadSafe>::setBuffer(
   _control->_freeBlockIndex = size - 1;
 }
 
-template <typename T, bool ThreadSafe>
-typename ContiguousPoolAllocator<T, ThreadSafe>::pointer
-ContiguousPoolAllocator<T, ThreadSafe>::address(reference x) const {
+template <typename T>
+typename ContiguousPoolAllocator<T>::pointer
+ContiguousPoolAllocator<T>::address(reference x) const {
   return &x;
 }
 
-template <typename T, bool ThreadSafe>
-typename ContiguousPoolAllocator<T, ThreadSafe>::const_pointer
-ContiguousPoolAllocator<T, ThreadSafe>::address(const_reference x) const {
+template <typename T>
+typename ContiguousPoolAllocator<T>::const_pointer
+ContiguousPoolAllocator<T>::address(const_reference x) const {
   return &x;
 }
 
-template <typename T, bool ThreadSafe>
-typename ContiguousPoolAllocator<T, ThreadSafe>::size_type
-ContiguousPoolAllocator<T, ThreadSafe>::max_size() const {
+template <typename T>
+typename ContiguousPoolAllocator<T>::size_type
+ContiguousPoolAllocator<T>::max_size() const {
   return 1;  // only 1 supported for now
 }
 
-template <typename T, bool ThreadSafe>
+template <typename T>
 template <typename... Args>
-void ContiguousPoolAllocator<T, ThreadSafe>::construct(T* p, Args&&... args) {
+void ContiguousPoolAllocator<T>::construct(T* p, Args&&... args) {
   new ((void*)p) T(std::forward<Args>(args)...);  // construct in-place
 }
 
-template <typename T, bool ThreadSafe>
-void ContiguousPoolAllocator<T, ThreadSafe>::destroy(pointer p) {
+template <typename T>
+void ContiguousPoolAllocator<T>::destroy(pointer p) {
   if (p != nullptr) {
     p->~T();
   }
 }
 
-template <typename T, bool ThreadSafe>
-typename ContiguousPoolAllocator<T, ThreadSafe>::pointer
-ContiguousPoolAllocator<T, ThreadSafe>::allocate(
-    size_type n, const_pointer /*unused*/) {
+template <typename T>
+typename ContiguousPoolAllocator<T>::pointer
+ContiguousPoolAllocator<T>::allocate(size_type n, const_pointer /*unused*/) {
   assert(bufferStart());
   {
     constexpr auto max_n =
@@ -239,9 +235,8 @@ ContiguousPoolAllocator<T, ThreadSafe>::allocate(
   return static_cast<pointer>(::operator new(n * sizeof(value_type)));
 }
 
-template <typename T, bool ThreadSafe>
-void ContiguousPoolAllocator<T, ThreadSafe>::deallocate(
-    pointer p, size_type n) {
+template <typename T>
+void ContiguousPoolAllocator<T>::deallocate(pointer p, size_type n) {
   if (p == nullptr) {
     return;
   }
@@ -259,79 +254,79 @@ void ContiguousPoolAllocator<T, ThreadSafe>::deallocate(
   }
 }
 
-template <typename T, bool ThreadSafe>
+template <typename T>
 template <typename... Args>
-typename ContiguousPoolAllocator<T, ThreadSafe>::pointer
-ContiguousPoolAllocator<T, ThreadSafe>::create(Args&&... args) {
+typename ContiguousPoolAllocator<T>::pointer
+ContiguousPoolAllocator<T>::create(Args&&... args) {
   T* p = allocate();
   construct(p, std::forward<Args>(args)...);
   return p;
 }
 
-template <typename T, bool ThreadSafe>
-void ContiguousPoolAllocator<T, ThreadSafe>::dispose(pointer p) {
+template <typename T>
+void ContiguousPoolAllocator<T>::dispose(pointer p) {
   destroy(p);
   deallocate(p);
 }
 
-template <typename T, bool ThreadSafe>
-size_t ContiguousPoolAllocator<T, ThreadSafe>::allocatedBlocks() const {
+template <typename T>
+size_t ContiguousPoolAllocator<T>::allocatedBlocks() const {
   return _control->_size ? _control->_size - _control->_freeBlockIndex - 1
                          : 0;
 }
 
-template <typename T, bool ThreadSafe>
-size_t ContiguousPoolAllocator<T, ThreadSafe>::allocatedHeapBlocks() const {
+template <typename T>
+size_t ContiguousPoolAllocator<T>::allocatedHeapBlocks() const {
   return _control->_numHeapAllocatedBlocks;
 }
 
-template <typename T, bool ThreadSafe>
-bool ContiguousPoolAllocator<T, ThreadSafe>::isFull() const {
+template <typename T>
+bool ContiguousPoolAllocator<T>::isFull() const {
   return _control->_freeBlockIndex == _control->_size - 1;
 }
 
-template <typename T, bool ThreadSafe>
-bool ContiguousPoolAllocator<T, ThreadSafe>::isEmpty() const {
+template <typename T>
+bool ContiguousPoolAllocator<T>::isEmpty() const {
   return _control->_freeBlockIndex == -1;
 }
 
-template <typename T, bool ThreadSafe>
-typename ContiguousPoolAllocator<T, ThreadSafe>::index_type
-ContiguousPoolAllocator<T, ThreadSafe>::size() const {
+template <typename T>
+typename ContiguousPoolAllocator<T>::index_type
+ContiguousPoolAllocator<T>::size() const {
   return _control->_size;
 }
 
-template <typename T, bool ThreadSafe>
-ContiguousPoolAllocator<T, ThreadSafe>::operator bool() const {
+template <typename T>
+ContiguousPoolAllocator<T>::operator bool() const {
   return _control != nullptr;
 }
 
-template <typename T, bool ThreadSafe>
-typename ContiguousPoolAllocator<T, ThreadSafe>::pointer
-ContiguousPoolAllocator<T, ThreadSafe>::bufferStart() {
+template <typename T>
+typename ContiguousPoolAllocator<T>::pointer
+ContiguousPoolAllocator<T>::bufferStart() {
   return reinterpret_cast<pointer>(_control->_buffer);
 }
 
-template <typename T, bool ThreadSafe>
-typename ContiguousPoolAllocator<T, ThreadSafe>::pointer
-ContiguousPoolAllocator<T, ThreadSafe>::bufferEnd() {
+template <typename T>
+typename ContiguousPoolAllocator<T>::pointer
+ContiguousPoolAllocator<T>::bufferEnd() {
   return reinterpret_cast<pointer>(_control->_buffer + _control->_size);
 }
 
-template <typename T, bool ThreadSafe>
-bool ContiguousPoolAllocator<T, ThreadSafe>::isManaged(pointer p) {
+template <typename T>
+bool ContiguousPoolAllocator<T>::isManaged(pointer p) {
   return (bufferStart() <= p) && (p < bufferEnd());
 }
 
-template <typename T, bool ThreadSafe>
-typename ContiguousPoolAllocator<T, ThreadSafe>::index_type
-ContiguousPoolAllocator<T, ThreadSafe>::blockIndex(pointer p) {
+template <typename T>
+typename ContiguousPoolAllocator<T>::index_type
+ContiguousPoolAllocator<T>::blockIndex(pointer p) {
   return static_cast<index_type>(
       reinterpret_cast<aligned_type*>(p) - _control->_buffer);
 }
 
-template <typename T, bool ThreadSafe>
-bool ContiguousPoolAllocator<T, ThreadSafe>::findContiguous(index_type n) {
+template <typename T>
+bool ContiguousPoolAllocator<T>::findContiguous(index_type n) {
   if ((_control->_freeBlockIndex + 1) < n) {
     return false;
   }

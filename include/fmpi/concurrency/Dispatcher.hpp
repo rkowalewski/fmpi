@@ -4,21 +4,6 @@
 #include <mpi.h>
 
 #include <atomic>
-#include <list>
-#include <mutex>
-#include <new>
-#include <numeric>
-#include <queue>
-#include <thread>
-
-#include <gsl/span>
-
-#include <rtlx/Enum.hpp>
-#include <rtlx/Timer.hpp>
-
-#include <tlx/container/ring_buffer.hpp>
-#include <tlx/container/simple_vector.hpp>
-
 #include <fmpi/Debug.hpp>
 #include <fmpi/Function.hpp>
 #include <fmpi/Message.hpp>
@@ -29,6 +14,18 @@
 #include <fmpi/memory/HeapAllocator.hpp>
 #include <fmpi/mpi/Request.hpp>
 #include <fmpi/util/Trace.hpp>
+#include <gsl/span>
+#include <list>
+#include <mutex>
+#include <new>
+#include <numeric>
+#include <queue>
+#include <rtlx/Enum.hpp>
+#include <rtlx/Timer.hpp>
+#include <thread>
+#include <tlx/container/ring_buffer.hpp>
+#include <tlx/container/simple_vector.hpp>
+#include <tlx/delegate.hpp>
 
 namespace fmpi {
 
@@ -74,8 +71,8 @@ class CommDispatcher {
   using simple_vector =
       tlx::SimpleVector<_T, tlx::SimpleVectorMode::NoInitNoDestroy>;
 
-  using signal        = Function<int(Message&, MPI_Request&)>;
-  using callback      = Function<void(Message&)>;
+  using signal        = tlx::delegate<int(Message&, MPI_Request&)>;
+  using callback      = tlx::delegate<void(Message&)>;
   using signal_list   = std::list<signal>;
   using callback_list = std::list<callback>;
 
@@ -155,13 +152,11 @@ class CommDispatcher {
 
   ~CommDispatcher();
 
-  template <class F, class... Args>
-  signal_token register_signal(
-      message_type type, F&& callable, Args&&... args);
+  template <class F>
+  signal_token register_signal(message_type type, F&& callable);
 
-  template <class F, class... Args>
-  callback_token register_callback(
-      message_type type, F&& callable, Args&&... args);
+  template <class F>
+  callback_token register_callback(message_type type, F&& callable);
 
   void loop_until_done();
 
@@ -199,8 +194,8 @@ class CommDispatcher {
   class TaskQueue {
     template <class T>
     struct ContiguousList {
-      using allocator = HeapAllocator<T, false>;
-      using container = std::list<T, ContiguousPoolAllocator<T, false>>;
+      using allocator = HeapAllocator<T>;
+      using container = std::list<T, ContiguousPoolAllocator<T>>;
     };
 
     using value_type = CommTask;
@@ -468,8 +463,8 @@ inline void CommDispatcher<testReqs>::pinToCore(int coreId) {
 }
 
 template <mpi::reqsome_op testReqs>
-typename MultiTrace::cache const& CommDispatcher<testReqs>::stats() const
-    noexcept {
+typename MultiTrace::cache const& CommDispatcher<testReqs>::stats()
+    const noexcept {
   return stats_.values();
 }
 
@@ -492,33 +487,27 @@ inline void CommDispatcher<testReqs>::stop_worker() {
 }
 
 template <mpi::reqsome_op testReqs>
-template <class F, class... Args>
+template <class F>
 inline typename CommDispatcher<testReqs>::signal_token
-CommDispatcher<testReqs>::register_signal(
-    message_type type, F&& callable, Args&&... args) {
+CommDispatcher<testReqs>::register_signal(message_type type, F&& callable) {
   auto const slot = rtlx::to_underlying(type);
 
   std::lock_guard<std::mutex> lg{mutex_};
 
   return signals_[slot].emplace(
-      std::end(signals_[slot]),
-      signal::make(
-          std::forward<F>(callable), std::forward<Args...>(args)...));
+      std::end(signals_[slot]), signal::make(std::forward<F>(callable)));
 }
 
 template <mpi::reqsome_op testReqs>
-template <class F, class... Args>
+template <class F>
 inline typename CommDispatcher<testReqs>::callback_token
-CommDispatcher<testReqs>::register_callback(
-    message_type type, F&& callable, Args&&... args) {
+CommDispatcher<testReqs>::register_callback(message_type type, F&& callable) {
   auto const slot = rtlx::to_underlying(type);
 
   std::lock_guard<std::mutex> lg{mutex_};
 
   return callbacks_[slot].emplace(
-      std::end(callbacks_[slot]),
-      callback::make(
-          std::forward<F>(callable), std::forward<Args...>(args)...));
+      std::end(callbacks_[slot]), callback::make(std::forward<F>(callable)));
 }
 
 template <mpi::reqsome_op testReqs>

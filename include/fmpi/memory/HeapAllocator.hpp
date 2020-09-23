@@ -13,10 +13,10 @@ namespace fmpi {
 /// ContiguousPoolManager.
 /// @tparam T The type to allocate.
 /// @note This allocator is not thread safe.
-template <typename T, bool ThreadSafe = false>
-struct HeapAllocator : public ContiguousPoolAllocator<T, ThreadSafe> {
+template <typename T>
+struct HeapAllocator : public ContiguousPoolAllocator<T> {
   //------------------------------ Typedefs ----------------------------------
-  typedef HeapAllocator<T, ThreadSafe> this_type;
+  typedef HeapAllocator<T> this_type;
   typedef T                            value_type;
   typedef value_type*                  pointer;
   typedef const value_type*            const_pointer;

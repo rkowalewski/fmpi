@@ -46,7 +46,7 @@ int main(int argc, char* argv[]) {
 
   fmpi::benchmark::Params params{};
   if (!fmpi::benchmark::process(argc, argv, world, params)) {
-    return 1;
+    return 0;
   }
 
   auto const me = world.rank();
