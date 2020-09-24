@@ -14,7 +14,6 @@
 #include <fmpi/mpi/Environment.hpp>
 #include <fmpi/mpi/Request.hpp>
 #include <fmpi/util/Trace.hpp>
-
 #include <tlx/math/integer_log2.hpp>
 #include <tlx/simple_vector.hpp>
 
@@ -942,7 +941,8 @@ inline void bruck_mod(
       steady_timer tt{trace.duration(detail::Tpack)};
 
       // We exchange all blocks where the j-th bit is set
-      for (auto&& idx : range<std::size_t>(me + (me == 0), me + nr)) {
+      for (auto&& idx :
+           range<std::size_t>(me + (me == 0), me.mpiRank() + nr)) {
         if ((idx - me) & static_cast<std::size_t>(j)) {
           blocks.emplace_back(idx % nr);
         }

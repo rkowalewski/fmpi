@@ -1,41 +1,35 @@
 #ifndef PARAMS_HPP
 #define PARAMS_HPP
 
-#include <fmpi/mpi/Environment.hpp>
+#include <chrono>
 #include <iosfwd>
-#include <vector>
+#include <string>
 
 namespace fmpi {
 namespace benchmark {
 
-constexpr size_t MINSZ = 32;
-constexpr size_t MAXSZ = 128;
-
-enum class Progress : uint8_t
-{
-  Nonblocking = 0,
-  Blocking
-};
-
 struct Params {
-  unsigned int nhosts{};
-#ifdef NDEBUG
-  unsigned int niters{10};
-#else
-  unsigned int niters{1};
-#endif
-  std::string pattern{};
-  bool        check{false};
-  bool        blocking_progress{false};
+ private:
+  // 5 seconds is the limit for a single round
+  static constexpr auto five_seconds =
+      std::chrono::duration_cast<std::chrono::microseconds>(
+          std::chrono::seconds(5));
 
-  std::vector<std::size_t> sizes{};
+ public:
+  Params();
+  uint32_t                  nhosts{};
+  unsigned int              niters{};
+  std::size_t               smin       = 1u << 5;  // 32 bytes
+  std::size_t               smax       = 1u << 7;  // 128 bytes
+  uint32_t                  pmin       = 1u << 1;
+  uint32_t                  pmax       = pmin;
+  std::chrono::microseconds time_limit = five_seconds;
+
+  std::string pattern{};     // pattern for algorithm selection
+  bool        check{false};  // validate correctness
 };
 
-auto process(
-    int /*argc*/,
-    char*                 argv[],
-    ::mpi::Context const& mpiCtx,
-    struct Params&        params) -> bool;
+bool read_input(int argc, char* argv[], struct Params& params);
 
 void printBenchmarkPreamble(
     std::ostream& os, const std::string& prefix, const char* delim = "\n");

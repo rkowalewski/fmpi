@@ -2,11 +2,10 @@
 #define FMPI_ALLTOALL_WAITSOME_HPP
 
 #include <cstdint>
-#include <numeric>
-
 #include <fmpi/alltoall/Detail.hpp>
 #include <fmpi/container/StackContainer.hpp>
-
+#include <iterator>
+#include <numeric>
 #include <tlx/container/ring_buffer.hpp>
 
 namespace fmpi {

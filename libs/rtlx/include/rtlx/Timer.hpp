@@ -5,14 +5,17 @@
 
 namespace rtlx {
 
+namespace detail {
+
 struct ChooseClockType {
   using type = std::conditional_t<
       std::chrono::high_resolution_clock::is_steady,
       std::chrono::high_resolution_clock,
       std::chrono::steady_clock>;
 };
+}  // namespace detail
 
-template <class Clock = ChooseClockType::type>
+template <class Clock = typename detail::ChooseClockType::type>
 class Timer {
   using timepoint = typename Clock::time_point;
 

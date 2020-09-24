@@ -48,6 +48,22 @@ enum class status
   rejected
 };
 
+template <mpi::reqsome_op>
+class CommDispatcher;
+
+class ScheduleCtx {
+ public:
+  using identifier = uint32_t;
+
+ private:
+  std::list<tlx::delegate<int(Message&)>> signals_;
+  std::list<tlx::delegate<int(Message&)>> callbacks_;
+  std::atomic_bool                        ready_{false};
+  bool                                    has_work_{false};
+  uint32_t                                id_;
+  uint32_t                                fanout_;
+};
+
 struct CommTask {
   constexpr CommTask() = default;
 

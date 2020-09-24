@@ -16,51 +16,53 @@
 
 #include <omp.h>
 
-#include <regex>
-
+#include <MPISynchronizedBarrier.hpp>
+#include <Params.hpp>
+#include <TwosidedAlgorithms.hpp>
 #include <fmpi/AlltoAll.hpp>
 #include <fmpi/Bruck.hpp>
 #include <fmpi/Random.hpp>
 #include <fmpi/concurrency/OpenMP.hpp>
-
+#include <regex>
 #include <rtlx/ScopedLambda.hpp>
 #include <rtlx/UnorderedMap.hpp>
-
 #include <tlx/algorithm.hpp>
 
-#include <MPISynchronizedBarrier.hpp>
-#include <Params.hpp>
-#include <TwosidedAlgorithms.hpp>
-
-// The container where we store our
-using value_t = int;
+// The container where we store our data
+using value_t = double;
 using container =
     tlx::SimpleVector<value_t, tlx::SimpleVectorMode::NoInitNoDestroy>;
+
+template <class T>
+void init_sbuf(T* first, T* last, uint32_t p, int32_t me);
+
+void print_topology(
+    mpi::Context const& ctx, fmpi::benchmark::Params const& params);
 
 int main(int argc, char* argv[]) {
   // Initialize MPI
   mpi::initialize(&argc, &argv, mpi::ThreadLevel::Serialized);
   auto finalizer = rtlx::scope_exit([]() { mpi::finalize(); });
 
-  const auto& world = mpi::Context::world();
-
   fmpi::benchmark::Params params{};
-  if (!fmpi::benchmark::process(argc, argv, world, params)) {
+  if (!fmpi::benchmark::read_input(argc, argv, params)) {
     return 0;
   }
 
-  auto const me = world.rank();
-  auto const nr = world.size();
+  const auto& world = mpi::Context::world();
+  auto const  me    = world.rank();
+  auto const  p     = world.size();
 
-  if ((nr % params.nhosts) != 0) {
+  if ((p % params.nhosts) != 0) {
     if (me == 0) {
       std::cout << "number of ranks must be equal on all nodes\n";
     }
-    return 1;
+    return 0;
   }
 
   using iterator_t = typename container::iterator;
-  auto merger      = [](std::vector<std::pair<iterator_t, iterator_t>> seqs,
+
+  auto merger = [](std::vector<std::pair<iterator_t, iterator_t>> seqs,
                    iterator_t                                     res) {
     // parallel merge does not support inplace merging
     // nels must be the number of elements in all sequences
@@ -89,35 +91,22 @@ int main(int argc, char* argv[]) {
   auto ALGORITHMS = algorithm_list<iterator_t, iterator_t, decltype(merger)>(
       params.pattern, world);
 
-  {
-    MPI_Barrier(world.mpiComm());
+  if (me == 0) {
     std::ostringstream os;
 
-    if (me == 0) {
-      os << "Algorithms:\n";
+    os << "Algorithms:\n";
 
-      for (auto&& kv : ALGORITHMS) {
-        os << kv.first << "\n";
-      }
-
-      os << "\nNode Topology:\n";
+    for (auto&& kv : ALGORITHMS) {
+      os << kv.first << "\n";
     }
 
-    int32_t const ppn = nr / params.nhosts;
-
-    FMPI_DBG(ppn);
-
-    if (me < ppn) {
-      os << "  MPI Rank " << me << "\n";
-      fmpi::print_pinning(os);
-    }
-
-    std::cout << os.str();
-    MPI_Barrier(world.mpiComm());
+    fmpi::benchmark::printBenchmarkPreamble(os, "++ ", "\n");
+    std::cout << os.str() << "\n";
   }
 
+  print_topology(world, params);
+
   if (me == 0) {
-    fmpi::benchmark::printBenchmarkPreamble(std::cout, "++ ", "\n");
     write_csv_header(std::cout);
   }
 
@@ -128,63 +117,42 @@ int main(int argc, char* argv[]) {
 
   FMPI_DBG(params.niters);
 
-  for (std::size_t step = 0; step < params.sizes.size(); ++step) {
-    auto const blocksize = params.sizes[step];
-    assert(blocksize >= sizeof(value_t));
-    assert(blocksize % sizeof(value_t) == 0);
+  if (params.smin < sizeof(value_t)) {
+    params.smin = sizeof(value_t);
+  }
 
+  for (std::size_t blocksize = params.smin; blocksize <= params.smax;
+       blocksize <<= 1) {
     auto const sendcount = blocksize / sizeof(value_t);
-
     FMPI_DBG(sendcount);
 
-    assert(blocksize % sizeof(value_t) == 0);
-
     // Required by good old 32-bit MPI
-    assert(sendcount > 0 && sendcount < mpi::max_int);
+    assert(sendcount < mpi::max_int);
 
-    auto const nels = sendcount * nr;
+    auto const nels = sendcount * p;
 
-    auto data    = container(nels);
-    auto out     = container(nels);
-    auto correct = container(0);
+    auto        sbuf    = container(nels);
+    auto        rbuf    = container(nels);
+    auto        correct = container(0);
+    std::size_t step    = 1u;
+
+#ifdef NDEBUG
+    auto const nwarmup = 1;
+#else
+    auto const nwarmup = 0;
+#endif
 
     for (auto it = 0; it < static_cast<int>(params.niters) + nwarmup; ++it) {
-#pragma omp parallel default(none) shared(data) \
-    firstprivate(nr, sendcount, me, nels)
-      {
-        std::random_device r;
-        std::seed_seq      seed_seq{r(), r(), r(), r(), r(), r()};
-        std::mt19937_64    generator(seed_seq);
-        std::uniform_int_distribution<value_t> distribution(-1E6, 1E6);
-#pragma omp for
-        for (std::size_t block = 0; block < std::size_t(nr); ++block) {
-#ifdef NDEBUG
-          // generate some random values
-          std::generate(
-              std::next(data.begin(), block * sendcount),
-              std::next(data.begin(), (block + 1) * sendcount),
-              [&]() { return distribution(generator); });
-          // sort it
-          std::sort(
-              std::next(data.begin(), block * sendcount),
-              std::next(data.begin(), (block + 1) * sendcount));
-#else
-          std::iota(
-              std::next(data.begin(), block * sendcount),
-              std::next(data.begin(), (block + 1) * sendcount),
-              block * sendcount + (me * nels));
-#endif
-        }
-      }
-
       auto& traceStore = fmpi::TraceStore::instance();
+
+      init_sbuf(sbuf.begin(), sbuf.end(), p, me);
 
       // first we want to obtain the correct result which we can verify then
       // with our own algorithms
       if (params.check) {
         correct = container(nels);
         fmpi::mpi_alltoall(
-            data.begin(),
+            sbuf.begin(),
             correct.begin(),
             static_cast<int>(sendcount),
             world,
@@ -195,11 +163,11 @@ int main(int argc, char* argv[]) {
 
       Measurement m{};
       m.nhosts    = params.nhosts;
-      m.nprocs    = nr;
+      m.nprocs    = p;
       m.nthreads  = omp_get_max_threads();
       m.me        = me;
-      m.step      = step + 1;
-      m.nbytes    = nels * nr * sizeof(value_t);
+      m.step      = step++;
+      m.nbytes    = nels * p * sizeof(value_t);
       m.blocksize = blocksize;
 
       for (auto&& algo : ALGORITHMS) {
@@ -214,18 +182,18 @@ int main(int argc, char* argv[]) {
         auto total = run_algorithm(
 
             algo.second,
-            data.begin(),
-            out.begin(),
+            sbuf.begin(),
+            rbuf.begin(),
             static_cast<int>(sendcount),
             world,
             merger);
 
         if (params.check) {
           validate(
-              out.begin(), out.end(), correct.begin(), world, algo.first);
+              rbuf.begin(), rbuf.end(), correct.begin(), world, algo.first);
         }
 
-        if (it >= nwarmup) {
+        if (nwarmup == 0 || it > nwarmup) {
           m.algorithm = algo.first;
           m.iter      = it - nwarmup + 1;
 
@@ -289,4 +257,82 @@ void write_csv_line(
   myos << entry.first << ", ";
   myos << entry.second << "\n";
   os << myos.str();
+}
+
+template <class T>
+void init_sbuf(T* first, T* last, uint32_t p, int32_t me) {
+  auto const nels = std::distance(first, last);
+  assert(nels > 0);
+
+  auto const sendcount = nels / p;
+
+#pragma omp parallel default(none) shared(first, last) \
+    firstprivate(p, sendcount, me, nels)
+  {
+#ifdef NDEBUG
+    std::random_device r;
+    std::seed_seq      seed_seq{r(), r(), r(), r(), r(), r()};
+    std::mt19937_64    generator(seed_seq);
+    std::uniform_int_distribution<value_t> distribution(-1E6, 1E6);
+#endif
+#pragma omp for
+    for (std::size_t block = 0; block < std::size_t(p); ++block) {
+#ifdef NDEBUG
+      // generate some random values
+      std::generate(
+          std::next(first, block * sendcount),
+          std::next(first, (block + 1) * sendcount),
+          [&]() { return distribution(generator); });
+      // sort it
+      std::sort(
+          std::next(first, block * sendcount),
+          std::next(first, (block + 1) * sendcount));
+#else
+      std::iota(
+          std::next(first, block * sendcount),
+          std::next(first, (block + 1) * sendcount),
+          block * sendcount + (me * nels));
+#endif
+    }
+  }
+}
+
+void print_topology(
+    mpi::Context const& ctx, fmpi::benchmark::Params const& params) {
+  auto const me   = ctx.rank();
+  auto const ppn  = static_cast<int32_t>(ctx.size() / params.nhosts);
+  auto const last = mpi::Rank{ppn - 1};
+
+  auto left  = (me > 0 && me <= last) ? me - 1 : mpi::Rank::null();
+  auto right = (me < last) ? me + 1 : mpi::Rank::null();
+
+  char dummy = 0;
+
+  std::ostringstream os;
+
+  if (me == 0) {
+    os << "Node Topology:\n";
+  }
+
+  MPI_Recv(&dummy, 1, MPI_CHAR, left, 0xAB, ctx.mpiComm(), MPI_STATUS_IGNORE);
+
+  if (me < ppn) {
+    os << "  MPI Rank " << me << "\n";
+    fmpi::print_pinning(os);
+  }
+
+  if (me == last) {
+    os << "\n";
+  }
+
+  std::cout << os.str() << std::endl;
+
+  MPI_Send(&dummy, 1, MPI_CHAR, right, 0xAB, ctx.mpiComm());
+
+  if (me == 0) {
+    MPI_Recv(
+        &dummy, 1, MPI_CHAR, last, 0xAB, ctx.mpiComm(), MPI_STATUS_IGNORE);
+  } else if (me == last) {
+    MPI_Send(&dummy, 1, MPI_CHAR, 0, 0xAB, ctx.mpiComm());
+  }
 }

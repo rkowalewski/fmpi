@@ -151,6 +151,4 @@ void fmpi::print_pinning(std::ostream& os) {
 
     os << "]";
   }
-
-  os << std::endl;
 }

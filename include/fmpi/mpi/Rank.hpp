@@ -3,10 +3,9 @@
 
 #include <mpi.h>
 
+#include <fmpi/detail/Assert.hpp>
 #include <iosfwd>
 #include <type_traits>
-
-#include <fmpi/detail/Assert.hpp>
 
 namespace mpi {
 
@@ -115,6 +114,14 @@ constexpr Rank operator+(Rank const& lhs, Rank const& rhs) noexcept {
 
 constexpr Rank operator-(Rank const& lhs, Rank const& rhs) noexcept {
   return Rank{lhs.mpiRank() - rhs.mpiRank()};
+}
+
+constexpr Rank operator-(Rank const& lhs, int32_t diff) noexcept {
+  return Rank{lhs.mpiRank() - diff};
+}
+
+constexpr Rank operator+(Rank const& lhs, int32_t diff) noexcept {
+  return Rank{lhs.mpiRank() + diff};
 }
 
 constexpr Rank operator^(Rank const& lhs, Rank const& rhs) FMPI_NOEXCEPT {

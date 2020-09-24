@@ -6,9 +6,11 @@
 #include <cmath>
 #include <ctime>
 #include <fmpi/NumericRange.hpp>
+#include <fmpi/mpi/Environment.hpp>
 #include <iomanip>
 #include <string>
 #include <tlx/cmdline_parser.hpp>
+#include <tlx/math/integer_log2.hpp>
 
 namespace fmpi::benchmark {
 
@@ -43,11 +45,7 @@ static auto getexepath() -> std::string {
   return std::string(result.data(), (count > 0) ? count : 0);
 }
 
-auto process(
-    int                   argc,
-    char*                 argv[],
-    ::mpi::Context const& mpiCtx,
-    struct Params&        params) -> bool {
+bool read_input(int argc, char* argv[], struct Params& params) {
   bool good = 0;
 
   tlx::CmdlineParser cp;
@@ -65,22 +63,22 @@ auto process(
       params.pattern,
       "Select specific algorithms matching a regex pattern");
 
-  std::size_t minblocksize = 0;
+  cp.add_bytes(
+      's', "smin", params.smin, "Minimum message size sent to each peer.");
+  cp.add_bytes(
+      'S', "smax", params.smax, "Maximum message size sent to each peer.");
 
-  std::size_t maxblocksize = 0;
-  cp.add_bytes(
-      'l',
-      "minblocksize",
-      minblocksize,
-      "Minimum block size communication to each unit.");
-  cp.add_bytes(
-      'u',
-      "maxblocksize",
-      maxblocksize,
-      "Maximum block size communication to each unit.");
+  cp.add_uint('p', "pmin", params.pmin, "minimum number of ranks");
+  cp.add_uint('P', "pmax", params.pmax, "maximum number of ranks");
 
   cp.add_uint(
       'i', "iterations", params.niters, "Number of iterations per round.");
+
+  std::size_t time_limit = params.time_limit.count();
+
+  cp.add_size_t('t', "time_limit", time_limit, "maximum time limit (us)");
+
+  params.time_limit = std::chrono::microseconds{time_limit};
 
   cp.add_flag(
       'c',
@@ -90,65 +88,39 @@ auto process(
       "correctly. This does not work with random text (no way to "
       " reproduce).");
 
-  cp.add_flag(
-      0,
-      "blocking_progress",
-      params.blocking_progress,
-      "blocking or non-blocking (default) progress");
+  auto const me = mpi::Context::world().rank();
 
-  std::string sizes_csv;
-  cp.add_string('s', "sizes", sizes_csv, "list of block sizes");
-
-  if (mpiCtx.rank() == 0) {
+  if (me == 0) {
     good = cp.process(argc, argv, std::cout);
   } else {
     onullstream os;
     good = cp.process(argc, argv, os);
   }
 
-  if (sizes_csv.empty()) {
-    std::int64_t nsteps = std::ceil(std::log2(maxblocksize)) -
-                          std::ceil(std::log2(minblocksize));
+  if (good) {
+    std::int64_t const nsteps = tlx::integer_log2_ceil(params.smax) -
+                                tlx::integer_log2_ceil(params.smin);
 
     if (nsteps < 0) {
-      if (mpiCtx.rank() == 0) {
+      if (me == 0) {
         std::ostringstream os;
-        os << "maxblocksize cannot be smaller than minblocksize\n";
+        os << "ERROR: smax cannot be smaller than smin\n\n";
         cp.print_usage(os);
         std::cerr << os.str();
-        return false;
       }
+      return false;
     }
 
-    nsteps = std::min<std::size_t>(nsteps, 20);
+    if (me == 0) {
+      auto time = std::time(nullptr);
+      std::cout << "Executable: " << getexepath() << "\n";
+      std::cout << "Time: " << std::put_time(std::gmtime(&time), "%F %T")
+                << "\n";
+      std::cout << "Git Version: " << FMPI_GIT_COMMIT << "\n";
 
-    params.sizes.resize(nsteps + 1);
-
-    auto blocksize = minblocksize;
-    for (auto&& r : range<std::size_t>(nsteps + 1)) {
-      params.sizes[r] = std::min(blocksize, maxblocksize);
-      blocksize *= 2;
+      cp.print_result();
+      std::cout << "\n";
     }
-  } else {
-    std::stringstream ss(sizes_csv);
-
-    for (std::size_t i = 0; ss >> i;) {
-      params.sizes.push_back(i);
-      if (ss.peek() == ',') {
-        ss.ignore();
-      }
-    }
-  }
-
-  if (good && mpiCtx.rank() == 0) {
-    auto time = std::time(nullptr);
-    std::cout << "Executable: " << getexepath() << "\n";
-    std::cout << "Time: " << std::put_time(std::gmtime(&time), "%F %T")
-              << "\n";
-    std::cout << "Git Version: " << FMPI_GIT_COMMIT << "\n";
-
-    cp.print_result();
-    std::cout << "\n";
   }
 
   return good;
@@ -206,4 +178,17 @@ void printBenchmarkPreamble(
 
   os << oss.str();
 }
+
+Params::Params()
+  :
+#ifdef NDEBUG
+  niters(10)
+  , check(false)
+#else
+  niters(1)
+  , check(true)
+#endif
+{
+}
+
 }  // namespace fmpi::benchmark

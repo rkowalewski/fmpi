@@ -2,9 +2,8 @@
 #define FMPI_CONFIG_HPP
 
 #include <cstddef>
-#include <string_view>
-
 #include <fmpi/common/Porting.hpp>
+#include <string_view>
 
 #define FMPI_IMPL_IN_CONFIG_HPP
 #include "config_impl.hpp"
