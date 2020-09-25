@@ -38,6 +38,12 @@ int dispatch_waitall(
     MPI_Status*  statuses,
     int*&        last);
 
+template <class T>
+struct ContiguousList {
+  using allocator = HeapAllocator<T>;
+  using container = std::list<T, ContiguousPoolAllocator<T>>;
+};
+
 }  // namespace detail
 
 enum class status
@@ -51,19 +57,6 @@ enum class status
 template <mpi::reqsome_op>
 class CommDispatcher;
 
-class ScheduleCtx {
- public:
-  using identifier = uint32_t;
-
- private:
-  std::list<tlx::delegate<int(Message&)>> signals_;
-  std::list<tlx::delegate<int(Message&)>> callbacks_;
-  std::atomic_bool                        ready_{false};
-  bool                                    has_work_{false};
-  uint32_t                                id_;
-  uint32_t                                fanout_;
-};
-
 struct CommTask {
   constexpr CommTask() = default;
 
@@ -74,6 +67,26 @@ struct CommTask {
 
   Message      message{};
   message_type type{};
+};
+
+class ScheduleCtx {
+  using task_list = detail::ContiguousList<CommTask>;
+  using allocator = typename task_list::allocator;
+  using list      = typename task_list::container;
+
+ public:
+  using identifier = uint32_t;
+
+ private:
+  std::list<tlx::delegate<int(Message&)>> signals_;
+  std::list<tlx::delegate<int(Message&)>> callbacks_;
+
+  std::atomic_bool                        ready_{false};
+  bool                                    has_work_{false};
+  uint32_t                                id_;
+  uint32_t                                fanout_;
+
+
 };
 
 template <mpi::reqsome_op testReqs = mpi::testsome>
@@ -208,14 +221,8 @@ class CommDispatcher {
   void trigger_callbacks(idx_ranges_t completed);
 
   class TaskQueue {
-    template <class T>
-    struct ContiguousList {
-      using allocator = HeapAllocator<T>;
-      using container = std::list<T, ContiguousPoolAllocator<T>>;
-    };
-
     using value_type = CommTask;
-    using container  = ContiguousList<value_type>;
+    using container  = detail::ContiguousList<value_type>;
     using allocator  = typename container::allocator;
     using list       = typename container::container;
 

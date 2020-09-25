@@ -22,33 +22,35 @@ def mkdir_p(dir):
 parser = argparse.ArgumentParser(description='Job submission.',
                                  formatter_class=argparse.ArgumentDefaultsHelpFormatter
                                  )
+parser.add_argument('binary', help='the binary to execute via mpiexec')
+
 parser.add_argument('nodes', type=int,
                     help='number of nodes')
 parser.add_argument('ntasks', type=int,
                     help='number of tasks per node')
 parser.add_argument('threads', type=int,
                     help='number of threads per task')
-parser.add_argument('application', help='the binary to execute via mpiexec')
-parser.add_argument('jobname', help='jobname')
-parser.add_argument('--partition', help='job partition', default='test')
 parser.add_argument(
-    '--time', help='wallclock time for job')
+    '--jobname', help='job name (if empty, the basename of the binary is used)')
+parser.add_argument('--partition', help='slurm partition', default='test')
+parser.add_argument('--time', help='wallclock time for job', default='00:30:00')
 parser.add_argument(
     '--binary-args', help='arguments passed to the binary via mpirun')
 
+
 args = parser.parse_args()
 
-if not os.path.exists(args.application):
-    print("invalid path to binary: %s" % args.application)
+if not os.path.exists(args.binary):
+    print("invalid path to binary: %s" % args.binary)
     exit(1)
 
-canonical_path = os.path.abspath(args.application)
+canonical_path = os.path.abspath(args.binary)
 
 if not (stat.S_IXUSR & os.stat(canonical_path)[stat.ST_MODE]):
-    print("binary not executable", args.application)
+    print("binary not executable", args.binary)
     exit(1)
 
-if not args.jobname:
+if args.jobname is None:
     args.jobname = os.path.basename(canonical_path)
 
 cwd = getGitRoot()
@@ -68,6 +70,8 @@ jobdir = os.path.join(cwd, '.jobs')
 if args.binary_args is None:
     args.binary_args = ""
 
+
+
 options = {}
 
 options['nodes'] = args.nodes
@@ -85,4 +89,5 @@ filein = open(os.path.join(cwd, 'jobs/sbatch.tpl'))
 
 src = Template(filein.read())
 result = src.substitute(options)
-print(result) # output generated batch file
+
+print(result)  # output generated batch file
