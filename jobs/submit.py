@@ -16,8 +16,10 @@ def getGitRoot():
 
 def mkdir_p(dir):
     '''make a directory (dir) if it doesn't exist'''
-    pathlib.Path(dir).mkdir(parents=True, exist_ok=True)
-
+    try:
+        pathlib.Path(dir).mkdir(parents=True)
+    except FileExistsError:
+        pass
 
 parser = argparse.ArgumentParser(description='Job submission.',
                                  formatter_class=argparse.ArgumentDefaultsHelpFormatter
@@ -60,17 +62,15 @@ scratch = os.environ.get('SCRATCH')
 if scratch is None:
     scratch = os.path.join(cwd, '.logs')
 else:
-    scratch = os.path.join(cwd, 'logs')
+    scratch = os.path.join(scratch, 'logs')
 
 datadir = "{scratch}/{project}/{job}".format(
     scratch=scratch, project="fmpi", job=args.jobname)
 
-jobdir = os.path.join(cwd, '.jobs')
+mkdir_p(datadir)
 
 if args.binary_args is None:
     args.binary_args = ""
-
-
 
 options = {}
 
