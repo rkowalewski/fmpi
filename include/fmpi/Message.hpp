@@ -2,10 +2,9 @@
 #define FMPI_MESSAGE_HPP
 
 #include <cstddef>
-#include <gsl/span>
-
 #include <fmpi/mpi/Rank.hpp>
 #include <fmpi/mpi/TypeMapper.hpp>
+#include <gsl/span>
 
 namespace fmpi {
 
@@ -20,9 +19,9 @@ enum class message_type : uint8_t
 
 struct Envelope {
  private:
-  mpi::Comm comm_{MPI_COMM_NULL};
-  mpi::Rank peer_{};
-  mpi::Tag  tag_{};
+  mpi::Comm    comm_{MPI_COMM_NULL};
+  mpi::Rank    peer_{};
+  mpi::Tag     tag_{};
 
  public:
   constexpr Envelope() = default;
@@ -63,7 +62,7 @@ class Message {
       mpi::Comm const& comm) noexcept
     : buf_(span.data())
     , count_(span.size())
-    , type_(mpi::type_mapper<T>::type())
+    , mpi_type_(mpi::type_mapper<T>::type())
     , envelope_(peer, tag, comm)
 
   {
@@ -77,9 +76,9 @@ class Message {
   constexpr Message& operator=(Message&&) noexcept = default;
 
   constexpr void set_buffer(void* buf, std::size_t count, MPI_Datatype type) {
-    buf_   = buf;
-    count_ = count;
-    type_  = type;
+    buf_      = buf;
+    count_    = count;
+    mpi_type_ = type;
   }
 
   template <class T>
@@ -96,7 +95,7 @@ class Message {
   }
 
   [[nodiscard]] constexpr MPI_Datatype type() const noexcept {
-    return type_;
+    return mpi_type_;
   }
 
   [[nodiscard]] constexpr std::size_t count() const noexcept {
@@ -118,7 +117,7 @@ class Message {
  private:
   void*        buf_{};
   std::size_t  count_{};
-  MPI_Datatype type_{};
+  MPI_Datatype mpi_type_{};
   Envelope     envelope_{};
 };
 
@@ -127,10 +126,7 @@ class Message {
 //static_assert(alignof(Message) == 8);
 //static_assert(sizeof(Message) == 32);
 
-
-class NonblockingMessageHandler {
-
-};
+class NonblockingMessageHandler {};
 
 }  // namespace fmpi
 

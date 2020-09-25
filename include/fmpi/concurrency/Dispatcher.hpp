@@ -70,23 +70,18 @@ struct CommTask {
 };
 
 class ScheduleCtx {
-  using task_list = detail::ContiguousList<CommTask>;
-  using allocator = typename task_list::allocator;
-  using list      = typename task_list::container;
-
  public:
   using identifier = uint32_t;
 
  private:
   std::list<tlx::delegate<int(Message&)>> signals_;
   std::list<tlx::delegate<int(Message&)>> callbacks_;
+  std::queue<CommTask>                    tasks_;
+  std::vector<MPI_Request>                reqs_;
 
-  std::atomic_bool                        ready_{false};
-  bool                                    has_work_{false};
-  uint32_t                                id_;
-  uint32_t                                fanout_;
-
-
+  std::atomic_bool ready_{false};
+  bool             has_work_{false};
+  uint32_t         id_;
 };
 
 template <mpi::reqsome_op testReqs = mpi::testsome>
