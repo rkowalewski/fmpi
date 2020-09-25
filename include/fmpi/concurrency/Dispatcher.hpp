@@ -253,11 +253,11 @@ class CommDispatcher {
     }
 
     void push(value_type const& task) {
-      return lists_[rtlx::to_underlying(task.type)].push(task);
+      lists_[rtlx::to_underlying(task.type)].push(task);
     }
 
     void push(value_type&& task) {
-      return lists_[rtlx::to_underlying(task.type)].emplace(task);
+      lists_[rtlx::to_underlying(task.type)].emplace(task);
     }
 
     void pop(message_type type) {

@@ -8,7 +8,7 @@ add_library(fmpi
     mpi/Environment.cc
     mpi/Rank.cc
     mpi/Request.cc
-    topo/BinaryTree.cc
+    # topo/BinaryTree.cc
     topo/Tree.cc
     util/Trace.cc
     Pinning.cc

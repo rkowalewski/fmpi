@@ -123,8 +123,8 @@ class Message {
 };
 
 //static_assert(sizeof(Envelope) == 12);
-static_assert(sizeof(MPI_Datatype) == 8);
-static_assert(alignof(Message) == 8);
+//static_assert(sizeof(MPI_Datatype) == 8);
+//static_assert(alignof(Message) == 8);
 //static_assert(sizeof(Message) == 32);
 
 

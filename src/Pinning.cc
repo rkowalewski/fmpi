@@ -14,7 +14,7 @@
 
 static uint32_t num_world_nodes() {
   auto const& world = mpi::Context::world();
-  MPI_Comm    shmcomm = nullptr;
+  MPI_Comm    shmcomm = MPI_COMM_NULL;
   int         shmrank = 0;
   uint32_t    nodes   = 0;
 

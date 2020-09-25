@@ -4,7 +4,7 @@
 #include <fmpi/Math.hpp>
 #include <fmpi/NumericRange.hpp>
 #include <fmpi/Schedule.hpp>
-#include <fmpi/topo/BinaryTree.hpp>
+//#include <fmpi/topo/BinaryTree.hpp>
 #include <fmpi/topo/Tree.hpp>
 #include <functional>
 #include <iomanip>
