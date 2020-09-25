@@ -20,12 +20,10 @@ void CustomArguments(benchmark::internal::Benchmark* b) {
 
   for (long np = min_procs; np <= max_procs; np *= 2) {
     for (long block_bytes = min_blocksz; block_bytes <= max_blocksz;
-         block_bytes *= 8) {
-      long const blocksz = block_bytes / sizeof(value_t);
-
+         block_bytes *= 4) {
       constexpr long ws = 0;
 
-      b->Args({np, blocksz, ws, static_cast<long>(omp_get_max_threads())});
+      b->Args({np, block_bytes, ws, static_cast<long>(omp_get_max_threads())});
     }
   }
 }

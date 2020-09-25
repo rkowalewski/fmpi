@@ -49,5 +49,5 @@ mpiexec -n $SLURM_NTASKS \
     -genv FMPI_HW_CORES="$ncores" \
     -genv FMPI_MGMT_CPUS="$num_mgmt_threads" \
     ./jobs/impi_omp.sh \
-    "./build.release/apps/mergebench/parallel" \
-    $SLURM_JOB_NUM_NODES <<ARGS>>
+    "./build.release/apps/mergebench/parallel_recursive" \
+    $SLURM_JOB_NUM_NODES --benchmark_filter='.*Parallel.*'

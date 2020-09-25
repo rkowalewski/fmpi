@@ -22,10 +22,10 @@ Params processParams(benchmark::State const& state) {
   Params params;
 
   params.nprocs   = state.range(0);
-  params.blocksz  = state.range(1);
+  params.blocksz  = state.range(1) / sizeof(value_t);
   params.windowsz = state.range(2);
 
-  params.nblocks = params.nprocs /* * params.nprocs*/;
+  params.nblocks = params.nprocs;
 
   params.arraysize = params.nblocks * params.blocksz;
 
