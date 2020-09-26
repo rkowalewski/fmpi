@@ -26,10 +26,47 @@
 #include <tlx/container/ring_buffer.hpp>
 #include <tlx/container/simple_vector.hpp>
 #include <tlx/delegate.hpp>
+#include <unordered_map>
 
 namespace fmpi {
 
+template <mpi::reqsome_op>
+class CommDispatcher;
+
+class ScheduleHandle {
+  using identifier = uint32_t;
+
+  template <mpi::reqsome_op>
+  friend class CommDispatcher;
+
+  static std::atomic_uint32_t last_id_;
+
+ public:
+  constexpr ScheduleHandle() = default;
+  constexpr explicit ScheduleHandle(identifier id) noexcept
+    : id_(id) {
+  }
+
+ private:
+  identifier id_ = -1;
+};
+
+struct CommTask {
+  constexpr CommTask() = default;
+
+  constexpr CommTask(message_type t, Message m)
+    : message(m)
+    , type(t) {
+  }
+
+  Message        message{};
+  message_type   type{};
+  ScheduleHandle id_{};
+};
+
 namespace detail {
+
+static constexpr auto n_types = rtlx::to_underlying(message_type::INVALID);
 
 int dispatch_waitall(
     MPI_Request* begin,
@@ -44,6 +81,66 @@ struct ContiguousList {
   using container = std::list<T, ContiguousPoolAllocator<T>>;
 };
 
+class MultiTaskQueue {
+  using value_type = CommTask;
+  using container  = ContiguousList<value_type>;
+  using allocator  = typename container::allocator;
+  using list       = typename container::container;
+
+  using task_queue = std::queue<value_type, list>;
+
+  using reference       = typename task_queue::reference;
+  using const_reference = typename task_queue::const_reference;
+
+  static constexpr uint16_t default_cap = 1000;
+
+ public:
+  MultiTaskQueue(uint16_t initial_cap = default_cap)
+    : alloc_(initial_cap) {
+    for (auto&& i : range(lists_.size())) {
+      lists_[i] = task_queue{alloc_};
+    }
+  }
+
+  [[nodiscard]] std::size_t size() const noexcept {
+    return std::accumulate(
+        std::begin(lists_),
+        std::end(lists_),
+        0U,
+        [](auto acc, auto const& queue) { return acc + queue.size(); });
+  }
+
+  [[nodiscard]] std::size_t size(message_type type) const noexcept {
+    return lists_[rtlx::to_underlying(type)].size();
+  }
+
+  void push(value_type const& task) {
+    lists_[rtlx::to_underlying(task.type)].push(task);
+  }
+
+  void push(value_type&& task) {
+    lists_[rtlx::to_underlying(task.type)].emplace(task);
+  }
+
+  void pop(message_type type) {
+    return lists_[rtlx::to_underlying(type)].pop();
+  }
+
+  reference front(message_type type) {
+    return lists_[rtlx::to_underlying(type)].front();
+  }
+
+  [[nodiscard]] const_reference front(message_type type) const {
+    return lists_[rtlx::to_underlying(type)].front();
+  }
+
+ private:
+  allocator alloc_;
+
+  // Task Lists: One for each type
+  std::array<task_queue, n_types> lists_{};
+};
+
 }  // namespace detail
 
 enum class status
@@ -54,43 +151,64 @@ enum class status
   rejected
 };
 
-template <mpi::reqsome_op>
-class CommDispatcher;
+class ScheduleCtx {
+  using handles_t =
+      tlx::SimpleVector<MPI_Request, tlx::SimpleVectorMode::NoInitNoDestroy>;
 
-struct CommTask {
-  constexpr CommTask() = default;
+  template <mpi::reqsome_op>
+  friend class CommDispatcher;
 
-  constexpr CommTask(message_type t, Message m)
-    : message(m)
-    , type(t) {
+  using signal   = tlx::delegate<void(Message&)>;
+  using callback = tlx::delegate<void(Message&)>;
+
+  enum class status
+  {
+    init,
+    scheduled,
+    ready
+  };
+
+ public:
+  ScheduleCtx(std::array<std::size_t, detail::n_types> nslots)
+    : nslots_(nslots) {
   }
 
-  Message      message{};
-  message_type type{};
-};
+  void mark_scheduled();
 
-class ScheduleCtx {
- public:
-  using identifier = uint32_t;
+  void register_signal(message_type type, signal&& callable);
+  void register_callback(message_type type, callback&& callable);
+
+  template <class F>
+  void register_signal(message_type type, F&& callable);
+
+  template <class F>
+  void register_callback(message_type type, F&& callable);
 
  private:
-  std::list<tlx::delegate<int(Message&)>> signals_;
-  std::list<tlx::delegate<int(Message&)>> callbacks_;
-  std::queue<CommTask>                    tasks_;
-  std::vector<MPI_Request>                reqs_;
+  /// Request Handles
+  std::array<std::size_t, detail::n_types>                  nslots_;
+  std::array<tlx::RingBuffer<std::size_t>, detail::n_types> slots_;
+  handles_t                                                 handles_;
 
-  std::atomic_bool ready_{false};
-  bool             has_work_{false};
-  uint32_t         id_;
+  /// Backlog
+  detail::MultiTaskQueue backlog_;
+
+  /// Status
+  std::atomic<status> state_{status::init};
+
+  /// Signals
+  std::mutex                                          mtx_signals;
+  std::unordered_map<std::uint8_t, std::list<signal>> signals_;
+
+  /// Callbacks
+  std::mutex                                            mtx_callbacks;
+  std::unordered_map<std::uint8_t, std::list<callback>> callbacks_;
 };
 
 template <mpi::reqsome_op testReqs = mpi::testsome>
 class CommDispatcher {
-  static constexpr auto n_types = rtlx::to_underlying(message_type::INVALID);
-  static_assert(n_types == 2, "only two request types supported for now");
-
-  class TaskQueue;
-
+  static_assert(
+      detail::n_types == 2, "only two message types supported for now");
   template <class _T>
   using simple_vector =
       tlx::SimpleVector<_T, tlx::SimpleVectorMode::NoInitNoDestroy>;
@@ -103,7 +221,7 @@ class CommDispatcher {
   using signal_token   = typename signal_list::const_iterator;
   using callback_token = typename callback_list::const_iterator;
 
-  using idx_ranges_t = std::array<int*, n_types>;
+  using idx_ranges_t = std::array<int*, detail::n_types>;
 
   static constexpr auto high_watermark =
       std::string_view("Tcomm.high_watermark");
@@ -160,16 +278,21 @@ class CommDispatcher {
   // indices of request slots in the sliding window
   simple_vector<int> indices_{};
   // free slots for each request type
-  simple_vector<tlx::RingBuffer<int>> req_slots_{n_types};
+  simple_vector<tlx::RingBuffer<int>> req_slots_{detail::n_types};
 
   // Task Cache
-  TaskQueue backlog_{};
+  detail::MultiTaskQueue backlog_{};
 
   // Signals
-  std::array<signal_list, n_types>   signals_{};
-  std::array<callback_list, n_types> callbacks_{};
+  std::array<signal_list, detail::n_types>   signals_{};
+  std::array<callback_list, detail::n_types> callbacks_{};
 
   std::thread thread_;
+
+  std::unordered_map<
+      typename ScheduleHandle::identifier,
+      std::weak_ptr<ScheduleCtx>>
+      active_schedules_;
 
  public:
   explicit CommDispatcher(std::shared_ptr<channel> chan, std::size_t winsz);
@@ -194,6 +317,8 @@ class CommDispatcher {
 
   typename MultiTrace::cache const& stats() const noexcept;
 
+  ScheduleHandle commit(std::weak_ptr<ScheduleCtx>);
+
  private:
   std::size_t req_count() const noexcept;
 
@@ -215,64 +340,6 @@ class CommDispatcher {
 
   void trigger_callbacks(idx_ranges_t completed);
 
-  class TaskQueue {
-    using value_type = CommTask;
-    using container  = detail::ContiguousList<value_type>;
-    using allocator  = typename container::allocator;
-    using list       = typename container::container;
-
-    using task_queue = std::queue<value_type, list>;
-
-    using reference       = typename task_queue::reference;
-    using const_reference = typename task_queue::const_reference;
-
-    static constexpr uint16_t default_task_capacity = 1000;
-
-   public:
-    TaskQueue() {
-      for (auto&& i : range(lists_.size())) {
-        lists_[i] = std::move(task_queue{alloc_});
-      }
-    }
-
-    [[nodiscard]] std::size_t size() const noexcept {
-      return std::accumulate(
-          std::begin(lists_),
-          std::end(lists_),
-          0U,
-          [](auto acc, auto const& queue) { return acc + queue.size(); });
-    }
-
-    [[nodiscard]] std::size_t size(message_type type) const noexcept {
-      return lists_[rtlx::to_underlying(type)].size();
-    }
-
-    void push(value_type const& task) {
-      lists_[rtlx::to_underlying(task.type)].push(task);
-    }
-
-    void push(value_type&& task) {
-      lists_[rtlx::to_underlying(task.type)].emplace(task);
-    }
-
-    void pop(message_type type) {
-      return lists_[rtlx::to_underlying(type)].pop();
-    }
-
-    reference front(message_type type) {
-      return lists_[rtlx::to_underlying(type)].front();
-    }
-
-    [[nodiscard]] const_reference front(message_type type) const {
-      return lists_[rtlx::to_underlying(type)].front();
-    }
-
-   private:
-    allocator alloc_{default_task_capacity};
-
-    // Task Lists: One for each type
-    std::array<task_queue, n_types> lists_{};
-  };
 };  // namespace fmpi
 
 template <typename mpi::reqsome_op testReqs>
@@ -315,10 +382,9 @@ inline void CommDispatcher<testReqs>::worker() {
 
   while (auto const tasks =
              HasTasks{backlog_.size(), !task_channel_->done()}) {
-    auto n_backlog = tasks.task_count.first;
-    if (n_backlog) {
+    if (auto const n_backlog = tasks.task_count.first; n_backlog != 0u) {
       // try to serve from caches
-      for (auto&& type : range(n_types)) {
+      for (auto&& type : range(detail::n_types)) {
         auto const nslots   = req_slots_[type].size();
         auto const req_type = static_cast<message_type>(type);
         auto const ntasks   = backlog_.size(req_type);
@@ -432,12 +498,12 @@ CommDispatcher<testReqs>::progress_network(bool force) {
   FMPI_DBG(nCompleted);
 
   idx_ranges_t ranges{};
-  for (auto&& type : range(n_types)) {
+  for (auto&& type : range(detail::n_types)) {
     auto first = (type == 0) ? std::begin(indices_) : ranges[type - 1];
 
     auto const pivot = static_cast<int>(reqs_in_flight_ * (type + 1));
 
-    auto mid = (type == n_types - 1)
+    auto mid = (type == detail::n_types - 1)
                    ? last
                    : std::partition(first, last, [pivot](auto const& req) {
                        return req < pivot;
@@ -456,7 +522,7 @@ template <typename mpi::reqsome_op testReqs>
 inline void CommDispatcher<testReqs>::trigger_callbacks(
     idx_ranges_t completed) {
   steady_timer t_callback{stats_.duration(callback_time)};
-  for (auto&& type : range(n_types)) {
+  for (auto&& type : range(detail::n_types)) {
     auto first = type == 0 ? std::begin(indices_) : completed[type - 1];
     auto last  = completed[type];
 
@@ -530,8 +596,8 @@ CommDispatcher<testReqs>::register_callback(message_type type, F&& callable) {
 
 template <mpi::reqsome_op testReqs>
 inline void CommDispatcher<testReqs>::discard_signals() {
-  using callback_container = std::array<callback_list, n_types>;
-  using signal_container   = std::array<signal_list, n_types>;
+  using callback_container = std::array<callback_list, detail::n_types>;
+  using signal_container   = std::array<signal_list, detail::n_types>;
 
   signals_   = signal_container{};
   callbacks_ = callback_container{};
@@ -542,7 +608,7 @@ inline void CommDispatcher<testReqs>::do_init(std::size_t winsz) {
   discard_signals();
 
   winsz_          = winsz;
-  reqs_in_flight_ = winsz_ / n_types;
+  reqs_in_flight_ = winsz_ / detail::n_types;
 
   pending_.resize(winsz_);
   mpi_reqs_.resize(winsz_);
@@ -564,7 +630,7 @@ inline void CommDispatcher<testReqs>::do_init(std::size_t winsz) {
         [n = i * reqs_in_flight_]() mutable { return n++; });
   }
 
-  FMPI_ASSERT((winsz_ % n_types) == 0);
+  FMPI_ASSERT((winsz_ % detail::n_types) == 0);
 }
 
 template <mpi::reqsome_op testReqs>
@@ -587,6 +653,16 @@ inline std::size_t CommDispatcher<testReqs>::req_capacity() const noexcept {
 template <mpi::reqsome_op testReqs>
 inline bool CommDispatcher<testReqs>::has_active_requests() const noexcept {
   return req_count() > 0;
+}
+
+template <mpi::reqsome_op testReqs>
+inline ScheduleHandle CommDispatcher<testReqs>::commit(
+    std::weak_ptr<ScheduleCtx> ctx) {
+  auto hdl = ScheduleHandle{ScheduleHandle::last_id_++};
+
+  active_schedules_[hdl.id_] = ctx;
+
+  return hdl;
 }
 
 namespace detail {

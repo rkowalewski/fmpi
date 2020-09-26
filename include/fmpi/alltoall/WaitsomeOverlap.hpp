@@ -1,15 +1,14 @@
 #ifndef FMPI_ALLTOALL_WAITSOMEOVERLAP_HPP
 #define FMPI_ALLTOALL_WAITSOMEOVERLAP_HPP
 
-#include <string_view>
-#include <utility>
-
 #include <fmpi/Pinning.hpp>
 #include <fmpi/alltoall/Detail.hpp>
 #include <fmpi/concurrency/BufferedChannel.hpp>
 #include <fmpi/concurrency/Dispatcher.hpp>
 #include <fmpi/memory/ThreadAllocator.hpp>
 #include <fmpi/util/Trace.hpp>
+#include <string_view>
+#include <utility>
 
 namespace fmpi {
 
@@ -109,6 +108,12 @@ inline void ring_waitsome_overlap(
   auto data_channel = std::make_shared<channel_t>(n_exchanges);
 
   auto comm_dispatcher = dispatcher_t{comm_channel, winsz};
+
+  std::array<std::size_t, 2> nslots;
+  nslots.fill(reqsInFlight);
+
+  auto schedule_ctx = std::make_shared<fmpi::ScheduleCtx>(nslots);
+  comm_dispatcher.commit(schedule_ctx);
 
   comm_dispatcher.register_signal(
       message_type::IRECV,
@@ -246,9 +251,9 @@ inline void ring_waitsome_overlap(
     };
 
     {
-      auto local_span =
-          gsl::span{std::next(begin, ctx.rank() * blocksize),
-                    std::next(begin, (ctx.rank() + 1) * blocksize)};
+      auto local_span = gsl::span{
+          std::next(begin, ctx.rank() * blocksize),
+          std::next(begin, (ctx.rank() + 1) * blocksize)};
 
       pieces.emplace_back(piece{local_span});
 
