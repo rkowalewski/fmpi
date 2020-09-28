@@ -11,6 +11,7 @@
 #include <fmpi/common/Porting.hpp>
 #include <fmpi/concurrency/BufferedChannel.hpp>
 #include <fmpi/concurrency/SPSC.hpp>
+#include <fmpi/container/FixedVector.hpp>
 #include <fmpi/memory/HeapAllocator.hpp>
 #include <fmpi/mpi/Request.hpp>
 #include <fmpi/util/Trace.hpp>
@@ -66,7 +67,7 @@ struct CommTask {
 
 namespace detail {
 
-static constexpr auto n_types = rtlx::to_underlying(message_type::INVALID);
+static constexpr auto n_types = rtlx::to_underlying(message_type::COUNT);
 
 int dispatch_waitall(
     MPI_Request* begin,
@@ -152,9 +153,6 @@ enum class status
 };
 
 class ScheduleCtx {
-  using handles_t =
-      tlx::SimpleVector<MPI_Request, tlx::SimpleVectorMode::NoInitNoDestroy>;
-
   template <mpi::reqsome_op>
   friend class CommDispatcher;
 
@@ -173,42 +171,53 @@ class ScheduleCtx {
     : nslots_(nslots) {
   }
 
-  void mark_scheduled();
-
   void register_signal(message_type type, signal&& callable);
   void register_callback(message_type type, callback&& callable);
 
   template <class F>
-  void register_signal(message_type type, F&& callable);
+  void register_signal(message_type type, F&& callable, bool safe = false) {
+    std::unique_lock<std::mutex> lk{mtx_signals_, std::defer_lock};
+
+    if (safe) {
+      lk.lock();
+    }
+
+    auto& list = signals_[rtlx::to_underlying(type)];
+    list.emplace(std::end(list), signal::make(std::forward<F>(callable)));
+  }
 
   template <class F>
   void register_callback(message_type type, F&& callable);
 
  private:
+  void commit();
+  void finish();
+
+ private:
   /// Request Handles
-  std::array<std::size_t, detail::n_types>                  nslots_;
-  std::array<tlx::RingBuffer<std::size_t>, detail::n_types> slots_;
-  handles_t                                                 handles_;
+  std::array<std::size_t, detail::n_types> nslots_;
+  FixedVector<tlx::RingBuffer<int>>        slots_{detail::n_types};
+  FixedVector<MPI_Request>                 handles_;
 
   /// Backlog
   detail::MultiTaskQueue backlog_;
 
   /// Status
-  std::atomic<status> state_{status::init};
+  status state_{status::init};
 
   /// Signals
-  std::mutex                                          mtx_signals;
-  std::unordered_map<std::uint8_t, std::list<signal>> signals_;
+  std::mutex                                     mtx_signals_;
+  std::array<std::list<signal>, detail::n_types> signals_;
 
   /// Callbacks
-  std::mutex                                            mtx_callbacks;
-  std::unordered_map<std::uint8_t, std::list<callback>> callbacks_;
+  std::mutex                                       mtx_callbacks_;
+  std::array<std::list<callback>, detail::n_types> callbacks_;
 };
 
 template <mpi::reqsome_op testReqs = mpi::testsome>
 class CommDispatcher {
   static_assert(
-      detail::n_types == 2, "only two message types supported for now");
+      detail::n_types == 2, "only four message types supported for now");
   template <class _T>
   using simple_vector =
       tlx::SimpleVector<_T, tlx::SimpleVectorMode::NoInitNoDestroy>;
@@ -317,7 +326,7 @@ class CommDispatcher {
 
   typename MultiTrace::cache const& stats() const noexcept;
 
-  ScheduleHandle commit(std::weak_ptr<ScheduleCtx>);
+  ScheduleHandle submit(std::weak_ptr<ScheduleCtx>);
 
  private:
   std::size_t req_count() const noexcept;
@@ -656,7 +665,7 @@ inline bool CommDispatcher<testReqs>::has_active_requests() const noexcept {
 }
 
 template <mpi::reqsome_op testReqs>
-inline ScheduleHandle CommDispatcher<testReqs>::commit(
+inline ScheduleHandle CommDispatcher<testReqs>::submit(
     std::weak_ptr<ScheduleCtx> ctx) {
   auto hdl = ScheduleHandle{ScheduleHandle::last_id_++};
 

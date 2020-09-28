@@ -14,14 +14,15 @@ enum class message_type : uint8_t
   IRECV = 0,
   ISEND,
 
-  INVALID
+  COUNT,  // DO NEVER USE
+  COMMIT,
 };
 
 struct Envelope {
  private:
-  mpi::Comm    comm_{MPI_COMM_NULL};
-  mpi::Rank    peer_{};
-  mpi::Tag     tag_{};
+  mpi::Comm comm_{MPI_COMM_NULL};
+  mpi::Rank peer_{};
+  mpi::Tag  tag_{};
 
  public:
   constexpr Envelope() = default;
@@ -121,10 +122,10 @@ class Message {
   Envelope     envelope_{};
 };
 
-//static_assert(sizeof(Envelope) == 12);
-//static_assert(sizeof(MPI_Datatype) == 8);
-//static_assert(alignof(Message) == 8);
-//static_assert(sizeof(Message) == 32);
+// static_assert(sizeof(Envelope) == 12);
+// static_assert(sizeof(MPI_Datatype) == 8);
+// static_assert(alignof(Message) == 8);
+// static_assert(sizeof(Message) == 32);
 
 class NonblockingMessageHandler {};
 

@@ -92,12 +92,12 @@ inline void ring_waitsome_overlap(
   auto buf_alloc = thread_alloc{};
 
   // queue for ready tasks
-  using part = std::pair<mpi::Rank, gsl::span<value_type>>;
+  using segment = std::pair<mpi::Rank, gsl::span<value_type>>;
 
 #if 0
-  //auto data_channel = boost::lockfree::spsc_queue<part>{n_rounds};
+  //auto data_channel = boost::lockfree::spsc_queue<segment>{n_rounds};
 #else
-  using channel_t = SPSCNChannel<part>;
+  using channel_t = SPSCNChannel<segment>;
 #endif
 
   using dispatcher_t = CommDispatcher<mpi::testsome>;
@@ -109,16 +109,28 @@ inline void ring_waitsome_overlap(
 
   auto comm_dispatcher = dispatcher_t{comm_channel, winsz};
 
-  std::array<std::size_t, 2> nslots;
+  std::array<std::size_t, detail::n_types> nslots;
   nslots.fill(reqsInFlight);
 
   auto schedule_ctx = std::make_shared<fmpi::ScheduleCtx>(nslots);
-  comm_dispatcher.commit(schedule_ctx);
+
+  schedule_ctx->register_signal(
+      message_type::IRECV, [buf_alloc, blocksize](Message& message) {
+        // allocator some buffer
+        auto* buffer = buf_alloc.allocate(blocksize);
+        FMPI_ASSERT(buffer);
+        auto allocated_span = gsl::span(buffer, blocksize);
+        FMPI_DBG(allocated_span.data());
+
+        // add the buffer to the message
+        message.set_buffer(allocated_span);
+      });
+
+  comm_dispatcher.submit(schedule_ctx);
 
   comm_dispatcher.register_signal(
       message_type::IRECV,
-      [&buf_alloc, blocksize](
-          Message& message, MPI_Request & /*req*/) -> int {
+      [buf_alloc, blocksize](Message& message, MPI_Request & /*req*/) -> int {
         // allocator some buffer
         auto* buffer = buf_alloc.allocate(blocksize);
         FMPI_ASSERT(buffer);
@@ -255,14 +267,14 @@ inline void ring_waitsome_overlap(
           std::next(begin, ctx.rank() * blocksize),
           std::next(begin, (ctx.rank() + 1) * blocksize)};
 
-      pieces.emplace_back(piece{local_span});
+      pieces.emplace_back(local_span);
 
-      part task{};
+      segment task{};
       while (data_channel->wait_dequeue(task)) {
         auto [source, span] = task;
 
         FMPI_DBG_STREAM(
-            "receiving part: " << std::make_pair(source, span.data()));
+            "receiving segment: " << std::make_pair(source, span.data()));
 
         pieces.emplace_back(piece{span, &buf_alloc});
 
