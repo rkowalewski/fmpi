@@ -14,15 +14,13 @@
 #include <condition_variable>
 #include <cstddef>
 #include <cstdint>
+#include <fmpi/Config.hpp>
+#include <fmpi/detail/Assert.hpp>
 #include <memory>
 #include <mutex>
 #include <stdexcept>
-#include <type_traits>
-
 #include <tlx/math.hpp>
-
-#include <fmpi/Config.hpp>
-#include <fmpi/detail/Assert.hpp>
+#include <type_traits>
 
 namespace fmpi {
 
@@ -92,8 +90,9 @@ class buffered_channel {
     for (;;) {
       s = &slots_[idx & (capacity_ - 1)];
       std::size_t   cycle{s->cycle.load(std::memory_order_acquire)};
-      std::intptr_t diff{static_cast<std::intptr_t>(cycle) -
-                         static_cast<std::intptr_t>(idx)};
+      std::intptr_t diff{
+          static_cast<std::intptr_t>(cycle) -
+          static_cast<std::intptr_t>(idx)};
       if (0 == diff) {
         if (producer_idx_.compare_exchange_weak(
                 idx, idx + 1, std::memory_order_relaxed)) {
@@ -116,8 +115,9 @@ class buffered_channel {
     for (;;) {
       s                   = &slots_[idx & (capacity_ - 1)];
       std::size_t   cycle = s->cycle.load(std::memory_order_acquire);
-      std::intptr_t diff{static_cast<std::intptr_t>(cycle) -
-                         static_cast<std::intptr_t>(idx + 1)};
+      std::intptr_t diff{
+          static_cast<std::intptr_t>(cycle) -
+          static_cast<std::intptr_t>(idx + 1)};
       if (0 == diff) {
         if (consumer_idx_.compare_exchange_weak(
                 idx, idx + 1, std::memory_order_relaxed)) {
@@ -247,7 +247,7 @@ class buffered_channel {
   }
 
   template <class Rep, class Period>
-  bool pop(
+  channel_op_status pop(
       value_type&                               result,
       const std::chrono::duration<Rep, Period>& rel_time) {
     for (;;) {
@@ -259,32 +259,73 @@ class buffered_channel {
             *reinterpret_cast<value_type*>(std::addressof(s->storage)));
         s->cycle.store(idx + capacity_, std::memory_order_release);
         not_full_cnd_.notify_one();
-        return true;
+        return status;
       }
       if (channel_op_status::empty == status) {
         std::unique_lock<std::mutex> lk{mtx_};
-        ++waiting_consumer_;
         if (is_closed()) {
-          throw std::runtime_error{"channel is closed"};
+          return channel_op_status::closed;
         }
+
+        ++waiting_consumer_;
+
         if (!is_empty_()) {
           continue;
         }
+
         not_empty_cnd_.wait_for(
             lk, rel_time, [this]() { return is_closed() || !is_empty_(); });
         --waiting_consumer_;
 
         if (is_empty_()) {
-          return false;
+          return channel_op_status::timeout;
         }
         // if it is closed then the next iteration throws an exception...
       } else {
         FMPI_ASSERT(channel_op_status::closed == status);
-        throw std::runtime_error{"channel is closed"};
+        return status;
+      }
+    }
+  }
+
+  channel_op_status pop(value_type& result) {
+    for (;;) {
+      slot*             s{nullptr};
+      std::size_t       idx{0};
+      channel_op_status status{try_value_pop_(s, idx)};
+      if (channel_op_status::success == status) {
+        result = std::move(
+            *reinterpret_cast<value_type*>(std::addressof(s->storage)));
+        s->cycle.store(idx + capacity_, std::memory_order_release);
+        not_full_cnd_.notify_one();
+        return status;
+      } else if (channel_op_status::empty == status) {
+        std::unique_lock<std::mutex> lk{mtx_};
+
+        if (is_closed()) {
+          return channel_op_status::closed;
+        }
+
+        ++waiting_consumer_;
+
+        if (!is_empty_()) {
+          continue;
+        }
+
+        not_empty_cnd_.wait(
+            lk, [this]() { return is_closed() || !is_empty_(); });
+        --waiting_consumer_;
+
+        if (is_empty_()) {
+          return channel_op_status::timeout;
+        }
+      } else {
+        FMPI_ASSERT(channel_op_status::closed == status);
+        return channel_op_status::closed;
       }
     }
   }
 };
 }  // namespace fmpi
 
-#endif // FMPI_CONCURRENCY_BUFFEREDCHANNEL_HPP
+#endif  // FMPI_CONCURRENCY_BUFFEREDCHANNEL_HPP

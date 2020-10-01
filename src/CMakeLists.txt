@@ -15,15 +15,16 @@ add_library(fmpi
     Dispatcher.cc
     )
 
-
 set(MI_OVERRIDE OFF)
 
 target_include_directories(fmpi PUBLIC ../include ${CMAKE_CURRENT_BINARY_DIR})
+target_include_directories(fmpi PUBLIC ${JUNCTION_ALL_INCLUDE_DIRS})
 
 target_link_libraries(fmpi PUBLIC
     MPI::MPI_CXX
     OpenMP::OpenMP_CXX
     Boost::boost
+    ${JUNCTION_ALL_LIBRARIES}
     dbg_macro
     GSL
     tlx

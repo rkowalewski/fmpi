@@ -51,9 +51,10 @@ class SPSCNChannel {
     if (!count_.load(std::memory_order_relaxed)) {
       return false;
     }
-    auto const ret = channel_.pop(val, timeout);
-    count_.fetch_sub(ret, std::memory_order_release);
-    return ret;
+    auto const ret     = channel_.pop(val, timeout);
+    auto const success = ret == channel_op_status::success;
+    count_.fetch_sub(success, std::memory_order_release);
+    return success;
   }
 
   bool enqueue(value_type const& task) {

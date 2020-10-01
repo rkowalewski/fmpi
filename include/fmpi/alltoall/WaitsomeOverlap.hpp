@@ -107,15 +107,16 @@ inline void ring_waitsome_overlap(
 
   auto data_channel = std::make_shared<channel_t>(n_exchanges);
 
-  auto comm_dispatcher = dispatcher_t{comm_channel, winsz};
+  // auto comm_dispatcher = dispatcher_t{comm_channel, winsz};
 
   std::array<std::size_t, detail::n_types> nslots;
   nslots.fill(reqsInFlight);
 
+  // make context
   auto schedule_ctx = std::make_shared<fmpi::ScheduleCtx>(nslots);
 
   schedule_ctx->register_signal(
-      message_type::IRECV, [buf_alloc, blocksize](Message& message) {
+      message_type::IRECV, [buf_alloc, blocksize](Message& message) mutable {
         // allocator some buffer
         auto* buffer = buf_alloc.allocate(blocksize);
         FMPI_ASSERT(buffer);
@@ -126,11 +127,29 @@ inline void ring_waitsome_overlap(
         message.set_buffer(allocated_span);
       });
 
-  comm_dispatcher.submit(schedule_ctx);
+  schedule_ctx->register_callback(
+      message_type::IRECV,
+      [data_channel](
+          Message& message /*, MPI_Status const& status*/) mutable {
+        auto span = gsl::span(
+            static_cast<value_type*>(message.writable_buffer()),
+            message.count());
 
+        auto ret =
+            data_channel->enqueue(std::make_pair(message.peer(), span));
+        FMPI_ASSERT(ret);
+      });
+
+  v2::CommDispatcher dispatcher{};
+
+  // submit into dispatcher
+  auto const hdl = dispatcher.submit(schedule_ctx);
+
+#if 0
   comm_dispatcher.register_signal(
       message_type::IRECV,
-      [buf_alloc, blocksize](Message& message, MPI_Request & /*req*/) -> int {
+      [buf_alloc, blocksize](
+          Message& message, MPI_Request& /*req*/) mutable -> int {
         // allocator some buffer
         auto* buffer = buf_alloc.allocate(blocksize);
         FMPI_ASSERT(buffer);
@@ -196,6 +215,7 @@ inline void ring_waitsome_overlap(
 
   comm_dispatcher.start_worker();
   comm_dispatcher.pinToCore(config.dispatcher_core);
+#endif
 
   t_init.finish();
 
@@ -210,7 +230,7 @@ inline void ring_waitsome_overlap(
       if (rpeer != ctx.rank()) {
         auto recv = Message{rpeer, kTagRing, ctx.mpiComm()};
 
-        comm_channel->enqueue(CommTask{message_type::IRECV, recv});
+        dispatcher.dispatch(hdl, message_type::IRECV, recv);
       }
 
       if (speer != ctx.rank()) {
@@ -218,7 +238,7 @@ inline void ring_waitsome_overlap(
 
         auto send = Message{span, speer, kTagRing, ctx.mpiComm()};
 
-        comm_channel->enqueue(CommTask{message_type::ISEND, send});
+        dispatcher.dispatch(hdl, message_type::ISEND, send);
       }
     }
   }
@@ -267,7 +287,7 @@ inline void ring_waitsome_overlap(
           std::next(begin, ctx.rank() * blocksize),
           std::next(begin, (ctx.rank() + 1) * blocksize)};
 
-      pieces.emplace_back(local_span);
+      pieces.emplace_back(piece{local_span});
 
       segment task{};
       while (data_channel->wait_dequeue(task)) {
@@ -377,21 +397,21 @@ inline void ring_waitsome_overlap(
     steady_timer t_idle{trace.duration(detail::idle)};
     // We definitely have to wait here because although all data has arrived
     // there might still be pending tasks for other peers (e.g. sends)
-    comm_dispatcher.loop_until_done();
+    // comm_dispatcher.loop_until_done();
   }
 
-  steady_timer t_comp{trace.duration(detail::shutdown)};
+  //steady_timer t_comp{trace.duration(detail::shutdown)};
 
-  auto const& dispatcher_stats = comm_dispatcher.stats();
-  trace.merge(dispatcher_stats.begin(), dispatcher_stats.end());
+  //auto const& dispatcher_stats = comm_dispatcher.stats();
+  //trace.merge(dispatcher_stats.begin(), dispatcher_stats.end());
 
-  auto const recv_stats = data_channel->statistics();
-  auto const comm_stats = comm_channel->statistics();
+  //auto const recv_stats = data_channel->statistics();
+  //auto const comm_stats = comm_channel->statistics();
 
-  trace.duration("Tcomm.enqueue") = comm_stats.enqueue_time;
-  trace.duration("Tcomm.dequeue") = comm_stats.dequeue_time;
-  trace.duration("Tcomp.enqueue") = recv_stats.enqueue_time;
-  trace.duration("Tcomp.dequeue") = recv_stats.dequeue_time;
+  //trace.duration("Tcomm.enqueue") = comm_stats.enqueue_time;
+  //trace.duration("Tcomm.dequeue") = comm_stats.dequeue_time;
+  //trace.duration("Tcomp.enqueue") = recv_stats.enqueue_time;
+  //trace.duration("Tcomp.dequeue") = recv_stats.dequeue_time;
 }
 
 namespace detail {

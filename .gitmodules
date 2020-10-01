@@ -19,3 +19,9 @@
 [submodule "external/snmalloc"]
 	path = external/snmalloc
 	url = git@github.com:microsoft/snmalloc.git
+[submodule "external/junction"]
+	path = external/junction
+	url = https://github.com/preshing/junction.git
+[submodule "external/turf"]
+	path = external/turf
+	url = https://github.com/preshing/turf.git

@@ -1,6 +1,7 @@
 #ifndef FMPI_CONCURRENCY_DISPATCHER_HPP
 #define FMPI_CONCURRENCY_DISPATCHER_HPP
 
+#include <junction/ConcurrentMap_Linear.h>
 #include <mpi.h>
 
 #include <atomic>
@@ -13,6 +14,7 @@
 #include <fmpi/concurrency/SPSC.hpp>
 #include <fmpi/container/FixedVector.hpp>
 #include <fmpi/memory/HeapAllocator.hpp>
+#include <fmpi/memory/ThreadAllocator.hpp>
 #include <fmpi/mpi/Request.hpp>
 #include <fmpi/util/Trace.hpp>
 #include <gsl/span>
@@ -34,11 +36,14 @@ namespace fmpi {
 template <mpi::reqsome_op>
 class CommDispatcher;
 
+namespace v2 {
+class CommDispatcher;
+}
+
 class ScheduleHandle {
   using identifier = uint32_t;
 
-  template <mpi::reqsome_op>
-  friend class CommDispatcher;
+  friend class v2::CommDispatcher;
 
   static std::atomic_uint32_t last_id_;
 
@@ -48,26 +53,49 @@ class ScheduleHandle {
     : id_(id) {
   }
 
+  constexpr identifier id() const noexcept {
+    return id_;
+  }
+
  private:
   identifier id_ = -1;
 };
 
+constexpr bool operator==(
+    ScheduleHandle const& lhs, ScheduleHandle const& rhs) {
+  return lhs.id() == rhs.id();
+}
+
+constexpr bool operator!=(
+    ScheduleHandle const& lhs, ScheduleHandle const& rhs) {
+  return not(lhs.id() == rhs.id());
+}
+
 struct CommTask {
   constexpr CommTask() = default;
 
-  constexpr CommTask(message_type t, Message m)
+  constexpr CommTask(
+      message_type t, Message m, ScheduleHandle id = ScheduleHandle{})
     : message(m)
+    , id(id)
     , type(t) {
   }
 
+  constexpr bool valid() const noexcept {
+    return type != message_type::INVALID;
+  }
+
+  constexpr void reset() noexcept {
+    type = message_type::INVALID;
+  }
+
   Message        message{};
-  message_type   type{};
-  ScheduleHandle id_{};
+  ScheduleHandle id{};
+  message_type   type{message_type::INVALID};
 };
 
 namespace detail {
-
-static constexpr auto n_types = rtlx::to_underlying(message_type::COUNT);
+static constexpr auto n_types = rtlx::to_underlying(message_type::INVALID);
 
 int dispatch_waitall(
     MPI_Request* begin,
@@ -153,8 +181,7 @@ enum class status
 };
 
 class ScheduleCtx {
-  template <mpi::reqsome_op>
-  friend class CommDispatcher;
+  friend class v2::CommDispatcher;
 
   using signal   = tlx::delegate<void(Message&)>;
   using callback = tlx::delegate<void(Message&)>;
@@ -167,12 +194,7 @@ class ScheduleCtx {
   };
 
  public:
-  ScheduleCtx(std::array<std::size_t, detail::n_types> nslots)
-    : nslots_(nslots) {
-  }
-
-  void register_signal(message_type type, signal&& callable);
-  void register_callback(message_type type, callback&& callable);
+  ScheduleCtx(std::array<std::size_t, detail::n_types> nslots);
 
   template <class F>
   void register_signal(message_type type, F&& callable, bool safe = false) {
@@ -182,25 +204,37 @@ class ScheduleCtx {
       lk.lock();
     }
 
-    auto& list = signals_[rtlx::to_underlying(type)];
-    list.emplace(std::end(list), signal::make(std::forward<F>(callable)));
+    auto& signals = signals_[rtlx::to_underlying(type)];
+    signals.emplace(
+        std::end(signals), signal::make(std::forward<F>(callable)));
   }
 
   template <class F>
-  void register_callback(message_type type, F&& callable);
+  void register_callback(message_type type, F&& callable, bool safe = false) {
+    std::unique_lock<std::mutex> lk{mtx_callbacks_, std::defer_lock};
+
+    if (safe) {
+      lk.lock();
+    }
+
+    auto& callbacks = callbacks_[rtlx::to_underlying(type)];
+    callbacks.emplace(
+        std::end(callbacks), signal::make(std::forward<F>(callable)));
+  }
 
  private:
   void commit();
   void finish();
+  void schedule(CommTask);
 
  private:
   /// Request Handles
-  std::array<std::size_t, detail::n_types> nslots_;
-  FixedVector<tlx::RingBuffer<int>>        slots_{detail::n_types};
-  FixedVector<MPI_Request>                 handles_;
-
-  /// Backlog
-  detail::MultiTaskQueue backlog_;
+  // std::array<std::size_t, detail::n_types> nslots_;
+  std::size_t                                       winsz_;
+  FixedVector<MPI_Request>                          handles_;
+  FixedVector<MPI_Status>                           statuses_;
+  FixedVector<CommTask>                             pending_;
+  std::array<tlx::RingBuffer<int>, detail::n_types> slots_;
 
   /// Status
   status state_{status::init};
@@ -213,6 +247,77 @@ class ScheduleCtx {
   std::mutex                                       mtx_callbacks_;
   std::array<std::list<callback>, detail::n_types> callbacks_;
 };
+
+namespace v2 {
+class CommDispatcher {
+  static_assert(
+      detail::n_types == 2, "only four message types supported for now");
+
+  using channel = buffered_channel<CommTask>;
+
+  class ctx_map {
+    using value_type = std::pair<ScheduleHandle, std::weak_ptr<ScheduleCtx>>;
+    using allocator  = HeapAllocator<value_type>;
+
+    using container =
+        std::list<value_type, ContiguousPoolAllocator<value_type>>;
+
+   public:
+    using iterator       = typename container::iterator;
+    using const_iterator = typename container::const_iterator;
+
+   public:
+    ctx_map();
+    void assign(ScheduleHandle, std::weak_ptr<ScheduleCtx>);
+    void erase(iterator);
+    void merge(container&&);
+
+    bool                            contains(ScheduleHandle) const;
+    std::pair<iterator, bool>       find(ScheduleHandle);
+    std::pair<const_iterator, bool> find(ScheduleHandle) const;
+
+    template <class OutputIterator>
+    void copy(OutputIterator d_first);
+
+    void release_expired();
+
+   private:
+    iterator       do_find(ScheduleHandle);
+    const_iterator do_find(ScheduleHandle) const;
+
+   private:
+    mutable std::mutex mtx_;
+    allocator          alloc_;
+    container          items_;
+  };
+
+ public:
+  CommDispatcher();
+  ~CommDispatcher();
+
+  ScheduleHandle submit(std::weak_ptr<ScheduleCtx>);
+  void           dispatch(ScheduleHandle, message_type, Message message);
+  void           terminate();
+
+ private:
+  void stop_worker();
+  void start_worker();
+  void progress_all(bool blocking = false);
+  void worker();
+
+ private:
+  channel     channel_;
+  ctx_map     schedules_;
+  std::thread thread_;
+};
+
+template <class OutputIterator>
+void CommDispatcher::ctx_map::copy(OutputIterator d_first) {
+  std::lock_guard<std::mutex> lg{mtx_};
+  std::copy(items_.begin(), items_.end(), d_first);
+}
+
+}  // namespace v2
 
 template <mpi::reqsome_op testReqs = mpi::testsome>
 class CommDispatcher {
@@ -298,11 +403,6 @@ class CommDispatcher {
 
   std::thread thread_;
 
-  std::unordered_map<
-      typename ScheduleHandle::identifier,
-      std::weak_ptr<ScheduleCtx>>
-      active_schedules_;
-
  public:
   explicit CommDispatcher(std::shared_ptr<channel> chan, std::size_t winsz);
 
@@ -326,7 +426,7 @@ class CommDispatcher {
 
   typename MultiTrace::cache const& stats() const noexcept;
 
-  ScheduleHandle submit(std::weak_ptr<ScheduleCtx>);
+  /// New Interface here
 
  private:
   std::size_t req_count() const noexcept;
@@ -348,8 +448,7 @@ class CommDispatcher {
   void do_init(std::size_t winsz);
 
   void trigger_callbacks(idx_ranges_t completed);
-
-};  // namespace fmpi
+};
 
 template <typename mpi::reqsome_op testReqs>
 inline CommDispatcher<testReqs>::CommDispatcher(
@@ -664,18 +763,7 @@ inline bool CommDispatcher<testReqs>::has_active_requests() const noexcept {
   return req_count() > 0;
 }
 
-template <mpi::reqsome_op testReqs>
-inline ScheduleHandle CommDispatcher<testReqs>::submit(
-    std::weak_ptr<ScheduleCtx> ctx) {
-  auto hdl = ScheduleHandle{ScheduleHandle::last_id_++};
-
-  active_schedules_[hdl.id_] = ctx;
-
-  return hdl;
-}
-
 namespace detail {
-
 inline int dispatch_waitall(
     MPI_Request* begin,
     MPI_Request* end,

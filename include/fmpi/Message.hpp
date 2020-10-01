@@ -13,8 +13,7 @@ enum class message_type : uint8_t
 {
   IRECV = 0,
   ISEND,
-
-  COUNT,  // DO NEVER USE
+  INVALID,  // DO NEVER USE
   COMMIT,
 };
 
@@ -121,13 +120,6 @@ class Message {
   MPI_Datatype mpi_type_{};
   Envelope     envelope_{};
 };
-
-// static_assert(sizeof(Envelope) == 12);
-// static_assert(sizeof(MPI_Datatype) == 8);
-// static_assert(alignof(Message) == 8);
-// static_assert(sizeof(Message) == 32);
-
-class NonblockingMessageHandler {};
 
 }  // namespace fmpi
 
