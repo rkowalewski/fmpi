@@ -105,8 +105,8 @@ void CommDispatcher::worker() {
 
         if (rb.size() == 0u) {
           // complete one of pending requests and replace it with new slot
-          FixedVector<MPI_Request> reqs(rb.size(), MPI_REQUEST_NULL);
-          FixedVector<int>         idxs(rb.size());
+          std::vector<MPI_Request> reqs;
+          std::vector<int>         idxs;
 
           auto first_slot = std::accumulate(
               ctx->slots_.begin(),
@@ -116,11 +116,10 @@ void CommDispatcher::worker() {
                 return acc + rb.size();
               });
 
-          std::size_t i = 0;
           for (auto&& idx : range<int>(first_slot, first_slot + rb.size())) {
             if (ctx->pending_[idx].type == task.type) {
-              reqs[i] = ctx->handles_[idx];
-              idxs[i] = idx;
+              reqs.emplace_back(ctx->handles_[idx]);
+              idxs.emplace_back(idx);
             }
           }
 
@@ -137,6 +136,8 @@ void CommDispatcher::worker() {
           slot = rb.back();
           rb.pop_back();
         }
+
+        FMPI_ASSERT(ctx->handles_[slot] == MPI_REQUEST_NULL);
 
         // Issue new message
         for (auto&& sig : ctx->signals_[ti]) {
