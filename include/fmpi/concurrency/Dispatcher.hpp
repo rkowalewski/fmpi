@@ -221,17 +221,16 @@ class ScheduleCtx {
         std::end(callbacks), signal::make(std::forward<F>(callable)));
   }
 
+  void wait();
+
  private:
-  void commit();
   void finish();
-  void schedule(CommTask);
 
  private:
   /// Request Handles
   // std::array<std::size_t, detail::n_types> nslots_;
   std::size_t                                       winsz_;
   FixedVector<MPI_Request>                          handles_;
-  FixedVector<MPI_Status>                           statuses_;
   FixedVector<CommTask>                             pending_;
   std::array<tlx::RingBuffer<int>, detail::n_types> slots_;
 
@@ -245,6 +244,9 @@ class ScheduleCtx {
   /// Callbacks
   std::mutex                                       mtx_callbacks_;
   std::array<std::list<callback>, detail::n_types> callbacks_;
+
+  std::condition_variable cv_finish_;
+  std::mutex              mtx_;
 };
 
 namespace v2 {
@@ -297,6 +299,7 @@ class CommDispatcher {
   ScheduleHandle submit(std::weak_ptr<ScheduleCtx>);
   void           dispatch(ScheduleHandle, message_type, Message message);
   void           terminate();
+  void           commit(ScheduleHandle);
 
  private:
   void stop_worker();

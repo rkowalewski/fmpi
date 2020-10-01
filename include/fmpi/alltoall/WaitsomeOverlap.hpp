@@ -241,6 +241,8 @@ inline void ring_waitsome_overlap(
         dispatcher.dispatch(hdl, message_type::ISEND, send);
       }
     }
+
+    dispatcher.commit(hdl);
   }
 
   using iter_pair = std::pair<OutputIt, OutputIt>;
@@ -398,20 +400,21 @@ inline void ring_waitsome_overlap(
     // We definitely have to wait here because although all data has arrived
     // there might still be pending tasks for other peers (e.g. sends)
     // comm_dispatcher.loop_until_done();
+    schedule_ctx->wait();
   }
 
-  //steady_timer t_comp{trace.duration(detail::shutdown)};
+  // steady_timer t_comp{trace.duration(detail::shutdown)};
 
-  //auto const& dispatcher_stats = comm_dispatcher.stats();
-  //trace.merge(dispatcher_stats.begin(), dispatcher_stats.end());
+  // auto const& dispatcher_stats = comm_dispatcher.stats();
+  // trace.merge(dispatcher_stats.begin(), dispatcher_stats.end());
 
-  //auto const recv_stats = data_channel->statistics();
-  //auto const comm_stats = comm_channel->statistics();
+  // auto const recv_stats = data_channel->statistics();
+  // auto const comm_stats = comm_channel->statistics();
 
-  //trace.duration("Tcomm.enqueue") = comm_stats.enqueue_time;
-  //trace.duration("Tcomm.dequeue") = comm_stats.dequeue_time;
-  //trace.duration("Tcomp.enqueue") = recv_stats.enqueue_time;
-  //trace.duration("Tcomp.dequeue") = recv_stats.dequeue_time;
+  // trace.duration("Tcomm.enqueue") = comm_stats.enqueue_time;
+  // trace.duration("Tcomm.dequeue") = comm_stats.dequeue_time;
+  // trace.duration("Tcomp.enqueue") = recv_stats.enqueue_time;
+  // trace.duration("Tcomp.dequeue") = recv_stats.dequeue_time;
 }
 
 namespace detail {
