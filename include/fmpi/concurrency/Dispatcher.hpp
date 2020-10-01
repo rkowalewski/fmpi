@@ -228,8 +228,8 @@ class ScheduleCtx {
 
  private:
   /// Request Handles
-  // std::array<std::size_t, detail::n_types> nslots_;
-  std::size_t                                       winsz_;
+  std::array<std::size_t, detail::n_types> const    nslots_;
+  std::size_t const                                 winsz_;
   FixedVector<MPI_Request>                          handles_;
   FixedVector<CommTask>                             pending_;
   std::array<tlx::RingBuffer<int>, detail::n_types> slots_;

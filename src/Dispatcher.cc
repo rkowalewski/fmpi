@@ -5,7 +5,8 @@ std::atomic_uint32_t fmpi::ScheduleHandle::last_id_ = 0;
 
 namespace fmpi {
 ScheduleCtx::ScheduleCtx(std::array<std::size_t, detail::n_types> nslots)
-  : winsz_(std::accumulate(nslots.begin(), nslots.end(), 0u))
+  : nslots_(nslots)
+  , winsz_(std::accumulate(nslots.begin(), nslots.end(), 0u))
   , handles_(winsz_, MPI_REQUEST_NULL)
   , pending_(winsz_) {
   // generate the slots
@@ -157,16 +158,14 @@ void CommDispatcher::worker() {
             std::vector<MPI_Request> reqs;
             std::vector<int>         idxs;
 
-            auto first_slot = std::accumulate(
-                ctx->slots_.begin(),
-                ctx->slots_.begin() + ti,
-                0,
-                [](auto acc, auto const& rb) -> int {
-                  return acc + rb.size();
-                });
+            auto const first_slot = std::accumulate(
+                ctx->nslots_.begin(), ctx->nslots_.begin() + ti, 0);
 
-            for (auto&& idx :
-                 range<int>(first_slot, first_slot + rb.size())) {
+            auto const last_slot = first_slot + ctx->nslots_[ti];
+
+            FMPI_DBG(std::make_pair(first_slot, last_slot));
+
+            for (auto&& idx : range<int>(first_slot, last_slot)) {
               if (ctx->pending_[idx].type == task.type) {
                 reqs.emplace_back(ctx->handles_[idx]);
                 idxs.emplace_back(idx);
