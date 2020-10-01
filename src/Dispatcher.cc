@@ -173,6 +173,13 @@ void CommDispatcher::worker() {
               }
             }
 
+            auto const count = std::count(
+                std::begin(reqs), std::end(reqs), MPI_REQUEST_NULL);
+
+            FMPI_ASSERT(count == 0);
+
+            FMPI_DBG(reqs.size());
+
             int        c = MPI_UNDEFINED;
             auto const ret =
                 MPI_Waitany(reqs.size(), reqs.data(), &c, &status);
