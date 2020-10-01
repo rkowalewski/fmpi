@@ -1,7 +1,6 @@
 #ifndef FMPI_CONCURRENCY_DISPATCHER_HPP
 #define FMPI_CONCURRENCY_DISPATCHER_HPP
 
-#include <junction/ConcurrentMap_Linear.h>
 #include <mpi.h>
 
 #include <atomic>
