@@ -36,17 +36,13 @@ def str2bool(v):
 def process_options(args, cwd):
     if not os.path.exists(args.binary):
         print("invalid path to binary: %s" % args.binary)
-        exit(1)
+        return None
 
     canonical_path = os.path.abspath(args.binary)
 
     if not (stat.S_IXUSR & os.stat(canonical_path)[stat.ST_MODE]):
         print("binary not executable", args.binary)
-        exit(1)
-
-    if not os.path.exists(args.template):
-        print("invalid path to template: %s" % args.template)
-        exit(1)
+        return None
 
     if args.jobname is None:
         args.jobname = os.path.basename(canonical_path)
@@ -86,7 +82,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='Job submission.',
                                      formatter_class=argparse.ArgumentDefaultsHelpFormatter
                                      )
-    parser.add_argument('template', help='the template file')
+    parser.add_argument('template', help='the template file', type=argparse.FileType('r'))
     parser.add_argument('binary', help='the binary to execute via mpiexec')
     parser.add_argument('--nodes', type=int, required=True,
                         help='number of nodes')
@@ -106,10 +102,8 @@ if __name__ == "__main__":
 
     cwd = getGitRoot()
     options = process_options(args, cwd)
+    if not (options is None):
+        src = Template(args.template.read())
+        result = src.substitute(options)
 
-    filein = open(args.template)
-
-    src = Template(filein.read())
-    result = src.substitute(options)
-
-    print(result)  # output generated batch file
+        print(result)  # output generated batch file
