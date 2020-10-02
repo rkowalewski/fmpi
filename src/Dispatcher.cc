@@ -176,7 +176,7 @@ void CommDispatcher::worker() {
             auto const count = std::count(
                 std::begin(reqs), std::end(reqs), MPI_REQUEST_NULL);
 
-            FMPI_ASSERT(count == 0);
+            FMPI_ASSERT(!reqs.size() || count == 0);
 
             FMPI_DBG(reqs.size());
 
@@ -290,7 +290,7 @@ void CommDispatcher::progress_all(bool blocking) {
 
     idxs_completed.resize((n == MPI_UNDEFINED) ? 0 : n);
 
-    FMPI_DBG(idxs_completed.size());
+    FMPI_DBG(std::make_pair(reqs.size(), idxs_completed.size()));
   }
 
   for (auto&& i : idxs_completed) {
