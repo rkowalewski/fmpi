@@ -1,5 +1,9 @@
 #!/bin/bash
 
+print_stderr() {
+  cat <<< "$PMI_RANK: $@" 1>&2
+}
+
 my_command="$1"
 shift
 
@@ -7,6 +11,10 @@ ncpus="$((FMPI_HW_CORES / 2))"
 
 domain_size="$((ncpus / SLURM_NTASKS_PER_NODE))"
 comm_cpus="$FMPI_MGMT_CPUS"
+
+# print_stderr "ncpus=$ncpus"
+# print_stderr "domain_size=$domain_size"
+# print_stderr "comm_cpus=$comm_cpus"
 
 offset="$comm_cpus"
 
@@ -39,6 +47,6 @@ export OMP_PLACES="$omp_place_spec"
 export OMP_PROC_BIND="true"
 export FMPI_DOMAIN_SIZE="$domain_size"
 
-cat <<< "$global_rank: ${OMP_PLACES}" 1>&2
+print_stderr "${OMP_PLACES}"
 
 "$my_command" "$@"

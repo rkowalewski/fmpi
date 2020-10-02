@@ -21,23 +21,34 @@ def mkdir_p(dir):
     except FileExistsError:
         pass
 
+def str2bool(v):
+    if isinstance(v, bool):
+       return v
+    if v.lower() in ('yes', 'true', 't', 'y', '1'):
+        return True
+    elif v.lower() in ('no', 'false', 'f', 'n', '0'):
+        return False
+    else:
+        raise argparse.ArgumentTypeError('Boolean value expected.')
+
 parser = argparse.ArgumentParser(description='Job submission.',
                                  formatter_class=argparse.ArgumentDefaultsHelpFormatter
                                  )
+parser.add_argument('template', help='the template file')
 parser.add_argument('binary', help='the binary to execute via mpiexec')
-
-parser.add_argument('nodes', type=int,
+parser.add_argument('--nodes', type=int, required=True,
                     help='number of nodes')
-parser.add_argument('ntasks', type=int,
+parser.add_argument('--ntasks', type=int, required=True,
                     help='number of tasks per node')
-parser.add_argument('threads', type=int,
+parser.add_argument('--threads', type=int, required=True,
                     help='number of threads per task')
+parser.add_argument('--time', help='wallclock time for job', required=True)
+parser.add_argument('--partition', help='slurm partition', required=True)
 parser.add_argument(
     '--jobname', help='job name (if empty, the basename of the binary is used)')
-parser.add_argument('--partition', help='slurm partition', default='test')
-parser.add_argument('--time', help='wallclock time for job', default='00:30:00')
 parser.add_argument(
     '--binary-args', help='arguments passed to the binary via mpirun')
+parser.add_argument('-n', '--dry-run', dest='dryrun', type=str2bool, nargs='?', default=False, const=True, help="Dry run option")
 
 
 args = parser.parse_args()
@@ -50,6 +61,10 @@ canonical_path = os.path.abspath(args.binary)
 
 if not (stat.S_IXUSR & os.stat(canonical_path)[stat.ST_MODE]):
     print("binary not executable", args.binary)
+    exit(1)
+
+if not os.path.exists(args.template):
+    print("invalid path to template: %s" % args.template)
     exit(1)
 
 if args.jobname is None:
@@ -67,7 +82,8 @@ else:
 datadir = "{scratch}/{project}/{job}".format(
     scratch=scratch, project="fmpi", job=args.jobname)
 
-mkdir_p(datadir)
+if args.dryrun == False:
+    mkdir_p(datadir)
 
 if args.binary_args is None:
     args.binary_args = ""
@@ -85,7 +101,7 @@ options['datadir'] = datadir
 options['binary_args'] = args.binary_args
 
 
-filein = open(os.path.join(cwd, 'jobs/sbatch.tpl'))
+filein = open(os.path.join(cwd, args.template))
 
 src = Template(filein.read())
 result = src.substitute(options)
