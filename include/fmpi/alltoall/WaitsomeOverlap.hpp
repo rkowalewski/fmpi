@@ -72,14 +72,13 @@ inline void ring_waitsome_overlap(
   auto const commAlgo = Schedule{ctx};
 
   // Each round is composed of an isend-irecv pair...
-  constexpr std::size_t messages_per_round = 2;
+  // constexpr std::size_t messages_per_round = 2;
 
   // exclude the local message to MPI_Self
   auto const n_exchanges  = ctx.size() - 1;
-  auto const n_messages   = n_exchanges * messages_per_round;
   auto const n_rounds     = commAlgo.phaseCount();
   auto const reqsInFlight = std::min(std::size_t(n_rounds), NReqs);
-  auto const winsz        = reqsInFlight * messages_per_round;
+  // auto const winsz        = reqsInFlight * messages_per_round;
 
   // intermediate buffer for two pipelines
   using thread_alloc = ThreadAllocator<value_type>;
@@ -94,22 +93,11 @@ inline void ring_waitsome_overlap(
   // queue for ready tasks
   using segment = std::pair<mpi::Rank, gsl::span<value_type>>;
 
-#if 0
-  //auto data_channel = boost::lockfree::spsc_queue<segment>{n_rounds};
-#else
   using channel_t = SPSCNChannel<segment>;
-#endif
-
-  using dispatcher_t = CommDispatcher<mpi::testsome>;
-
-  auto comm_channel =
-      std::make_shared<typename dispatcher_t::channel>(n_messages);
 
   auto data_channel = std::make_shared<channel_t>(n_exchanges);
 
-  // auto comm_dispatcher = dispatcher_t{comm_channel, winsz};
-
-  std::array<std::size_t, detail::n_types> nslots;
+  std::array<std::size_t, detail::n_types> nslots{};
   nslots.fill(reqsInFlight);
 
   // make context
@@ -144,78 +132,6 @@ inline void ring_waitsome_overlap(
 
   // submit into dispatcher
   auto const hdl = dispatcher.submit(schedule_ctx);
-
-#if 0
-  comm_dispatcher.register_signal(
-      message_type::IRECV,
-      [buf_alloc, blocksize](
-          Message& message, MPI_Request& /*req*/) mutable -> int {
-        // allocator some buffer
-        auto* buffer = buf_alloc.allocate(blocksize);
-        FMPI_ASSERT(buffer);
-        auto allocated_span = gsl::span(buffer, blocksize);
-        FMPI_DBG(allocated_span.data());
-
-        // add the buffer to the message
-        message.set_buffer(allocated_span);
-
-        return 0;
-      });
-
-  comm_dispatcher.register_signal(
-      message_type::IRECV, [](Message& message, MPI_Request& req) -> int {
-        // FMPI_DBG_STREAM("receiving message:" << message);
-        auto ret = mpi::irecv(
-            message.writable_buffer(),
-            message.count(),
-            message.type(),
-            message.peer(),
-            message.tag(),
-            message.comm(),
-            &req);
-
-        FMPI_ASSERT(ret == MPI_SUCCESS);
-
-        return ret;
-      });
-
-  comm_dispatcher.register_signal(
-      message_type::ISEND, [](Message& message, MPI_Request& req) -> int {
-        // FMPI_DBG_STREAM("sending message:" << message);
-        auto ret = mpi::isend(
-            message.readable_buffer(),
-            message.count(),
-            message.type(),
-            message.peer(),
-            message.tag(),
-            message.comm(),
-            &req);
-
-        FMPI_ASSERT(ret == MPI_SUCCESS);
-        return ret;
-      });
-
-  comm_dispatcher.register_callback(
-      message_type::IRECV,
-      [data_channel](
-          Message& message /*, MPI_Status const& status*/) mutable {
-#if 0
-        FMPI_ASSERT(status.MPI_ERROR == MPI_SUCCESS);
-        FMPI_ASSERT(status.MPI_SOURCE == message.peer());
-        FMPI_ASSERT(status.MPI_TAG == message.tag());
-#endif
-        auto span = gsl::span(
-            static_cast<value_type*>(message.writable_buffer()),
-            message.count());
-
-        auto ret =
-            data_channel->enqueue(std::make_pair(message.peer(), span));
-        FMPI_ASSERT(ret);
-      });
-
-  comm_dispatcher.start_worker();
-  comm_dispatcher.pinToCore(config.dispatcher_core);
-#endif
 
   t_init.finish();
 

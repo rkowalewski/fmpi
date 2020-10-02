@@ -287,44 +287,6 @@ class buffered_channel {
       }
     }
   }
-
-  channel_op_status pop(value_type& result) {
-    for (;;) {
-      slot*             s{nullptr};
-      std::size_t       idx{0};
-      channel_op_status status{try_value_pop_(s, idx)};
-      if (channel_op_status::success == status) {
-        result = std::move(
-            *reinterpret_cast<value_type*>(std::addressof(s->storage)));
-        s->cycle.store(idx + capacity_, std::memory_order_release);
-        not_full_cnd_.notify_one();
-        return status;
-      } else if (channel_op_status::empty == status) {
-        std::unique_lock<std::mutex> lk{mtx_};
-
-        if (is_closed()) {
-          return channel_op_status::closed;
-        }
-
-        ++waiting_consumer_;
-
-        if (!is_empty_()) {
-          continue;
-        }
-
-        not_empty_cnd_.wait(
-            lk, [this]() { return is_closed() || !is_empty_(); });
-        --waiting_consumer_;
-
-        if (is_empty_()) {
-          return channel_op_status::timeout;
-        }
-      } else {
-        FMPI_ASSERT(channel_op_status::closed == status);
-        return channel_op_status::closed;
-      }
-    }
-  }
 };
 }  // namespace fmpi
 

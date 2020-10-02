@@ -2,20 +2,9 @@
 #include <omp.h>
 #include <sched.h>
 
-#include <cstdlib>
-
-#include <gsl/span>
-
 #include <boost/lockfree/spsc_queue.hpp>
 #include <cassert>
-#include <future>
-#include <iostream>
-#include <numeric>
-#include <random>
-#include <rtlx/ScopedLambda.hpp>
-#include <sstream>
-#include <thread>
-
+#include <cstdlib>
 #include <fmpi/NumericRange.hpp>
 #include <fmpi/Pinning.hpp>
 #include <fmpi/concurrency/Async.hpp>
@@ -25,6 +14,14 @@
 #include <fmpi/mpi/Algorithm.hpp>
 #include <fmpi/mpi/Environment.hpp>
 #include <fmpi/mpi/Request.hpp>
+#include <future>
+#include <gsl/span>
+#include <iostream>
+#include <numeric>
+#include <random>
+#include <rtlx/ScopedLambda.hpp>
+#include <sstream>
+#include <thread>
 
 const unsigned long QUEUE_SIZE     = 5L;
 const unsigned long TOTAL_ELEMENTS = QUEUE_SIZE * 10L;
@@ -123,92 +120,6 @@ int run() {
 
   auto buf_alloc = fmpi::ThreadAllocator<value_type>{};
 
-  auto const nreqs = 2 * world.size();
-
-  using comm_channel = typename fmpi::SPSCNChannel<fmpi::CommTask>;
-  auto channel       = std::make_shared<comm_channel>(nreqs);
-
-  // Dispatcher Thread
-  fmpi::CommDispatcher dispatcher{channel, winsz};
-
-  dispatcher.register_signal(
-      fmpi::message_type::IRECV,
-      [&buf_alloc](fmpi::Message& message, MPI_Request& /*req*/) {
-        // allocator some buffer
-        auto* b = buf_alloc.allocate(blocksize);
-        message.set_buffer(gsl::span(b, blocksize));
-
-        return 0;
-      });
-
-  dispatcher.register_signal(
-      fmpi::message_type::IRECV,
-      [](fmpi::Message& message, MPI_Request& req) -> int {
-        return MPI_Irecv(
-            message.writable_buffer(),
-            message.count(),
-            message.type(),
-            message.peer(),
-            message.tag(),
-            message.comm(),
-            &req);
-      });
-
-  dispatcher.register_signal(
-      fmpi::message_type::ISEND,
-      [](fmpi::Message& message, MPI_Request& req) -> int {
-        auto ret = MPI_Isend(
-            message.readable_buffer(),
-            message.count(),
-            message.type(),
-            message.peer(),
-            message.tag(),
-            message.comm(),
-            &req);
-
-        assert(ret == MPI_SUCCESS);
-        return ret;
-      });
-
-  dispatcher.register_callback(
-      fmpi::message_type::IRECV,
-      [&ready_tasks](fmpi::Message& message /*, MPI_Status const& status*/) {
-        auto span = gsl::span(
-            static_cast<value_type*>(message.writable_buffer()),
-            message.count());
-
-        ready_tasks.push(std::make_pair(message.peer(), span));
-      });
-
-  dispatcher.start_worker();
-  dispatcher.pinToCore(pinning.dispatcher_core);
-
-  auto f_comm = fmpi::async(
-      0 /*unused*/,
-      [first   = std::begin(sbuf),
-       last    = std::end(sbuf),
-       channel = std::move(channel),
-       &world]() {
-        constexpr int mpi_tag = 123;
-
-        for (auto&& peer :
-             fmpi::range(mpi::Rank(0), mpi::Rank(world.size()))) {
-          auto recv_message = fmpi::Message{peer, mpi_tag, world.mpiComm()};
-
-          channel->enqueue(
-              fmpi::CommTask{fmpi::message_type::IRECV, recv_message});
-
-          auto send_message = fmpi::Message(
-              gsl::span(&*std::next(first, peer * blocksize), blocksize),
-              peer,
-              mpi_tag,
-              world.mpiComm());
-
-          channel->enqueue(
-              fmpi::CommTask{fmpi::message_type::ISEND, send_message});
-        }
-      });
-
   auto f_comp = fmpi::async(
       0 /*unused*/,
       [&ready_tasks, &rbuf, &buf_alloc, ntasks = world.size()]() -> iterator {
@@ -227,10 +138,51 @@ int run() {
         return rbuf.end();
       });
 
+  // make context
+  std::array<std::size_t, fmpi::detail::n_types> nslots{};
+  nslots.fill(winsz / 2);
+  auto schedule_ctx = std::make_shared<fmpi::ScheduleCtx>(nslots);
+
+  fmpi::v2::CommDispatcher dispatcher{};
+
+  schedule_ctx->register_signal(
+      fmpi::message_type::IRECV, [&buf_alloc](fmpi::Message& message) {
+        // allocator some buffer
+        auto* b = buf_alloc.allocate(blocksize);
+        message.set_buffer(gsl::span(b, blocksize));
+      });
+
+  schedule_ctx->register_callback(
+      fmpi::message_type::IRECV, [&ready_tasks](fmpi::Message& message) {
+        auto span = gsl::span(
+            static_cast<value_type*>(message.writable_buffer()),
+            message.count());
+
+        ready_tasks.push(std::make_pair(message.peer(), span));
+      });
+
+  // submit into dispatcher
+  auto const hdl = dispatcher.submit(schedule_ctx);
+
+  for (auto&& peer : fmpi::range(mpi::Rank(0), mpi::Rank(world.size()))) {
+    constexpr int mpi_tag = 123;
+    auto recv_message     = fmpi::Message{peer, mpi_tag, world.mpiComm()};
+
+    dispatcher.dispatch(hdl, fmpi::message_type::IRECV, recv_message);
+
+    auto send_message = fmpi::Message(
+        gsl::span(&*std::next(std::begin(sbuf), peer * blocksize), blocksize),
+        peer,
+        mpi_tag,
+        world.mpiComm());
+
+    dispatcher.dispatch(hdl, fmpi::message_type::ISEND, send_message);
+  }
+
   iterator ret;
   try {
     ret = f_comp.get();
-    f_comm.wait();
+    schedule_ctx->wait();
   } catch (...) {
     std::cout << "computation done...\n";
   }
@@ -240,8 +192,6 @@ int run() {
   if (!std::equal(std::begin(rbuf), std::end(rbuf), std::begin(expect))) {
     throw std::runtime_error("invalid result");
   }
-
-  dispatcher.loop_until_done();
 
   return 0;
 }

@@ -52,7 +52,7 @@ class ScheduleHandle {
     : id_(id) {
   }
 
-  constexpr identifier id() const noexcept {
+  [[nodiscard]] constexpr identifier id() const noexcept {
     return id_;
   }
 
@@ -80,7 +80,7 @@ struct CommTask {
     , type(t) {
   }
 
-  constexpr bool valid() const noexcept {
+  [[nodiscard]] constexpr bool valid() const noexcept {
     return type != message_type::INVALID;
   }
 
@@ -123,7 +123,7 @@ class MultiTaskQueue {
   static constexpr uint16_t default_cap = 1000;
 
  public:
-  MultiTaskQueue(uint16_t initial_cap = default_cap)
+  explicit MultiTaskQueue(uint16_t initial_cap = default_cap)
     : alloc_(initial_cap) {
     for (auto&& i : range(lists_.size())) {
       lists_[i] = task_queue{alloc_};
@@ -187,46 +187,23 @@ class ScheduleCtx {
 
   enum class status
   {
-    init,
-    scheduled,
+    pending,
     ready
   };
 
  public:
-  ScheduleCtx(std::array<std::size_t, detail::n_types> nslots);
+  explicit ScheduleCtx(std::array<std::size_t, detail::n_types> nslots);
 
-  template <class F>
-  void register_signal(message_type type, F&& callable, bool safe = false) {
-    std::unique_lock<std::mutex> lk{mtx_signals_, std::defer_lock};
-
-    if (safe) {
-      lk.lock();
-    }
-
-    auto& signals = signals_[rtlx::to_underlying(type)];
-    signals.emplace(
-        std::end(signals), signal::make(std::forward<F>(callable)));
-  }
-
-  template <class F>
-  void register_callback(message_type type, F&& callable, bool safe = false) {
-    std::unique_lock<std::mutex> lk{mtx_callbacks_, std::defer_lock};
-
-    if (safe) {
-      lk.lock();
-    }
-
-    auto& callbacks = callbacks_[rtlx::to_underlying(type)];
-    callbacks.emplace(
-        std::end(callbacks), signal::make(std::forward<F>(callable)));
-  }
+  void register_signal(message_type type, signal&& callable);
+  void register_callback(message_type type, callback&& callable);
 
   void wait();
 
  private:
-  void finish();
+  // complete all outstanding requests
+  void complete_all();
+  void notify();
 
- private:
   /// Request Handles
   std::array<std::size_t, detail::n_types> const    nslots_;
   std::size_t const                                 winsz_;
@@ -234,17 +211,12 @@ class ScheduleCtx {
   FixedVector<CommTask>                             pending_;
   std::array<tlx::RingBuffer<int>, detail::n_types> slots_;
 
-  /// Status
-  status state_{status::init};
-
-  /// Signals
-  std::mutex                                     mtx_signals_;
-  std::array<std::list<signal>, detail::n_types> signals_;
-
-  /// Callbacks
-  std::mutex                                       mtx_callbacks_;
+  /// Signals and Callbacks
+  std::array<std::list<signal>, detail::n_types>   signals_;
   std::array<std::list<callback>, detail::n_types> callbacks_;
 
+  /// Status Information
+  status                  state_{status::pending};
   std::condition_variable cv_finish_;
   std::mutex              mtx_;
 };
@@ -267,15 +239,13 @@ class CommDispatcher {
     using iterator       = typename container::iterator;
     using const_iterator = typename container::const_iterator;
 
-   public:
     ctx_map();
-    void assign(ScheduleHandle, std::weak_ptr<ScheduleCtx>);
-    void erase(iterator);
-    void merge(container&&);
+    void assign(
+        ScheduleHandle const& hdl, const std::weak_ptr<ScheduleCtx>& wp);
 
-    bool                            contains(ScheduleHandle) const;
-    std::pair<iterator, bool>       find(ScheduleHandle);
-    std::pair<const_iterator, bool> find(ScheduleHandle) const;
+    bool                            contains(ScheduleHandle const& hdl) const;
+    std::pair<iterator, bool>       find(ScheduleHandle const& hdl);
+    std::pair<const_iterator, bool> find(ScheduleHandle const& hdl) const;
 
     template <class OutputIterator>
     void copy(OutputIterator d_first);
@@ -283,10 +253,9 @@ class CommDispatcher {
     void release_expired();
 
    private:
-    iterator       do_find(ScheduleHandle);
-    const_iterator do_find(ScheduleHandle) const;
+    iterator       do_find(ScheduleHandle hdl);
+    const_iterator do_find(ScheduleHandle hdl) const;
 
-   private:
     mutable std::mutex mtx_;
     allocator          alloc_;
     container          items_;
@@ -296,10 +265,13 @@ class CommDispatcher {
   CommDispatcher();
   ~CommDispatcher();
 
-  ScheduleHandle submit(std::weak_ptr<ScheduleCtx>);
-  void           dispatch(ScheduleHandle, message_type, Message message);
-  void           terminate();
-  void           commit(ScheduleHandle);
+  ScheduleHandle submit(const std::weak_ptr<ScheduleCtx>& ctx);
+
+  void dispatch(
+      ScheduleHandle const& handle, message_type type, Message message);
+
+  void commit(ScheduleHandle const& hdl);
+  void terminate();
 
  private:
   void stop_worker();
@@ -307,7 +279,6 @@ class CommDispatcher {
   void progress_all(bool blocking = false);
   void worker();
 
- private:
   channel     channel_;
   ctx_map     schedules_;
   std::thread thread_;
@@ -321,6 +292,7 @@ void CommDispatcher::ctx_map::copy(OutputIterator d_first) {
 
 }  // namespace v2
 
+#if 0
 template <mpi::reqsome_op testReqs = mpi::testsome>
 class CommDispatcher {
   static_assert(
@@ -793,7 +765,9 @@ inline int dispatch_waitall(
 
   return ret;
 }
+
 }  // namespace detail
+#endif
 
 }  // namespace fmpi
 

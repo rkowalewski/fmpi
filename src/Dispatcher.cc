@@ -1,5 +1,6 @@
 #include <fmpi/concurrency/Dispatcher.hpp>
 #include <fmpi/mpi/Algorithm.hpp>
+#include <utility>
 
 std::atomic_uint32_t fmpi::ScheduleHandle::last_id_ = 0;
 
@@ -18,11 +19,11 @@ ScheduleCtx::ScheduleCtx(std::array<std::size_t, detail::n_types> nslots)
   }
 }
 
-void ScheduleCtx::finish() {
+void ScheduleCtx::notify() {
   std::lock_guard<std::mutex> lk{mtx_};
 
   auto const prev = std::exchange(state_, status::ready);
-  FMPI_ASSERT(prev == status::init);
+  FMPI_ASSERT(prev == status::pending);
   cv_finish_.notify_all();
 }
 
@@ -33,10 +34,49 @@ void ScheduleCtx::wait() {
   }
 }
 
+inline void ScheduleCtx::complete_all() {
+  FixedVector<MPI_Status> statuses(handles_.size());
+
+  std::vector<std::size_t> idxs;
+  idxs.reserve(handles_.size());
+
+  auto r = range(handles_.size());
+
+  std::copy_if(
+      std::begin(r),
+      std::end(r),
+      std::back_inserter(idxs),
+      [this](auto const& idx) { return handles_[idx] != MPI_REQUEST_NULL; });
+
+  auto const ret =
+      MPI_Waitall(handles_.size(), handles_.data(), statuses.data());
+  FMPI_ASSERT(ret == MPI_SUCCESS);
+
+  for (auto&& idx : idxs) {
+    auto&      task = pending_[idx];
+    auto const tid  = rtlx::to_underlying(task.type);
+    FMPI_ASSERT(task.valid());
+
+    for (auto&& cb : callbacks_[tid]) {
+      cb(task.message);
+    }
+  }
+}
+
+void ScheduleCtx::register_signal(message_type type, signal&& callable) {
+  auto& signals = signals_[rtlx::to_underlying(type)];
+  signals.emplace(std::end(signals), callable);
+}
+
+void ScheduleCtx::register_callback(message_type type, callback&& callable) {
+  auto& callbacks = callbacks_[rtlx::to_underlying(type)];
+  callbacks.emplace(std::end(callbacks), callable);
+}
+
 namespace v2 {
 
-static constexpr std::size_t channel_capacity   = 10000;
-static constexpr std::size_t schedules_capacity = 100;
+constexpr std::size_t channel_capacity   = 10000;
+constexpr std::size_t schedules_capacity = 100;
 
 CommDispatcher::CommDispatcher()
   : channel_(channel_capacity) {
@@ -63,29 +103,28 @@ struct DefaultMessageHandler {
           message.tag(),
           message.comm(),
           &req);
-
-    } else {
-      FMPI_ASSERT(t == message_type::ISEND);
-      return mpi::isend(
-          message.readable_buffer(),
-          message.count(),
-          message.type(),
-          message.peer(),
-          message.tag(),
-          message.comm(),
-          &req);
     }
+    FMPI_ASSERT(t == message_type::ISEND);
+
+    return mpi::isend(
+        message.readable_buffer(),
+        message.count(),
+        message.type(),
+        message.peer(),
+        message.tag(),
+        message.comm(),
+        &req);
   }
 };
 
-ScheduleHandle CommDispatcher::submit(std::weak_ptr<ScheduleCtx> ctx) {
+ScheduleHandle CommDispatcher::submit(const std::weak_ptr<ScheduleCtx>& ctx) {
   auto hdl = ScheduleHandle{ScheduleHandle::last_id_++};
-  schedules_.assign(hdl, ctx);
+  schedules_.assign(hdl, std::move(ctx));
   return hdl;
 }
 
 void CommDispatcher::dispatch(
-    ScheduleHandle handle, message_type type, Message message) {
+    ScheduleHandle const& handle, message_type type, Message message) {
   // steady_timer t_enqueue{stats_.enqueue_time};
 
   // It may be that
@@ -106,7 +145,8 @@ void CommDispatcher::worker() {
     auto     status = channel_.pop(task, 1us);
 
     if (status == channel_op_status::closed) {
-      break;
+      constexpr bool blocking = true;
+      progress_all(blocking);
     } else if (status == channel_op_status::success) {
       FMPI_ASSERT(task.valid());
 
@@ -116,36 +156,8 @@ void CommDispatcher::worker() {
 
       if (task.type == message_type::COMMIT) {
         if (auto sp = it->second.lock()) {
-          FixedVector<MPI_Status> statuses(sp->handles_.size());
-
-          std::vector<std::size_t> idxs;
-          idxs.reserve(sp->handles_.size());
-
-          auto r = range(sp->handles_.size());
-
-          std::copy_if(
-              std::begin(r),
-              std::end(r),
-              std::back_inserter(idxs),
-              [p = sp.get()](auto const& idx) {
-                return p->handles_[idx] != MPI_REQUEST_NULL;
-              });
-
-          auto const ret = MPI_Waitall(
-              sp->handles_.size(), sp->handles_.data(), statuses.data());
-          FMPI_ASSERT(ret == MPI_SUCCESS);
-
-          for (auto&& idx : idxs) {
-            auto&      task = sp->pending_[idx];
-            auto const tid  = rtlx::to_underlying(task.type);
-            FMPI_ASSERT(task.valid());
-
-            for (auto&& cb : sp->callbacks_[tid]) {
-              cb(task.message);
-            }
-          }
-
-          sp->finish();
+          sp->complete_all();
+          sp->notify();
         }
       } else {
         if (auto ctx = it->second.lock()) {
@@ -154,7 +166,7 @@ void CommDispatcher::worker() {
           int        slot = MPI_UNDEFINED;
           MPI_Status status;
 
-          if (rb.size() == 0u) {
+          if (rb.empty()) {
             // complete one of pending requests and replace it with new slot
             std::vector<MPI_Request> reqs;
             std::vector<int>         idxs;
@@ -176,7 +188,7 @@ void CommDispatcher::worker() {
             auto const count = std::count(
                 std::begin(reqs), std::end(reqs), MPI_REQUEST_NULL);
 
-            FMPI_ASSERT(!reqs.size() || count == 0);
+            FMPI_ASSERT(reqs.empty() || count == 0);
 
             FMPI_DBG(reqs.size());
 
@@ -230,7 +242,7 @@ void CommDispatcher::worker() {
   }
 }
 
-void CommDispatcher::commit(ScheduleHandle hdl) {
+void CommDispatcher::commit(ScheduleHandle const& hdl) {
   auto status = channel_.push(CommTask{message_type::COMMIT, Message{}, hdl});
   FMPI_ASSERT(status == channel_op_status::success);
 }
@@ -321,79 +333,32 @@ void CommDispatcher::ctx_map::release_expired() {
   items_.remove_if([](auto const& pair) { return pair.second.expired(); });
 }
 
-#if 0
-    while (req_capacity()) {
-      CommTask task{};
-      // if we fail, there are two reasons...
-      // either the timeout is hit without popping an element
-      // or we already popped everything out of the channel
-      if (!task_channel_->wait_dequeue(task, sleep_interval)) {
-        break;
-      }
-
-      auto const req_type = rtlx::to_underlying(task.type);
-      auto const nslots   = req_slots_[req_type].size();
-
-      if (nslots == 0u) {
-        backlog_.push(task);
-      } else {
-        do_dispatch(task);
-      }
-    }
-
-    do_progress();
-  }
-
-  {
-    constexpr auto force_progress           = true;
-    stats_.value<int64_t>(nreqs_completion) = req_count();
-    do_progress(force_progress);
-  }
-
-  {
-    std::lock_guard<std::mutex> lk{mutex_};
-
-    auto const was_busy = std::exchange(busy_, false);
-    FMPI_ASSERT(was_busy);
-  }
-  cv_finished_.notify_all();
-#endif
-
 CommDispatcher::ctx_map::ctx_map()
   : alloc_(schedules_capacity)
   , items_(alloc_) {
 }
 
 void CommDispatcher::ctx_map::assign(
-    ScheduleHandle hdl, std::weak_ptr<ScheduleCtx> p) {
+    ScheduleHandle const& hdl, const std::weak_ptr<ScheduleCtx>& p) {
   std::lock_guard<std::mutex> lg{mtx_};
   FMPI_ASSERT(do_find(hdl) == std::end(items_));
   items_.emplace_back(hdl, p);
 }
 
-void CommDispatcher::ctx_map::merge(CommDispatcher::ctx_map::container&&) {
-}
-
-void CommDispatcher::ctx_map::erase(CommDispatcher::ctx_map::iterator it) {
-  std::lock_guard<std::mutex> lg{mtx_};
-  FMPI_ASSERT(it != std::end(items_));
-  items_.erase(it);
-}
-
-bool CommDispatcher::ctx_map::contains(ScheduleHandle hdl) const {
+bool CommDispatcher::ctx_map::contains(ScheduleHandle const& hdl) const {
   std::lock_guard<std::mutex> lg{mtx_};
   return do_find(hdl) != std::end(items_);
 }
 
 std::pair<CommDispatcher::ctx_map::const_iterator, bool>
-CommDispatcher::ctx_map::find(ScheduleHandle hdl) const {
+CommDispatcher::ctx_map::find(ScheduleHandle const& hdl) const {
   std::lock_guard<std::mutex> lg{mtx_};
   auto const                  it = do_find(hdl);
   return std::make_pair(it, it != items_.cend());
 }
 
 std::pair<CommDispatcher::ctx_map::iterator, bool>
-CommDispatcher::ctx_map::find(ScheduleHandle hdl) {
+CommDispatcher::ctx_map::find(ScheduleHandle const& hdl) {
   std::lock_guard<std::mutex> lg{mtx_};
   auto const                  it = do_find(hdl);
   return std::make_pair(it, it != items_.end());

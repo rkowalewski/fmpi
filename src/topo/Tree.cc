@@ -16,7 +16,7 @@ static void knomial_tree_aux(Tree* tree, mpi::Rank me, uint32_t size) {
   int        mask  = 0x1;
 
   while (mask < nr) {
-    if (vr % (radix * mask)) {
+    if ((vr % (radix * mask)) != 0) {
       int parent = vr / (radix * mask) * (radix * mask);
       parent     = (parent + tree->root) % nr;
       tree->src  = mpi::Rank{parent};
