@@ -94,7 +94,6 @@ class DebugOutput {
 
 }  // namespace detail
 }  // namespace fmpi
-#endif
 
 namespace std {
 
@@ -104,6 +103,7 @@ auto operator<<(std::ostream& os, std::pair<F, T> const& p) -> std::ostream& {
   return os;
 }
 }  // namespace std
+#endif
 
 #ifndef NDEBUG
 

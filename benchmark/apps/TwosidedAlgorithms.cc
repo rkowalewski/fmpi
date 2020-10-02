@@ -34,6 +34,12 @@ using container =
     tlx::SimpleVector<value_t, tlx::SimpleVectorMode::NoInitNoDestroy>;
 
 template <class T>
+using uniform_dist = std::conditional_t<
+    std::is_integral_v<T>,
+    std::uniform_int_distribution<T>,
+    std::uniform_real_distribution<T>>;
+
+template <class T>
 void init_sbuf(T* first, T* last, uint32_t p, int32_t me);
 
 void print_topology(
@@ -193,7 +199,7 @@ int main(int argc, char* argv[]) {
               rbuf.begin(), rbuf.end(), correct.begin(), world, algo.first);
         }
 
-        if (nwarmup == 0 || it > nwarmup) {
+        if (nwarmup == 0 || it > 0) {
           m.algorithm = algo.first;
           m.iter      = it - nwarmup + 1;
 
@@ -270,10 +276,10 @@ void init_sbuf(T* first, T* last, uint32_t p, int32_t me) {
     firstprivate(p, sendcount, me, nels)
   {
 #ifdef NDEBUG
-    std::random_device r;
-    std::seed_seq      seed_seq{r(), r(), r(), r(), r(), r()};
-    std::mt19937_64    generator(seed_seq);
-    std::uniform_int_distribution<value_t> distribution(-1E6, 1E6);
+    std::random_device    r;
+    std::seed_seq         seed_seq{r(), r(), r(), r(), r(), r()};
+    std::mt19937_64       generator(seed_seq);
+    uniform_dist<value_t> distribution;
 #endif
 #pragma omp for
     for (std::size_t block = 0; block < std::size_t(p); ++block) {

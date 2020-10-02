@@ -271,7 +271,6 @@ class CommDispatcher {
       ScheduleHandle const& handle, message_type type, Message message);
 
   void commit(ScheduleHandle const& hdl);
-  void terminate();
 
  private:
   void progress_all(bool blocking = false);

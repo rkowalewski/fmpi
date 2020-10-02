@@ -1,6 +1,7 @@
+#include <utility>
+
 #include <fmpi/concurrency/Dispatcher.hpp>
 #include <fmpi/mpi/Algorithm.hpp>
-#include <utility>
 
 std::atomic_uint32_t fmpi::ScheduleHandle::last_id_ = 0;
 
@@ -86,10 +87,6 @@ CommDispatcher::CommDispatcher()
 CommDispatcher::~CommDispatcher() {
   channel_.close();
   thread_.join();
-}
-
-void CommDispatcher::terminate() {
-  channel_.close();
 }
 
 struct DefaultMessageHandler {
