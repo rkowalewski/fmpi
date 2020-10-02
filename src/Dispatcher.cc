@@ -116,8 +116,9 @@ void CommDispatcher::worker() {
 
       if (task.type == message_type::COMMIT) {
         if (auto sp = it->second.lock()) {
+          FixedVector<MPI_Status> statuses(sp->handles_.size());
+
           std::vector<std::size_t> idxs;
-          std::vector<MPI_Status>  statuses(sp->handles_.size());
           idxs.reserve(sp->handles_.size());
 
           auto r = range(sp->handles_.size());
@@ -272,25 +273,27 @@ void CommDispatcher::progress_all(bool blocking) {
 
   FMPI_ASSERT(reqs.size() == ctx_handles.size());
 
-  std::vector<int>        idxs(reqs.size());
+  std::vector<int>        idxs_completed(reqs.size());
   FixedVector<MPI_Status> statuses(reqs.size());
 
   if (blocking) {
     auto const ret = MPI_Waitall(reqs.size(), reqs.data(), statuses.data());
     FMPI_ASSERT(ret == MPI_SUCCESS);
-    std::iota(std::begin(idxs), std::end(idxs), 0);
+    std::iota(std::begin(idxs_completed), std::end(idxs_completed), 0);
   } else {
     int n = MPI_UNDEFINED;
 
     auto const ret = MPI_Testsome(
-        reqs.size(), reqs.data(), &n, idxs.data(), statuses.data());
+        reqs.size(), reqs.data(), &n, idxs_completed.data(), statuses.data());
 
     FMPI_ASSERT(ret == MPI_SUCCESS);
 
-    idxs.resize((n == MPI_UNDEFINED) ? 0 : n);
+    idxs_completed.resize((n == MPI_UNDEFINED) ? 0 : n);
+
+    FMPI_DBG(idxs_completed.size());
   }
 
-  for (auto&& i : idxs) {
+  for (auto&& i : idxs_completed) {
     // 1. mark request as complete
     auto const [sp_idx, req_idx] = ctx_handles[i];
     auto sp                      = sps[sp_idx];
