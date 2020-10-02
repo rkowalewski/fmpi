@@ -84,7 +84,7 @@ CommDispatcher::CommDispatcher()
 }
 
 CommDispatcher::~CommDispatcher() {
-  terminate();
+  channel_.close();
   thread_.join();
 }
 
@@ -127,14 +127,9 @@ void CommDispatcher::dispatch(
     ScheduleHandle const& handle, message_type type, Message message) {
   // steady_timer t_enqueue{stats_.enqueue_time};
 
-  // It may be that
-  // FMPI_ASSERT(schedules_.contains(handle));
+  FMPI_ASSERT(schedules_.contains(handle));
   auto const status = channel_.push(CommTask{type, message, handle});
   FMPI_ASSERT(status == channel_op_status::success);
-}
-
-inline void CommDispatcher::start_worker() {
-  thread_ = std::thread([this]() { worker(); });
 }
 
 void CommDispatcher::worker() {
@@ -147,6 +142,7 @@ void CommDispatcher::worker() {
     if (status == channel_op_status::closed) {
       constexpr bool blocking = true;
       progress_all(blocking);
+      break;
     } else if (status == channel_op_status::success) {
       FMPI_ASSERT(task.valid());
 

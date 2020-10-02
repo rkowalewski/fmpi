@@ -274,8 +274,6 @@ class CommDispatcher {
   void terminate();
 
  private:
-  void stop_worker();
-  void start_worker();
   void progress_all(bool blocking = false);
   void worker();
 
