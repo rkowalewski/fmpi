@@ -1,7 +1,6 @@
-#include <utility>
-
 #include <fmpi/concurrency/Dispatcher.hpp>
 #include <fmpi/mpi/Algorithm.hpp>
+#include <utility>
 
 std::atomic_uint32_t fmpi::ScheduleHandle::last_id_ = 0;
 
@@ -23,7 +22,7 @@ ScheduleCtx::ScheduleCtx(std::array<std::size_t, detail::n_types> nslots)
 void ScheduleCtx::notify() {
   std::lock_guard<std::mutex> lk{mtx_};
 
-  auto const prev = std::exchange(state_, status::ready);
+  auto const prev = state_.exchange(status::ready, std::memory_order_relaxed);
   FMPI_ASSERT(prev == status::pending);
   cv_finish_.notify_all();
 }
@@ -33,6 +32,10 @@ void ScheduleCtx::wait() {
   while (state_ != status::ready) {
     cv_finish_.wait(lk);
   }
+}
+
+bool ScheduleCtx::ready() const noexcept {
+  return state_.load(std::memory_order_relaxed) == status::ready;
 }
 
 inline void ScheduleCtx::complete_all() {
@@ -53,25 +56,31 @@ inline void ScheduleCtx::complete_all() {
       MPI_Waitall(handles_.size(), handles_.data(), statuses.data());
   FMPI_ASSERT(ret == MPI_SUCCESS);
 
+  std::array<std::vector<Message>, detail::n_types> msgs;
+
   for (auto&& idx : idxs) {
     auto&      task = pending_[idx];
     auto const tid  = rtlx::to_underlying(task.type);
     FMPI_ASSERT(task.valid());
 
-    for (auto&& cb : callbacks_[tid]) {
-      cb(task.message);
+    msgs[tid].emplace_back(task.message);
+  }
+
+  for (auto&& tid : range(detail::n_types)) {
+    if ((not msgs[tid].empty()) and callbacks_[tid]) {
+      callbacks_[tid](msgs[tid]);
     }
   }
-}
+}  // namespace fmpi
 
 void ScheduleCtx::register_signal(message_type type, signal&& callable) {
-  auto& signals = signals_[rtlx::to_underlying(type)];
-  signals.emplace(std::end(signals), callable);
+  FMPI_ASSERT(not signals_[rtlx::to_underlying(type)]);
+  signals_[rtlx::to_underlying(type)] = std::move(callable);
 }
 
 void ScheduleCtx::register_callback(message_type type, callback&& callable) {
-  auto& callbacks = callbacks_[rtlx::to_underlying(type)];
-  callbacks.emplace(std::end(callbacks), callable);
+  FMPI_ASSERT(not callbacks_[rtlx::to_underlying(type)]);
+  callbacks_[rtlx::to_underlying(type)] = std::move(callable);
 }
 
 namespace v2 {
@@ -120,7 +129,7 @@ ScheduleHandle CommDispatcher::submit(const std::weak_ptr<ScheduleCtx>& ctx) {
   return hdl;
 }
 
-void CommDispatcher::dispatch(
+void CommDispatcher::schedule(
     ScheduleHandle const& handle, message_type type, Message message) {
   // steady_timer t_enqueue{stats_.enqueue_time};
 
@@ -203,8 +212,8 @@ void CommDispatcher::worker() {
           FMPI_ASSERT(ctx->handles_[slot] == MPI_REQUEST_NULL);
 
           // Issue new message
-          for (auto&& sig : ctx->signals_[ti]) {
-            sig(task.message);
+          if (ctx->signals_[ti]) {
+            ctx->signals_[ti](task.message);
           }
 
           // TODO: register custom message handler for each context
@@ -218,13 +227,9 @@ void CommDispatcher::worker() {
           // task holds now the previous task...
           // so let's complete callbacks for it
 
-          if (task.valid()) {
-            for (auto&& cb : ctx->callbacks_[ti]) {
-              cb(task.message);
-            }
+          if (task.valid() and ctx->callbacks_[ti]) {
+            ctx->callbacks_[ti](std::vector<Message>({task.message}));
           }
-
-          // progress (test) all operations
         }
       }
     }
@@ -248,10 +253,10 @@ void CommDispatcher::progress_all(bool blocking) {
   // schedules
   std::vector<schedule_t> scheds;
   // all requests
-  std::vector<MPI_Request> reqs;
-  // map indices in reqs to tuples of (handle, internal idx)
+  std::vector<MPI_Request>                  reqs;
+  std::vector<std::shared_ptr<ScheduleCtx>> sps;
+  // map indices in reqs to tuples of (sps, req_idx)
   std::vector<std::pair<std::size_t, std::size_t>> ctx_handles;
-  std::vector<std::shared_ptr<ScheduleCtx>>        sps;
 
   // create a copy of all known schedules
   schedules_.copy(std::back_inserter(scheds));
@@ -298,10 +303,13 @@ void CommDispatcher::progress_all(bool blocking) {
     FMPI_DBG(std::make_pair(reqs.size(), idxs_completed.size()));
   }
 
+  FixedVector<std::array<std::vector<Message>, detail::n_types>> ctx_tasks(
+      sps.size());
+
   for (auto&& i : idxs_completed) {
     // 1. mark request as complete
     auto const [sp_idx, req_idx] = ctx_handles[i];
-    auto sp                      = sps[sp_idx];
+    auto& sp                     = sps[sp_idx];
 
     // mark as complete
     sp->handles_[req_idx] = MPI_REQUEST_NULL;
@@ -311,13 +319,26 @@ void CommDispatcher::progress_all(bool blocking) {
 
     auto const ti = rtlx::to_underlying(task.type);
 
-    for (auto&& cb : sp->callbacks_[ti]) {
-      cb(task.message);
-    }
+    ctx_tasks[sp_idx][ti].emplace_back(task.message);
+
+    // for (auto&& cb : sp->callbacks_[ti]) {
+    //  cb(task.message);
+    //}
 
     task.reset();
 
     sp->slots_[ti].push_front(req_idx);
+  }
+
+  for (auto&& sp_idx : range(ctx_tasks.size())) {
+    for (auto&& ti : range(detail::n_types)) {
+      // issue callbacks only if vector is non empty
+      auto& msgs = ctx_tasks[sp_idx][ti];
+      auto& cb   = sps[sp_idx]->callbacks_[ti];
+      if (cb and not msgs.empty()) {
+        cb(msgs);
+      }
+    }
   }
 }
 
@@ -372,4 +393,9 @@ CommDispatcher::ctx_map::iterator CommDispatcher::ctx_map::do_find(
 }
 
 }  // namespace v2
+
+v2::CommDispatcher& dispatcher_executor() {
+  static auto dispatcher = std::make_unique<v2::CommDispatcher>();
+  return *dispatcher;
+}
 }  // namespace fmpi

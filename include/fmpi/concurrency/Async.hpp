@@ -5,16 +5,15 @@
 
 //#include <fmpi/Pinning.hpp>
 #include <fmpi/Debug.hpp>
-#include <fmpi/Function.hpp>
 #include <fmpi/common/Porting.hpp>
+#include <fmpi/concurrency/Dispatcher.hpp>
 #include <fmpi/mpi/Environment.hpp>
-
 #include <rtlx/Timer.hpp>
+#include <tlx/delegate.hpp>
 
 namespace fmpi {
 
 namespace detail {
-
 template <typename R, typename F, typename... Args>
 constexpr void set_promise_value(std::promise<R>& p, F&& f, Args&&... args) {
   if constexpr (std::is_void_v<R>) {
@@ -29,6 +28,7 @@ constexpr void set_promise_value(std::promise<R>& p, F&& f, Args&&... args) {
     p.set_value(std::move(value));
   }
 }
+
 }  // namespace detail
 
 template <typename F, typename... Ts>

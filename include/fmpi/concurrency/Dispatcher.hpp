@@ -32,11 +32,9 @@
 
 namespace fmpi {
 
-template <mpi::reqsome_op>
-class CommDispatcher;
-
 namespace v2 {
 class CommDispatcher;
+
 }
 
 class ScheduleHandle {
@@ -183,7 +181,7 @@ class ScheduleCtx {
   friend class v2::CommDispatcher;
 
   using signal   = tlx::delegate<void(Message&)>;
-  using callback = tlx::delegate<void(Message&)>;
+  using callback = tlx::delegate<void(std::vector<Message>)>;
 
   enum class status
   {
@@ -198,6 +196,7 @@ class ScheduleCtx {
   void register_callback(message_type type, callback&& callable);
 
   void wait();
+  bool ready() const noexcept;
 
  private:
   // complete all outstanding requests
@@ -212,11 +211,13 @@ class ScheduleCtx {
   std::array<tlx::RingBuffer<int>, detail::n_types> slots_;
 
   /// Signals and Callbacks
-  std::array<std::list<signal>, detail::n_types>   signals_;
-  std::array<std::list<callback>, detail::n_types> callbacks_;
+  // std::array<std::list<signal>, detail::n_types>   signals_;
+  // std::array<std::list<callback>, detail::n_types> callbacks_;
+  std::array<signal, detail::n_types>   signals_{};
+  std::array<callback, detail::n_types> callbacks_{};
 
   /// Status Information
-  status                  state_{status::pending};
+  std::atomic<status>     state_{status::pending};
   std::condition_variable cv_finish_;
   std::mutex              mtx_;
 };
@@ -265,9 +266,12 @@ class CommDispatcher {
   CommDispatcher();
   ~CommDispatcher();
 
+  CommDispatcher(CommDispatcher const&) = delete;
+  CommDispatcher& operator=(CommDispatcher const&) = delete;
+
   ScheduleHandle submit(const std::weak_ptr<ScheduleCtx>& ctx);
 
-  void dispatch(
+  void schedule(
       ScheduleHandle const& handle, message_type type, Message message);
 
   void commit(ScheduleHandle const& hdl);
@@ -288,6 +292,23 @@ void CommDispatcher::ctx_map::copy(OutputIterator d_first) {
 }
 
 }  // namespace v2
+
+v2::CommDispatcher& dispatcher_executor();
+
+namespace detail {
+
+class future_shared_state {
+  // the schedule context
+  std::shared_ptr<ScheduleCtx> sp_;
+
+ public:
+  void wait();
+  bool ready() const noexcept;
+};
+
+class when_any_executor {};
+
+}  // namespace detail
 
 #if 0
 template <mpi::reqsome_op testReqs = mpi::testsome>

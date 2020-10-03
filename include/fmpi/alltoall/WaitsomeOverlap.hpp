@@ -116,20 +116,17 @@ inline void ring_waitsome_overlap(
       });
 
   schedule_ctx->register_callback(
-      message_type::IRECV,
-      [data_channel](
-          Message& message /*, MPI_Status const& status*/) mutable {
-        auto span = gsl::span(
-            static_cast<value_type*>(message.writable_buffer()),
-            message.count());
+      message_type::IRECV, [data_channel](std::vector<Message> msgs) mutable {
+        for (auto&& msg : msgs) {
+          auto span = gsl::span(
+              static_cast<value_type*>(msg.writable_buffer()), msg.count());
 
-        auto ret =
-            data_channel->enqueue(std::make_pair(message.peer(), span));
-        FMPI_ASSERT(ret);
+          auto ret = data_channel->enqueue(std::make_pair(msg.peer(), span));
+          FMPI_ASSERT(ret);
+        }
       });
 
-  v2::CommDispatcher dispatcher{};
-
+  auto& dispatcher = dispatcher_executor();
   // submit into dispatcher
   auto const hdl = dispatcher.submit(schedule_ctx);
 
@@ -146,7 +143,7 @@ inline void ring_waitsome_overlap(
       if (rpeer != ctx.rank()) {
         auto recv = Message{rpeer, kTagRing, ctx.mpiComm()};
 
-        dispatcher.dispatch(hdl, message_type::IRECV, recv);
+        dispatcher.schedule(hdl, message_type::IRECV, recv);
       }
 
       if (speer != ctx.rank()) {
@@ -154,7 +151,7 @@ inline void ring_waitsome_overlap(
 
         auto send = Message{span, speer, kTagRing, ctx.mpiComm()};
 
-        dispatcher.dispatch(hdl, message_type::ISEND, send);
+        dispatcher.schedule(hdl, message_type::ISEND, send);
       }
     }
 

@@ -1,9 +1,7 @@
 #ifndef FMPI_PINNING_HPP
 #define FMPI_PINNING_HPP
 
-#include <mpi.h>
-
-#include <cstddef>
+#include <cstdint>
 #include <iosfwd>
 
 namespace fmpi {

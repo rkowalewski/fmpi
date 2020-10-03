@@ -1,10 +1,9 @@
 #ifndef FMPI_MPI_ENVIRONMENT_HPP
 #define FMPI_MPI_ENVIRONMENT_HPP
 
-#include <cstdint>
-
 #include <mpi.h>
 
+#include <cstdint>
 #include <fmpi/mpi/Rank.hpp>
 
 namespace mpi {

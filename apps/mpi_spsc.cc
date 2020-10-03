@@ -153,12 +153,14 @@ int run() {
       });
 
   schedule_ctx->register_callback(
-      fmpi::message_type::IRECV, [&ready_tasks](fmpi::Message& message) {
-        auto span = gsl::span(
-            static_cast<value_type*>(message.writable_buffer()),
-            message.count());
+      fmpi::message_type::IRECV,
+      [&ready_tasks](std::vector<fmpi::Message> msgs) {
+        for (auto&& msg : msgs) {
+          auto span = gsl::span(
+              static_cast<value_type*>(msg.writable_buffer()), msg.count());
 
-        ready_tasks.push(std::make_pair(message.peer(), span));
+          ready_tasks.push(std::make_pair(msg.peer(), span));
+        }
       });
 
   // submit into dispatcher
@@ -168,7 +170,7 @@ int run() {
     constexpr int mpi_tag = 123;
     auto recv_message     = fmpi::Message{peer, mpi_tag, world.mpiComm()};
 
-    dispatcher.dispatch(hdl, fmpi::message_type::IRECV, recv_message);
+    dispatcher.schedule(hdl, fmpi::message_type::IRECV, recv_message);
 
     auto send_message = fmpi::Message(
         gsl::span(&*std::next(std::begin(sbuf), peer * blocksize), blocksize),
@@ -176,7 +178,7 @@ int run() {
         mpi_tag,
         world.mpiComm());
 
-    dispatcher.dispatch(hdl, fmpi::message_type::ISEND, send_message);
+    dispatcher.schedule(hdl, fmpi::message_type::ISEND, send_message);
   }
 
   iterator ret;
