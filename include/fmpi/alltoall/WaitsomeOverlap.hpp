@@ -253,14 +253,13 @@ inline void ring_waitsome_overlap(
             std::end(msgs),
             std::back_inserter(pieces),
             [palloc = &buf_alloc](auto& msg) {
-              auto source = msg.peer();
               auto span   = gsl::span(
                   static_cast<value_type*>(msg.writable_buffer()),
                   msg.count());
 
               FMPI_DBG_STREAM(
                   "receiving segment: " << std::make_pair(
-                      source, span.data()));
+                      msg.peer(), span.data()));
 
               return piece{span, palloc};
             });
