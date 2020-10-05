@@ -11,6 +11,7 @@
 #include <fmpi/common/Porting.hpp>
 #include <fmpi/concurrency/BufferedChannel.hpp>
 #include <fmpi/concurrency/SPSC.hpp>
+#include <fmpi/concurrency/SimpleConcurrentDeque.hpp>
 #include <fmpi/container/FixedVector.hpp>
 #include <fmpi/memory/HeapAllocator.hpp>
 #include <fmpi/memory/ThreadAllocator.hpp>
@@ -39,10 +40,6 @@ class CommDispatcher;
 
 class ScheduleHandle {
   using identifier = uint32_t;
-
-  friend class v2::CommDispatcher;
-
-  static std::atomic_uint32_t last_id_;
 
  public:
   constexpr ScheduleHandle() = default;
@@ -217,9 +214,9 @@ class ScheduleCtx {
   std::array<callback, detail::n_types> callbacks_{};
 
   /// Status Information
-  std::atomic<status>     state_{status::pending};
-  std::condition_variable cv_finish_;
   std::mutex              mtx_;
+  std::condition_variable cv_finish_;
+  std::atomic<status>     state_{status::pending};
 };
 
 namespace v2 {
@@ -298,17 +295,63 @@ v2::CommDispatcher& dispatcher_executor();
 namespace detail {
 
 class future_shared_state {
+  using mpi_result           = int;
+  using simple_message_queue = SimpleConcurrentDeque<Message>;
+
   // the schedule context
-  std::shared_ptr<ScheduleCtx> sp_;
+  std::shared_ptr<ScheduleCtx> ctx_;
+  // the queue to notify about ready tasks
+  std::shared_ptr<simple_message_queue> q_;
 
  public:
-  void wait();
-  bool ready() const noexcept;
+  future_shared_state() noexcept = default;
+
+  future_shared_state(
+      std::shared_ptr<ScheduleCtx>          sp,
+      std::shared_ptr<simple_message_queue> q);
+
+  void       wait();
+  bool       is_ready() const noexcept;
+  bool       valid() const noexcept;
+  mpi_result get();
 };
 
-class when_any_executor {};
-
 }  // namespace detail
+
+class when_any_executor;
+
+class collective_future : private detail::future_shared_state {
+  using base = detail::future_shared_state;
+
+  friend class when_any_executor;
+
+ public:
+  // Constructors
+  collective_future() noexcept = default;
+
+  collective_future(
+      std::shared_ptr<ScheduleCtx>                    sp,
+      std::shared_ptr<SimpleConcurrentDeque<Message>> q);
+
+  ~collective_future();
+
+  // Only Movable
+  collective_future(const collective_future&) = delete;
+  collective_future(collective_future&&)      = default;
+
+  collective_future& operator=(const collective_future&) = delete;
+  collective_future& operator=(collective_future&&) = default;
+
+  using base::get;
+  using base::is_ready;
+  using base::valid;
+  using base::wait;
+};
+
+class when_any_executor {
+  auto when_any(collective_future& fut);
+  auto when_some(collective_future& fut);
+};
 
 #if 0
 template <mpi::reqsome_op testReqs = mpi::testsome>

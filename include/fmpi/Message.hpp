@@ -50,23 +50,35 @@ class Message {
   constexpr Message() = default;
 
   constexpr Message(
-      mpi::Rank peer, mpi::Tag tag, mpi::Comm const& comm) noexcept
+      void*        buf,
+      std::size_t  count,
+      MPI_Datatype type,
+      mpi::Rank    peer,
+      mpi::Tag     tag,
+      mpi::Comm    comm) noexcept
+    : buf_(buf)
+    , count_(count)
+    , mpi_type_(type)
+    , envelope_(peer, tag, comm) {
+  }
+
+  constexpr Message(mpi::Rank peer, mpi::Tag tag, mpi::Comm comm) noexcept
     : envelope_(peer, tag, comm) {
   }
 
   template <class T>
   constexpr Message(
-      gsl::span<T>     span,
-      mpi::Rank        peer,
-      mpi::Tag         tag,
-      mpi::Comm const& comm) noexcept
-    : buf_(span.data())
-    , count_(span.size())
-    , mpi_type_(mpi::type_mapper<T>::type())
-    , envelope_(peer, tag, comm)
-
-  {
-    set_buffer(span);
+      gsl::span<T> span,
+      mpi::Rank    peer,
+      mpi::Tag     tag,
+      mpi::Comm    comm) noexcept
+    : Message(
+          span.data(),
+          span.size(),
+          mpi::type_mapper<T>::type(),
+          peer,
+          tag,
+          comm) {
   }
 
   constexpr Message(const Message&) = default;

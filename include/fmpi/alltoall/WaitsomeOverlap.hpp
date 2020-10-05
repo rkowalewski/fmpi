@@ -29,6 +29,40 @@ template <class T>
 using simple_vector =
     tlx::SimpleVector<T, tlx::SimpleVectorMode::NoInitNoDestroy>;
 
+template <class Schedule>
+class CollectiveCtx {
+ public:
+  CollectiveCtx(
+      const void*         sendbuf,
+      std::size_t         sendcount,
+      MPI_Datatype        sendtype,
+      void*               recvbuf,
+      std::size_t         recvcount,
+      MPI_Datatype        recvtype,
+      mpi::Context const& ctx)
+    : sendbuf_(sendbuf)
+    , sendcount_(sendcount)
+    , sendtype_(sendtype)
+    , recvbuf_(recvbuf)
+    , recvcount_(recvcount)
+    , recvtype_(recvtype)
+    , comm_(ctx.mpiComm())
+    , schedule_(ctx) {
+  }
+
+  collective_future execute();
+
+ private:
+  const void*  sendbuf_;
+  std::size_t  sendcount_;
+  MPI_Datatype sendtype_;
+  void*        recvbuf_;
+  std::size_t  recvcount_;
+  MPI_Datatype recvtype_;
+  MPI_Comm     comm_;
+  Schedule     schedule_;
+};  // namespace detail
+
 }  // namespace detail
 
 template <
@@ -91,19 +125,19 @@ inline void ring_waitsome_overlap(
   auto buf_alloc = thread_alloc{};
 
   // queue for ready tasks
-  using segment = std::pair<mpi::Rank, gsl::span<value_type>>;
+  // using segment = std::pair<mpi::Rank, gsl::span<value_type>>;
 
-  using channel_t = SPSCNChannel<segment>;
+  // using channel_t = SPSCNChannel<segment>;
 
-  auto data_channel = std::make_shared<channel_t>(n_exchanges);
+  // auto data_channel = std::make_shared<channel_t>(n_exchanges);
 
   std::array<std::size_t, detail::n_types> nslots{};
   nslots.fill(reqsInFlight);
 
-  // make context
-  auto schedule_ctx = std::make_shared<fmpi::ScheduleCtx>(nslots);
+  auto schedule_state = std::make_shared<fmpi::ScheduleCtx>(nslots);
+  auto queue          = std::make_shared<SimpleConcurrentDeque<Message>>();
 
-  schedule_ctx->register_signal(
+  schedule_state->register_signal(
       message_type::IRECV, [buf_alloc, blocksize](Message& message) mutable {
         // allocator some buffer
         auto* buffer = buf_alloc.allocate(blocksize);
@@ -115,20 +149,18 @@ inline void ring_waitsome_overlap(
         message.set_buffer(allocated_span);
       });
 
-  schedule_ctx->register_callback(
-      message_type::IRECV, [data_channel](std::vector<Message> msgs) mutable {
-        for (auto&& msg : msgs) {
-          auto span = gsl::span(
-              static_cast<value_type*>(msg.writable_buffer()), msg.count());
-
-          auto ret = data_channel->enqueue(std::make_pair(msg.peer(), span));
-          FMPI_ASSERT(ret);
-        }
+  schedule_state->register_callback(
+      message_type::IRECV, [queue](std::vector<Message> msgs) mutable {
+        FMPI_ASSERT(queue);
+        std::move(
+            std::begin(msgs), std::end(msgs), std::back_inserter(*queue));
       });
 
   auto& dispatcher = dispatcher_executor();
   // submit into dispatcher
-  auto const hdl = dispatcher.submit(schedule_ctx);
+  auto const hdl = dispatcher.submit(schedule_state);
+
+  auto future = collective_future{std::move(schedule_state), queue};
 
   t_init.finish();
 
@@ -204,14 +236,34 @@ inline void ring_waitsome_overlap(
 
       pieces.emplace_back(piece{local_span});
 
-      segment task{};
-      while (data_channel->wait_dequeue(task)) {
-        auto [source, span] = task;
+      // segment task{};
+      std::size_t n = n_exchanges;
+      // while (data_channel->wait_dequeue(task)) {
+      std::vector<Message> msgs;
+      msgs.reserve(n);
+      while (n) {
+        std::size_t m = 0;
+        queue->pop_all(std::back_inserter(msgs), m);
 
-        FMPI_DBG_STREAM(
-            "receiving segment: " << std::make_pair(source, span.data()));
+        std::transform(
+            std::begin(msgs),
+            std::end(msgs),
+            std::back_inserter(pieces),
+            [palloc = &buf_alloc](auto& msg) {
+              auto source = msg.peer();
+              auto span   = gsl::span(
+                  static_cast<value_type*>(msg.writable_buffer()),
+                  msg.count());
 
-        pieces.emplace_back(piece{span, &buf_alloc});
+              FMPI_DBG_STREAM(
+                  "receiving segment: " << std::make_pair(
+                      source, span.data()));
+
+              return piece{span, palloc};
+            });
+
+        msgs.clear();
+        n -= m;
 
         if (enough_work(pieces.begin(), pieces.end())) {
           steady_timer t_comp{trace.duration(kComputationTime)};
@@ -313,7 +365,7 @@ inline void ring_waitsome_overlap(
     // We definitely have to wait here because although all data has arrived
     // there might still be pending tasks for other peers (e.g. sends)
     // comm_dispatcher.loop_until_done();
-    schedule_ctx->wait();
+    // schedule_state->wait();
   }
 
   // steady_timer t_comp{trace.duration(detail::shutdown)};
