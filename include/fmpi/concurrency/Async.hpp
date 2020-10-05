@@ -2,11 +2,10 @@
 #define FMPI_CONCURRENCY_ASYNC_HPP
 
 #include <future>
+#include <type_traits>
 
 //#include <fmpi/Pinning.hpp>
-#include <fmpi/Debug.hpp>
 #include <fmpi/common/Porting.hpp>
-#include <fmpi/concurrency/Dispatcher.hpp>
 #include <fmpi/mpi/Environment.hpp>
 #include <rtlx/Timer.hpp>
 #include <tlx/delegate.hpp>
@@ -33,8 +32,8 @@ constexpr void set_promise_value(std::promise<R>& p, F&& f, Args&&... args) {
 
 template <typename F, typename... Ts>
 inline auto async(int /*core*/, F&& f, Ts&&... params)
-    -> std::future<invoke_result_t<F, Ts...>> {
-  using future_inner_type = invoke_result_t<F, Ts...>;
+    -> std::future<std::invoke_result_t<F, Ts...>> {
+  using future_inner_type = std::invoke_result_t<F, Ts...>;
 
   auto promise_ptr = std::make_unique<std::promise<future_inner_type>>();
   auto result      = promise_ptr->get_future();

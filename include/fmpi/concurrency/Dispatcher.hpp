@@ -3,34 +3,15 @@
 
 #include <mpi.h>
 
-#include <atomic>
-#include <fmpi/Debug.hpp>
-#include <fmpi/Function.hpp>
 #include <fmpi/Message.hpp>
-#include <fmpi/NumericRange.hpp>
-#include <fmpi/common/Porting.hpp>
 #include <fmpi/concurrency/BufferedChannel.hpp>
 #include <fmpi/concurrency/Future.hpp>
-#include <fmpi/concurrency/SPSC.hpp>
-#include <fmpi/concurrency/SimpleConcurrentDeque.hpp>
 #include <fmpi/container/FixedVector.hpp>
 #include <fmpi/memory/HeapAllocator.hpp>
-#include <fmpi/memory/ThreadAllocator.hpp>
-#include <fmpi/mpi/Request.hpp>
-#include <fmpi/util/Trace.hpp>
-#include <gsl/span>
 #include <list>
-#include <mutex>
-#include <new>
-#include <numeric>
-#include <queue>
 #include <rtlx/Enum.hpp>
-#include <rtlx/Timer.hpp>
-#include <thread>
 #include <tlx/container/ring_buffer.hpp>
-#include <tlx/container/simple_vector.hpp>
 #include <tlx/delegate.hpp>
-#include <unordered_map>
 
 namespace fmpi {
 

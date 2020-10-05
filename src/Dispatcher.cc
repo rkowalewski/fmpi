@@ -1,5 +1,8 @@
+#include <fmpi/Debug.hpp>
+#include <fmpi/NumericRange.hpp>
 #include <fmpi/concurrency/Dispatcher.hpp>
 #include <fmpi/mpi/Algorithm.hpp>
+#include <numeric>
 #include <utility>
 
 namespace fmpi {
@@ -391,16 +394,4 @@ std::
   return std::make_pair(std::begin(items_), std::end(items_));
 }
 
-#if 0
-collective_future::collective_future(
-    std::shared_ptr<ScheduleCtx>                    sp,
-    std::shared_ptr<SimpleConcurrentDeque<Message>> q)
-  : base(sp, q) {
-}
-
-collective_future::~collective_future() {
-  FMPI_DBG("waiting");
-  wait();
-}
-#endif
 }  // namespace fmpi

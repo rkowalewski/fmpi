@@ -5,6 +5,7 @@
 #include <boost/lockfree/spsc_queue.hpp>
 #include <cassert>
 #include <cstdlib>
+#include <fmpi/Debug.hpp>
 #include <fmpi/NumericRange.hpp>
 #include <fmpi/Pinning.hpp>
 #include <fmpi/concurrency/Async.hpp>

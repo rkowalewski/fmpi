@@ -1,6 +1,7 @@
 #ifndef FMPI_MEMORY_CONTIGUOUSPOOLALLOCATOR_HPP
 #define FMPI_MEMORY_CONTIGUOUSPOOLALLOCATOR_HPP
 
+#include <cassert>
 #include <memory>
 
 namespace fmpi {
