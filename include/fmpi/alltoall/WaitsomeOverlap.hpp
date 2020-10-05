@@ -136,9 +136,9 @@ inline void ring_waitsome_overlap(
 
   auto promise = collective_promise{};
   auto future  = promise.get_future();
+  auto queue   = future.arrival_queue();
   auto schedule_state =
       std::make_unique<fmpi::ScheduleCtx>(nslots, std::move(promise));
-  auto queue = future.arrival_queue();
 
   schedule_state->register_signal(
       message_type::IRECV, [buf_alloc, blocksize](Message& message) mutable {
@@ -253,7 +253,7 @@ inline void ring_waitsome_overlap(
             std::end(msgs),
             std::back_inserter(pieces),
             [palloc = &buf_alloc](auto& msg) {
-              auto span   = gsl::span(
+              auto span = gsl::span(
                   static_cast<value_type*>(msg.writable_buffer()),
                   msg.count());
 
