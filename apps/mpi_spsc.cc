@@ -141,9 +141,14 @@ int run() {
   // make context
   std::array<std::size_t, fmpi::detail::n_types> nslots{};
   nslots.fill(winsz / 2);
-  auto schedule_ctx = std::make_shared<fmpi::ScheduleCtx>(nslots);
 
-  fmpi::v2::CommDispatcher dispatcher{};
+  fmpi::collective_promise promise;
+  auto                     future = promise.get_future();
+
+  auto schedule_ctx =
+      std::make_unique<fmpi::ScheduleCtx>(nslots, std::move(promise));
+
+  fmpi::CommDispatcher dispatcher{};
 
   schedule_ctx->register_signal(
       fmpi::message_type::IRECV, [&buf_alloc](fmpi::Message& message) {
@@ -164,7 +169,7 @@ int run() {
       });
 
   // submit into dispatcher
-  auto const hdl = dispatcher.submit(schedule_ctx);
+  auto hdl = dispatcher.submit(std::move(schedule_ctx));
 
   for (auto&& peer : fmpi::range(mpi::Rank(0), mpi::Rank(world.size()))) {
     constexpr int mpi_tag = 123;
@@ -184,7 +189,6 @@ int run() {
   iterator ret;
   try {
     ret = f_comp.get();
-    schedule_ctx->wait();
   } catch (...) {
     std::cout << "computation done...\n";
   }

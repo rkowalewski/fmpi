@@ -134,8 +134,11 @@ inline void ring_waitsome_overlap(
   std::array<std::size_t, detail::n_types> nslots{};
   nslots.fill(reqsInFlight);
 
-  auto schedule_state = std::make_shared<fmpi::ScheduleCtx>(nslots);
-  auto queue          = std::make_shared<SimpleConcurrentDeque<Message>>();
+  auto promise = collective_promise{};
+  auto future  = promise.get_future();
+  auto schedule_state =
+      std::make_unique<fmpi::ScheduleCtx>(nslots, std::move(promise));
+  auto queue = future.arrival_queue();
 
   schedule_state->register_signal(
       message_type::IRECV, [buf_alloc, blocksize](Message& message) mutable {
@@ -150,17 +153,17 @@ inline void ring_waitsome_overlap(
       });
 
   schedule_state->register_callback(
-      message_type::IRECV, [queue](std::vector<Message> msgs) mutable {
-        FMPI_ASSERT(queue);
+      message_type::IRECV, [sptr = queue](std::vector<Message> msgs) mutable {
+        FMPI_ASSERT(sptr);
         std::move(
-            std::begin(msgs), std::end(msgs), std::back_inserter(*queue));
+            std::begin(msgs), std::end(msgs), std::back_inserter(*sptr));
       });
 
   auto& dispatcher = dispatcher_executor();
   // submit into dispatcher
-  auto const hdl = dispatcher.submit(schedule_state);
+  auto const hdl = dispatcher.submit(std::move(schedule_state));
 
-  auto future = collective_future{std::move(schedule_state), queue};
+  // auto future = collective_future{std::move(schedule_state), queue};
 
   t_init.finish();
 
@@ -365,7 +368,8 @@ inline void ring_waitsome_overlap(
     // We definitely have to wait here because although all data has arrived
     // there might still be pending tasks for other peers (e.g. sends)
     // comm_dispatcher.loop_until_done();
-    // schedule_state->wait();
+    auto ret = future.get();
+    FMPI_ASSERT(ret == MPI_SUCCESS);
   }
 
   // steady_timer t_comp{trace.duration(detail::shutdown)};

@@ -10,6 +10,7 @@
 #include <fmpi/NumericRange.hpp>
 #include <fmpi/common/Porting.hpp>
 #include <fmpi/concurrency/BufferedChannel.hpp>
+#include <fmpi/concurrency/Future.hpp>
 #include <fmpi/concurrency/SPSC.hpp>
 #include <fmpi/concurrency/SimpleConcurrentDeque.hpp>
 #include <fmpi/container/FixedVector.hpp>
@@ -33,13 +34,11 @@
 
 namespace fmpi {
 
-namespace v2 {
 class CommDispatcher;
 
-}
-
 class ScheduleHandle {
-  using identifier = uint32_t;
+  using identifier                    = int32_t;
+  static constexpr identifier null_id = -2;
 
  public:
   constexpr ScheduleHandle() = default;
@@ -52,7 +51,7 @@ class ScheduleHandle {
   }
 
  private:
-  identifier id_ = -1;
+  identifier id_ = null_id;
 };
 
 constexpr bool operator==(
@@ -88,6 +87,133 @@ struct CommTask {
   message_type   type{message_type::INVALID};
 };
 
+namespace detail {
+
+static constexpr auto n_types = rtlx::to_underlying(message_type::INVALID);
+}
+
+enum class status
+{
+  pending,
+  running,
+  resolved,
+  rejected
+};
+
+class ScheduleCtx {
+  friend class CommDispatcher;
+
+  using signal   = tlx::delegate<void(Message&)>;
+  using callback = tlx::delegate<void(std::vector<Message>)>;
+
+  enum class status
+  {
+    pending,
+    error,
+    ready
+  };
+
+ public:
+  explicit ScheduleCtx(
+      std::array<std::size_t, detail::n_types> nslots, collective_promise pr);
+
+  void register_signal(message_type type, signal&& callable);
+  void register_callback(message_type type, callback&& callable);
+
+  collective_future get_future();
+
+  // void wait();
+  // bool ready() const noexcept;
+
+ private:
+  // complete all outstanding requests
+  void complete_all();
+  // void notify();
+
+  /// Request Handles
+  std::array<std::size_t, detail::n_types> const    nslots_;
+  std::size_t const                                 winsz_;
+  FixedVector<MPI_Request>                          handles_;
+  FixedVector<CommTask>                             pending_;
+  std::array<tlx::RingBuffer<int>, detail::n_types> slots_;
+
+  /// Signals and Callbacks
+  std::array<signal, detail::n_types>   signals_{};
+  std::array<callback, detail::n_types> callbacks_{};
+
+  /// Status Information
+  status state_{status::pending};
+
+  // promise to notify waiting tasks
+  collective_promise promise_{};
+};
+
+class CommDispatcher {
+  static_assert(
+      detail::n_types == 2, "only four message types supported for now");
+
+  using channel = buffered_channel<CommTask>;
+
+  class ctx_map {
+    using value_type =
+        std::pair<ScheduleHandle, std::unique_ptr<ScheduleCtx>>;
+
+    using allocator = HeapAllocator<value_type>;
+
+    using container =
+        std::list<value_type, ContiguousPoolAllocator<value_type>>;
+
+   public:
+    using iterator       = typename container::iterator;
+    using const_iterator = typename container::const_iterator;
+
+    ctx_map();
+    void assign(ScheduleHandle const& hdl, std::unique_ptr<ScheduleCtx>);
+    void erase(iterator it);
+
+    bool                            contains(ScheduleHandle const& hdl) const;
+    std::pair<iterator, bool>       find(ScheduleHandle const& hdl);
+    std::pair<const_iterator, bool> find(ScheduleHandle const& hdl) const;
+
+    std::pair<iterator, iterator> known_schedules();
+
+    void release_expired();
+
+   private:
+    iterator       do_find(ScheduleHandle hdl);
+    const_iterator do_find(ScheduleHandle hdl) const;
+
+    mutable std::mutex mtx_;
+    allocator          alloc_;
+    container          items_;
+  };
+
+ public:
+  CommDispatcher();
+  ~CommDispatcher();
+
+  CommDispatcher(CommDispatcher const&) = delete;
+  CommDispatcher& operator=(CommDispatcher const&) = delete;
+
+  ScheduleHandle submit(std::unique_ptr<ScheduleCtx> ctx);
+
+  void schedule(
+      ScheduleHandle const& handle, message_type type, Message message);
+
+  void commit(ScheduleHandle const& hdl);
+
+ private:
+  void progress_all(bool blocking = false);
+  void worker();
+
+  channel     channel_;
+  ctx_map     schedules_;
+  std::thread thread_;
+};
+
+CommDispatcher& dispatcher_executor();
+
+#if 0
 namespace detail {
 static constexpr auto n_types = rtlx::to_underlying(message_type::INVALID);
 
@@ -165,193 +291,7 @@ class MultiTaskQueue {
 };
 
 }  // namespace detail
-
-enum class status
-{
-  pending,
-  running,
-  resolved,
-  rejected
-};
-
-class ScheduleCtx {
-  friend class v2::CommDispatcher;
-
-  using signal   = tlx::delegate<void(Message&)>;
-  using callback = tlx::delegate<void(std::vector<Message>)>;
-
-  enum class status
-  {
-    pending,
-    ready
-  };
-
- public:
-  explicit ScheduleCtx(std::array<std::size_t, detail::n_types> nslots);
-
-  void register_signal(message_type type, signal&& callable);
-  void register_callback(message_type type, callback&& callable);
-
-  void wait();
-  bool ready() const noexcept;
-
- private:
-  // complete all outstanding requests
-  void complete_all();
-  void notify();
-
-  /// Request Handles
-  std::array<std::size_t, detail::n_types> const    nslots_;
-  std::size_t const                                 winsz_;
-  FixedVector<MPI_Request>                          handles_;
-  FixedVector<CommTask>                             pending_;
-  std::array<tlx::RingBuffer<int>, detail::n_types> slots_;
-
-  /// Signals and Callbacks
-  // std::array<std::list<signal>, detail::n_types>   signals_;
-  // std::array<std::list<callback>, detail::n_types> callbacks_;
-  std::array<signal, detail::n_types>   signals_{};
-  std::array<callback, detail::n_types> callbacks_{};
-
-  /// Status Information
-  std::mutex              mtx_;
-  std::condition_variable cv_finish_;
-  std::atomic<status>     state_{status::pending};
-};
-
-namespace v2 {
-class CommDispatcher {
-  static_assert(
-      detail::n_types == 2, "only four message types supported for now");
-
-  using channel = buffered_channel<CommTask>;
-
-  class ctx_map {
-    using value_type = std::pair<ScheduleHandle, std::weak_ptr<ScheduleCtx>>;
-    using allocator  = HeapAllocator<value_type>;
-
-    using container =
-        std::list<value_type, ContiguousPoolAllocator<value_type>>;
-
-   public:
-    using iterator       = typename container::iterator;
-    using const_iterator = typename container::const_iterator;
-
-    ctx_map();
-    void assign(
-        ScheduleHandle const& hdl, const std::weak_ptr<ScheduleCtx>& wp);
-
-    bool                            contains(ScheduleHandle const& hdl) const;
-    std::pair<iterator, bool>       find(ScheduleHandle const& hdl);
-    std::pair<const_iterator, bool> find(ScheduleHandle const& hdl) const;
-
-    template <class OutputIterator>
-    void copy(OutputIterator d_first);
-
-    void release_expired();
-
-   private:
-    iterator       do_find(ScheduleHandle hdl);
-    const_iterator do_find(ScheduleHandle hdl) const;
-
-    mutable std::mutex mtx_;
-    allocator          alloc_;
-    container          items_;
-  };
-
- public:
-  CommDispatcher();
-  ~CommDispatcher();
-
-  CommDispatcher(CommDispatcher const&) = delete;
-  CommDispatcher& operator=(CommDispatcher const&) = delete;
-
-  ScheduleHandle submit(const std::weak_ptr<ScheduleCtx>& ctx);
-
-  void schedule(
-      ScheduleHandle const& handle, message_type type, Message message);
-
-  void commit(ScheduleHandle const& hdl);
-
- private:
-  void progress_all(bool blocking = false);
-  void worker();
-
-  channel     channel_;
-  ctx_map     schedules_;
-  std::thread thread_;
-};
-
-template <class OutputIterator>
-void CommDispatcher::ctx_map::copy(OutputIterator d_first) {
-  std::lock_guard<std::mutex> lg{mtx_};
-  std::copy(items_.begin(), items_.end(), d_first);
-}
-
-}  // namespace v2
-
-v2::CommDispatcher& dispatcher_executor();
-
-namespace detail {
-
-class future_shared_state {
-  using mpi_result           = int;
-  using simple_message_queue = SimpleConcurrentDeque<Message>;
-
-  // the schedule context
-  std::shared_ptr<ScheduleCtx> ctx_;
-  // the queue to notify about ready tasks
-  std::shared_ptr<simple_message_queue> q_;
-
- public:
-  future_shared_state() noexcept = default;
-
-  future_shared_state(
-      std::shared_ptr<ScheduleCtx>          sp,
-      std::shared_ptr<simple_message_queue> q);
-
-  void       wait();
-  bool       is_ready() const noexcept;
-  bool       valid() const noexcept;
-  mpi_result get();
-};
-
-}  // namespace detail
-
-class when_any_executor;
-
-class collective_future : private detail::future_shared_state {
-  using base = detail::future_shared_state;
-
-  friend class when_any_executor;
-
- public:
-  // Constructors
-  collective_future() noexcept = default;
-
-  collective_future(
-      std::shared_ptr<ScheduleCtx>                    sp,
-      std::shared_ptr<SimpleConcurrentDeque<Message>> q);
-
-  ~collective_future();
-
-  // Only Movable
-  collective_future(const collective_future&) = delete;
-  collective_future(collective_future&&)      = default;
-
-  collective_future& operator=(const collective_future&) = delete;
-  collective_future& operator=(collective_future&&) = default;
-
-  using base::get;
-  using base::is_ready;
-  using base::valid;
-  using base::wait;
-};
-
-class when_any_executor {
-  auto when_any(collective_future& fut);
-  auto when_some(collective_future& fut);
-};
+#endif
 
 #if 0
 template <mpi::reqsome_op testReqs = mpi::testsome>

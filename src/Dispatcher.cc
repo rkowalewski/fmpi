@@ -2,20 +2,28 @@
 #include <fmpi/mpi/Algorithm.hpp>
 #include <utility>
 
-static std::atomic_uint32_t last_schedule_id = 0;
-
 namespace fmpi {
 
-v2::CommDispatcher& dispatcher_executor() {
-  static auto dispatcher = std::make_unique<v2::CommDispatcher>();
+namespace internal {
+
+constexpr std::size_t      channel_capacity   = 10000;
+constexpr std::size_t      schedules_capacity = 100;
+static std::atomic_int32_t last_schedule_id   = 0;
+
+}  // namespace internal
+
+CommDispatcher& dispatcher_executor() {
+  static auto dispatcher = std::make_unique<CommDispatcher>();
   return *dispatcher;
 }
 
-ScheduleCtx::ScheduleCtx(std::array<std::size_t, detail::n_types> nslots)
+ScheduleCtx::ScheduleCtx(
+    std::array<std::size_t, detail::n_types> nslots, collective_promise pr)
   : nslots_(nslots)
   , winsz_(std::accumulate(nslots.begin(), nslots.end(), 0u))
   , handles_(winsz_, MPI_REQUEST_NULL)
-  , pending_(winsz_) {
+  , pending_(winsz_)
+  , promise_(std::move(pr)) {
   // generate the slots
   std::size_t n = 0;
   for (auto&& i : range(detail::n_types)) {
@@ -23,25 +31,6 @@ ScheduleCtx::ScheduleCtx(std::array<std::size_t, detail::n_types> nslots)
     std::generate_n(
         std::front_inserter(slots_[i]), nslots[i], [&n]() { return n++; });
   }
-}
-
-void ScheduleCtx::notify() {
-  std::lock_guard<std::mutex> lk{mtx_};
-
-  auto const prev = state_.exchange(status::ready, std::memory_order_relaxed);
-  FMPI_ASSERT(prev == status::pending);
-  cv_finish_.notify_all();
-}
-
-void ScheduleCtx::wait() {
-  std::unique_lock<std::mutex> lk(mtx_);
-  while (state_ != status::ready) {
-    cv_finish_.wait(lk);
-  }
-}
-
-bool ScheduleCtx::ready() const noexcept {
-  return state_.load(std::memory_order_relaxed) == status::ready;
 }
 
 inline void ScheduleCtx::complete_all() {
@@ -89,13 +78,12 @@ void ScheduleCtx::register_callback(message_type type, callback&& callable) {
   callbacks_[rtlx::to_underlying(type)] = std::move(callable);
 }
 
-namespace v2 {
-
-constexpr std::size_t channel_capacity   = 10000;
-constexpr std::size_t schedules_capacity = 100;
+collective_future ScheduleCtx::get_future() {
+  return promise_.get_future();
+}
 
 CommDispatcher::CommDispatcher()
-  : channel_(channel_capacity) {
+  : channel_(internal::channel_capacity) {
   thread_ = std::thread([this]() { worker(); });
 }
 
@@ -129,8 +117,9 @@ struct DefaultMessageHandler {
   }
 };
 
-ScheduleHandle CommDispatcher::submit(const std::weak_ptr<ScheduleCtx>& ctx) {
-  auto hdl = ScheduleHandle{last_schedule_id++};
+ScheduleHandle CommDispatcher::submit(std::unique_ptr<ScheduleCtx> ctx) {
+  auto hdl = ScheduleHandle{internal::last_schedule_id++};
+  FMPI_ASSERT(ctx->promise_.sptr_.use_count() >= 2);
   schedules_.assign(hdl, std::move(ctx));
   return hdl;
 }
@@ -162,84 +151,84 @@ void CommDispatcher::worker() {
       auto [it, ok] = schedules_.find(task.id);
       FMPI_ASSERT(ok);
 
-      if (auto ctx = it->second.lock()) {
-        if (task.type == message_type::COMMIT) {
-          ctx->complete_all();
-          ctx->notify();
-          continue;
-        }
+      auto& up = it->second;
 
-        auto const ti   = rtlx::to_underlying(task.type);
-        auto&      rb   = ctx->slots_[ti];
-        int        slot = MPI_UNDEFINED;
-        MPI_Status status;
+      if (task.type == message_type::COMMIT) {
+        FMPI_ASSERT(up->state_ == ScheduleCtx::status::pending);
+        up->complete_all();
+        up->promise_.set_value(MPI_SUCCESS);
+        schedules_.erase(it);
+        continue;
+      }
 
-        if (rb.empty()) {
-          // complete one of pending requests and replace it with new slot
-          std::vector<MPI_Request> reqs;
-          std::vector<int>         idxs;
+      auto const ti   = rtlx::to_underlying(task.type);
+      auto&      rb   = up->slots_[ti];
+      int        slot = MPI_UNDEFINED;
+      MPI_Status status;
 
-          auto const first_slot = std::accumulate(
-              ctx->nslots_.begin(), ctx->nslots_.begin() + ti, 0);
+      if (rb.empty()) {
+        // complete one of pending requests and replace it with new slot
+        std::vector<MPI_Request> reqs;
+        std::vector<int>         idxs;
 
-          auto const last_slot = first_slot + ctx->nslots_[ti];
+        auto const first_slot =
+            std::accumulate(up->nslots_.begin(), up->nslots_.begin() + ti, 0);
 
-          FMPI_DBG(std::make_pair(first_slot, last_slot));
+        auto const last_slot = first_slot + up->nslots_[ti];
 
-          for (auto&& idx : range<int>(first_slot, last_slot)) {
-            if (ctx->pending_[idx].type == task.type) {
-              reqs.emplace_back(ctx->handles_[idx]);
-              idxs.emplace_back(idx);
-            }
+        FMPI_DBG(std::make_pair(first_slot, last_slot));
+
+        for (auto&& idx : range<int>(first_slot, last_slot)) {
+          if (up->pending_[idx].type == task.type) {
+            reqs.emplace_back(up->handles_[idx]);
+            idxs.emplace_back(idx);
           }
-
-          auto const count =
-              std::count(std::begin(reqs), std::end(reqs), MPI_REQUEST_NULL);
-
-          FMPI_ASSERT(reqs.empty() || count == 0);
-
-          FMPI_DBG(reqs.size());
-
-          int        c   = MPI_UNDEFINED;
-          auto const ret = MPI_Waitany(reqs.size(), reqs.data(), &c, &status);
-
-          FMPI_ASSERT(ret == MPI_SUCCESS);
-          FMPI_ASSERT(c != MPI_UNDEFINED);
-
-          slot                = idxs[c];
-          ctx->handles_[slot] = MPI_REQUEST_NULL;
-        } else {
-          // obtain free slot from ring buffer
-          slot = rb.back();
-          rb.pop_back();
         }
 
-        FMPI_ASSERT(ctx->handles_[slot] == MPI_REQUEST_NULL);
+        auto const count =
+            std::count(std::begin(reqs), std::end(reqs), MPI_REQUEST_NULL);
 
-        // Issue new message
-        if (ctx->signals_[ti]) {
-          ctx->signals_[ti](task.message);
-        }
+        FMPI_ASSERT(reqs.empty() || count == 0);
 
-        // TODO: register custom message handler for each context
-        DefaultMessageHandler h{};
-        auto ret = h(task.message, ctx->handles_[slot], task.type);
+        FMPI_DBG(reqs.size());
+
+        int        c   = MPI_UNDEFINED;
+        auto const ret = MPI_Waitany(reqs.size(), reqs.data(), &c, &status);
 
         FMPI_ASSERT(ret == MPI_SUCCESS);
+        FMPI_ASSERT(c != MPI_UNDEFINED);
 
-        std::swap(task, ctx->pending_[slot]);
+        slot               = idxs[c];
+        up->handles_[slot] = MPI_REQUEST_NULL;
+      } else {
+        // obtain free slot from ring buffer
+        slot = rb.back();
+        rb.pop_back();
+      }
 
-        // task holds now the previous task...
-        // so let's complete callbacks for it
+      FMPI_ASSERT(up->handles_[slot] == MPI_REQUEST_NULL);
 
-        if (task.valid() and ctx->callbacks_[ti]) {
-          ctx->callbacks_[ti](std::vector<Message>({task.message}));
-        }
+      // Issue new message
+      if (up->signals_[ti]) {
+        up->signals_[ti](task.message);
+      }
+
+      // TODO: register custom message handler for each context
+      DefaultMessageHandler h{};
+      auto ret = h(task.message, up->handles_[slot], task.type);
+
+      FMPI_ASSERT(ret == MPI_SUCCESS);
+
+      std::swap(task, up->pending_[slot]);
+
+      // task holds now the previous task...
+      // so let's complete callbacks for it
+
+      if (task.valid() and up->callbacks_[ti]) {
+        up->callbacks_[ti](std::vector<Message>({task.message}));
       }
 
       progress_all();
-
-      schedules_.release_expired();
     }
   }
 }
@@ -250,34 +239,26 @@ void CommDispatcher::commit(ScheduleHandle const& hdl) {
 }
 
 void CommDispatcher::progress_all(bool blocking) {
-  // progress all schedules
-  using schedule_t =
-      typename std::iterator_traits<typename ctx_map::iterator>::value_type;
-
   // all requests
-  std::vector<MPI_Request>                  reqs;
-  std::vector<std::shared_ptr<ScheduleCtx>> sps;
+  std::vector<MPI_Request>  reqs;
+  std::vector<ScheduleCtx*> sps;
   // map indices in reqs to tuples of (sps, req_idx)
   std::vector<std::pair<std::size_t, std::size_t>> ctx_handles;
 
-  // create a copy of all known schedules
   {
-    // schedules
-    std::vector<schedule_t> scheds;
-    schedules_.copy(std::back_inserter(scheds));
-    sps.reserve(scheds.size());
+    // create a copy of all known schedules
+    auto [first, last] = schedules_.known_schedules();
+    sps.reserve(std::distance(first, last));
 
-    for (auto&& sched : scheds) {
-      auto wp = sched.second;
-      if (auto sp_ = wp.lock()) {
-        auto& sp = sps.emplace_back(std::move(sp_));
+    for (auto it = first; it != last; ++it) {
+      auto* up = it->second.get();
+      auto& sp = sps.emplace_back(up);
 
-        for (auto&& i : range(sp->handles_.size())) {
-          if (sp->handles_[i] != MPI_REQUEST_NULL) {
-            FMPI_ASSERT(sp->pending_[i].valid());
-            reqs.emplace_back(sp->handles_[i]);
-            ctx_handles.emplace_back(sps.size() - 1, i);
-          }
+      for (auto&& i : range(sp->handles_.size())) {
+        if (sp->handles_[i] != MPI_REQUEST_NULL) {
+          FMPI_ASSERT(sp->pending_[i].valid());
+          reqs.emplace_back(sp->handles_[i]);
+          ctx_handles.emplace_back(sps.size() - 1, i);
         }
       }
     }
@@ -307,6 +288,10 @@ void CommDispatcher::progress_all(bool blocking) {
     idxs_completed.resize((n == MPI_UNDEFINED) ? 0 : n);
 
     FMPI_DBG(std::make_pair(reqs.size(), idxs_completed.size()));
+  }
+
+  if (idxs_completed.empty()) {
+    return;
   }
 
   FixedVector<std::array<std::vector<Message>, detail::n_types>> ctx_tasks(
@@ -348,21 +333,22 @@ void CommDispatcher::progress_all(bool blocking) {
   }
 }
 
-void CommDispatcher::ctx_map::release_expired() {
-  std::lock_guard<std::mutex> lg{mtx_};
-  items_.remove_if([](auto const& pair) { return pair.second.expired(); });
-}
-
 CommDispatcher::ctx_map::ctx_map()
-  : alloc_(schedules_capacity)
+  : alloc_(internal::schedules_capacity)
   , items_(alloc_) {
 }
 
 void CommDispatcher::ctx_map::assign(
-    ScheduleHandle const& hdl, const std::weak_ptr<ScheduleCtx>& p) {
+    ScheduleHandle const& hdl, std::unique_ptr<ScheduleCtx> p) {
   std::lock_guard<std::mutex> lg{mtx_};
   FMPI_ASSERT(do_find(hdl) == std::end(items_));
-  items_.emplace_back(hdl, p);
+  items_.emplace_back(hdl, std::move(p));
+}
+
+void CommDispatcher::ctx_map::erase(iterator it) {
+  std::lock_guard<std::mutex> lg{mtx_};
+  FMPI_ASSERT(do_find(it->first) != std::end(items_));
+  items_.erase(it);
 }
 
 bool CommDispatcher::ctx_map::contains(ScheduleHandle const& hdl) const {
@@ -398,35 +384,14 @@ CommDispatcher::ctx_map::iterator CommDispatcher::ctx_map::do_find(
   });
 }
 
-}  // namespace v2
-
-namespace detail {
-future_shared_state::future_shared_state(
-    std::shared_ptr<ScheduleCtx> sp, std::shared_ptr<simple_message_queue> q)
-  : ctx_(sp)
-  , q_(q) {
+std::
+    pair<CommDispatcher::ctx_map::iterator, CommDispatcher::ctx_map::iterator>
+    CommDispatcher::ctx_map::known_schedules() {
+  std::lock_guard<std::mutex> lg{mtx_};
+  return std::make_pair(std::begin(items_), std::end(items_));
 }
 
-void future_shared_state::wait() {
-  ctx_->wait();
-}
-
-bool future_shared_state::is_ready() const noexcept {
-  return ctx_->ready();
-}
-
-future_shared_state::mpi_result future_shared_state::get() {
-  auto sptr = std::move(ctx_);
-  sptr->wait();
-  return MPI_SUCCESS;
-}
-
-bool future_shared_state::valid() const noexcept {
-  return ctx_ != nullptr;
-}
-
-}  // namespace detail
-
+#if 0
 collective_future::collective_future(
     std::shared_ptr<ScheduleCtx>                    sp,
     std::shared_ptr<SimpleConcurrentDeque<Message>> q)
@@ -437,4 +402,5 @@ collective_future::~collective_future() {
   FMPI_DBG("waiting");
   wait();
 }
+#endif
 }  // namespace fmpi

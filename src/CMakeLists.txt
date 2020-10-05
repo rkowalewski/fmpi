@@ -1,6 +1,7 @@
 add_library(fmpi
     common/Porting.cc
     concurrency/CacheLocality.cc
+    concurrency/Future.cc
     detail/Assert.cc
     memory/BlockAllocator.cc
     memory/ThreadAllocator.cc

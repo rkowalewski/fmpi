@@ -15,8 +15,6 @@ class SimpleConcurrentDeque {
   using value_type = T;
 
  public:
-  SimpleConcurrentDeque() noexcept = default;
-
   //! \brief Emplaces a new instance of T in front of the deque
   template <typename... Args>
   void emplace_front(Args&&... args) {
