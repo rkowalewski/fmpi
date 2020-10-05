@@ -122,7 +122,6 @@ struct DefaultMessageHandler {
 
 ScheduleHandle CommDispatcher::submit(std::unique_ptr<ScheduleCtx> ctx) {
   auto hdl = ScheduleHandle{internal::last_schedule_id++};
-  FMPI_ASSERT(ctx->promise_.sptr_.use_count() >= 2);
   schedules_.assign(hdl, std::move(ctx));
   return hdl;
 }

@@ -30,9 +30,9 @@ class future_shared_state {
 class collective_future;
 
 class collective_promise {
+  std::shared_ptr<detail::future_shared_state> sptr_;
 
  public:
-  std::shared_ptr<detail::future_shared_state> sptr_;
   collective_promise();
   collective_promise(const collective_promise&)     = delete;
   collective_promise(collective_promise&&) noexcept = default;
