@@ -45,5 +45,4 @@ mpiexec -n $$SLURM_NTASKS \
     -genv FMPI_HW_CORES="$$ncores" \
     -genv FMPI_MGMT_CPUS="$$num_mgmt_threads" \
     ./jobs/impi_omp.sh \
-    "$binary" \
-    $$SLURM_JOB_NUM_NODES $binary_args
+    "$binary" $binary_args
