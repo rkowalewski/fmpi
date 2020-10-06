@@ -139,10 +139,10 @@ inline void ring_waitsome_overlap(
     auto enough_work = [/*&config*/](
                            typename pieces_t::const_iterator c_first,
                            typename pieces_t::const_iterator c_last) -> bool {
-      //auto const     npieces    = std::distance(c_first, c_last);
-      //constexpr auto min_pieces = 1;
+      // auto const     npieces    = std::distance(c_first, c_last);
+      // constexpr auto min_pieces = 1;
 
-      //auto const nbytes = std::accumulate(
+      // auto const nbytes = std::accumulate(
       //    c_first, c_last, std::size_t(0), [](auto acc, auto const& c) {
       //      return acc + std::visit(
       //                       [](auto&& v) -> std::size_t {
@@ -180,8 +180,7 @@ inline void ring_waitsome_overlap(
             std::back_inserter(pieces),
             [palloc = &buf_alloc](auto& msg) {
               auto span = gsl::span(
-                  static_cast<value_type*>(msg.writable_buffer()),
-                  msg.count());
+                  static_cast<value_type*>(msg.buffer()), msg.count());
 
               FMPI_DBG_STREAM(
                   "receiving segment: " << std::make_pair(
@@ -423,14 +422,8 @@ collective_future CollectiveCtx<Schedule>::execute() {
 
   auto const& ctx = args_.comm;
 
-  auto const  nr       = ctx.size();
   auto const& commAlgo = schedule_.schedule;
 
-#if 0
-  auto const name = std::string{Schedule::NAME} +
-                    std::string{algorithm_name} + std::to_string(NReqs);
-
-#endif
   auto trace = MultiTrace{std::string_view(schedule_.name)};
 
   FMPI_DBG_STREAM(
@@ -439,13 +432,9 @@ collective_future CollectiveCtx<Schedule>::execute() {
 
   steady_timer t_init{trace.duration(detail::initialize)};
 
-  // Each round is composed of an isend-irecv pair...
-  // constexpr std::size_t messages_per_round = 2;
-
   // exclude the local message to MPI_Self
   auto const n_rounds     = commAlgo.phaseCount();
   auto const reqsInFlight = std::min(std::size_t(n_rounds), schedule_.winsz);
-  // auto const winsz        = reqsInFlight * messages_per_round;
 
   // intermediate buffer for two pipelines
   using thread_alloc = ThreadAllocator<std::byte>;

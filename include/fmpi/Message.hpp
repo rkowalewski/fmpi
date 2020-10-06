@@ -98,11 +98,11 @@ class Message {
     set_buffer(buf.data(), buf.size(), mpi::type_mapper<T>::type());
   }
 
-  constexpr void* writable_buffer() noexcept {
+  constexpr void* buffer() noexcept {
     return buf_;
   }
 
-  [[nodiscard]] constexpr const void* readable_buffer() const noexcept {
+  [[nodiscard]] constexpr const void* buffer() const noexcept {
     return buf_;
   }
 

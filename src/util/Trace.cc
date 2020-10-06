@@ -53,7 +53,7 @@ MultiTrace::~MultiTrace() {
   if constexpr (kEnableTrace) {
     if (!name_.empty() && name_ != anonymous) {
       auto& global_instance = TraceStore::instance();
-      FMPI_ASSERT(!global_instance.contains(name_));
+      //FMPI_ASSERT(!global_instance.contains(name_));
       global_instance.insert(name_, std::begin(values_), std::end(values_));
     }
   }

@@ -2,18 +2,17 @@
 #define FMPI_CONCURRENCY_SIMPLEDISPATCHER_HPP
 
 #include <condition_variable>
-#include <future>
-#include <mutex>
-#include <numeric>
-#include <queue>
-#include <utility>
-
 #include <fmpi/Config.hpp>
 #include <fmpi/Function.hpp>
 #include <fmpi/Message.hpp>
 #include <fmpi/Pinning.hpp>
 #include <fmpi/concurrency/UnlockGuard.hpp>
 #include <fmpi/mpi/TypeMapper.hpp>
+#include <future>
+#include <mutex>
+#include <numeric>
+#include <queue>
+#include <utility>
 
 namespace fmpi {
 
@@ -74,12 +73,12 @@ inline std::future<mpi::return_code> SimpleDispatcher::dispatch(
         auto& send = msg_pair.first;
         auto& recv = msg_pair.second;
         promise->set_value(MPI_Sendrecv(
-            send.readable_buffer(),
+            send.buffer(),
             send.count(),
             send.type(),
             send.peer(),
             kTagBruck,
-            recv.writable_buffer(),
+            recv.buffer(),
             recv.count(),
             recv.type(),
             recv.peer(),
@@ -109,12 +108,12 @@ inline std::future<mpi::return_code> SimpleDispatcher::dispatch(
     auto& send = msg_pair.first;
     auto& recv = msg_pair.second;
     promise->set_value(MPI_Sendrecv(
-        send.readable_buffer(),
+        send.buffer(),
         send.count(),
         send.type(),
         send.peer(),
         kTagBruck,
-        recv.writable_buffer(),
+        recv.buffer(),
         recv.count(),
         recv.type(),
         recv.peer(),

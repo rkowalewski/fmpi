@@ -105,7 +105,7 @@ struct DefaultMessageHandler {
   int operator()(Message& message, MPI_Request& req, message_type t) const {
     if (t == message_type::IRECV) {
       return mpi::irecv(
-          message.writable_buffer(),
+          message.buffer(),
           message.count(),
           message.type(),
           message.peer(),
@@ -116,7 +116,7 @@ struct DefaultMessageHandler {
     FMPI_ASSERT(t == message_type::ISEND);
 
     return mpi::isend(
-        message.readable_buffer(),
+        message.buffer(),
         message.count(),
         message.type(),
         message.peer(),

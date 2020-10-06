@@ -162,8 +162,8 @@ int run() {
       fmpi::message_type::IRECV,
       [&ready_tasks](std::vector<fmpi::Message> msgs) {
         for (auto&& msg : msgs) {
-          auto span = gsl::span(
-              static_cast<value_type*>(msg.writable_buffer()), msg.count());
+          auto span =
+              gsl::span(static_cast<value_type*>(msg.buffer()), msg.count());
 
           ready_tasks.push(std::make_pair(msg.peer(), span));
         }
