@@ -65,6 +65,7 @@ def process_options(args, cwd):
 
     options = {}
 
+    options['binary'] = args.binary
     options['nodes'] = args.nodes
     options['ntasks'] = args.ntasks
     options['threads'] = args.threads
