@@ -122,8 +122,8 @@ int main(int argc, char* argv[]) {
   }
 
   // calibrate clock
-  auto clock           = SynchronizedClock{};
-  bool is_clock_synced = clock.Init(world.mpiComm());
+  auto                  clock           = SynchronizedClock{};
+  [[maybe_unused]] bool is_clock_synced = clock.Init(world.mpiComm());
   assert(is_clock_synced);
 
   FMPI_DBG(params.niters);

@@ -422,8 +422,6 @@ collective_future CollectiveCtx<Schedule>::execute() {
   MPI_Type_get_extent(args_.recvtype, &recvlb, &recvextent);
   MPI_Type_get_extent(args_.sendtype, &sendlb, &sendextent);
 
-  constexpr auto algorithm_name = std::string_view("WaitsomeOverlap");
-
   auto const& ctx = args_.comm;
 
   auto const& commAlgo = schedule_.schedule;
