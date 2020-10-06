@@ -19,7 +19,6 @@ using namespace std::literals::string_view_literals;
 constexpr auto initialize = "Tmain.initialize"sv;
 constexpr auto dispatch   = "Tmain.dispatch"sv;
 constexpr auto receive    = "Tmain.receive"sv;
-constexpr auto shutdown   = "Tmain.shutdown"sv;
 constexpr auto idle       = "Tmain.idle"sv;
 constexpr auto compute    = kComputationTime;
 
@@ -39,17 +38,6 @@ struct CollectiveArgs {
   MPI_Datatype        recvtype;
   mpi::Context const& comm;
 };
-
-#if 0
-sendbuf_(sendbuf)
-  , sendcount_(sendcount)
-  , sendtype_(sendtype)
-  , recvbuf_(recvbuf)
-  , recvcount_(recvcount)
-  , recvtype_(recvtype)
-  , comm_(ctx)
-  , schedule_(ctx)
-#endif
 
 template <class Schedule>
 struct ScheduleArgs {
@@ -151,17 +139,17 @@ inline void ring_waitsome_overlap(
     auto enough_work = [/*&config*/](
                            typename pieces_t::const_iterator c_first,
                            typename pieces_t::const_iterator c_last) -> bool {
-      auto const     npieces    = std::distance(c_first, c_last);
-      constexpr auto min_pieces = 1;
+      //auto const     npieces    = std::distance(c_first, c_last);
+      //constexpr auto min_pieces = 1;
 
-      auto const nbytes = std::accumulate(
-          c_first, c_last, std::size_t(0), [](auto acc, auto const& c) {
-            return acc + std::visit(
-                             [](auto&& v) -> std::size_t {
-                               return v.size() * sizeof(value_type);
-                             },
-                             c);
-          });
+      //auto const nbytes = std::accumulate(
+      //    c_first, c_last, std::size_t(0), [](auto acc, auto const& c) {
+      //      return acc + std::visit(
+      //                       [](auto&& v) -> std::size_t {
+      //                         return v.size() * sizeof(value_type);
+      //                       },
+      //                       c);
+      //    });
 
       // auto const ncpus_rank = std::size_t(config.domain_size);
       return true;
@@ -262,7 +250,7 @@ inline void ring_waitsome_overlap(
   }
 
   {
-    steady_timer t_comp{trace.duration(kComputationTime)};
+    steady_timer t_comp{trace.duration(detail::compute)};
     FMPI_DBG("final merge");
     FMPI_DBG(pieces.size());
 
@@ -308,8 +296,6 @@ inline void ring_waitsome_overlap(
     auto ret = future.get();
     FMPI_ASSERT(ret == MPI_SUCCESS);
   }
-
-  // steady_timer t_comp{trace.duration(detail::shutdown)};
 
   // auto const& dispatcher_stats = comm_dispatcher.stats();
   // trace.merge(dispatcher_stats.begin(), dispatcher_stats.end());
