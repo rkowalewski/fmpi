@@ -14,7 +14,6 @@ class SimpleConcurrentDeque {
  public:
   using value_type = T;
 
- public:
   //! \brief Emplaces a new instance of T in front of the deque
   template <typename... Args>
   void emplace_front(Args&&... args) {
@@ -38,7 +37,7 @@ class SimpleConcurrentDeque {
   }
 
   //! \brief Clears the deque
-  void clear(void) {
+  void clear() {
     std::lock_guard<std::mutex> lock(mtx_);
     collection_.clear();
   }
@@ -47,7 +46,7 @@ class SimpleConcurrentDeque {
   //!
   //!        No exception is ever returned as we garanty that the deque is not
   //!        empty before trying to return data.
-  T pop_front(void) noexcept {
+  T pop_front() noexcept {
     std::unique_lock<std::mutex> lock{mtx_};
     cond_.wait(lock, [this]() { return not collection_.empty(); });
     auto elem = std::move(collection_.front());

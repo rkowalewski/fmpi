@@ -71,7 +71,7 @@ inline void ScheduleCtx::complete_all() {
       callbacks_[tid](msgs[tid]);
     }
   }
-}  // namespace fmpi
+}
 
 void ScheduleCtx::register_signal(message_type type, signal&& callable) {
   FMPI_ASSERT(not signals_[rtlx::to_underlying(type)]);
@@ -81,10 +81,6 @@ void ScheduleCtx::register_signal(message_type type, signal&& callable) {
 void ScheduleCtx::register_callback(message_type type, callback&& callable) {
   FMPI_ASSERT(not callbacks_[rtlx::to_underlying(type)]);
   callbacks_[rtlx::to_underlying(type)] = std::move(callable);
-}
-
-collective_future ScheduleCtx::get_future() {
-  return promise_.get_future();
 }
 
 CommDispatcher::CommDispatcher()
@@ -152,20 +148,27 @@ void CommDispatcher::worker() {
       constexpr bool blocking = true;
       progress_all(blocking);
       break;
-    } else if (status == channel_op_status::success) {
+    }
+    if (status == channel_op_status::success) {
       FMPI_ASSERT(task.valid());
 
       // retrieve ctx
+
       auto [it, ok] = schedules_.find(task.id);
+
       FMPI_ASSERT(ok);
 
       auto& uptr = it->second;
 
       if (task.type == message_type::COMMIT) {
         FMPI_ASSERT(uptr->state_ == ScheduleCtx::status::pending);
+
         uptr->complete_all();
+
         uptr->promise_.set_value(MPI_SUCCESS);
+
         schedules_.erase(it);
+
         continue;
       }
 

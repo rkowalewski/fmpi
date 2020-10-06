@@ -103,8 +103,6 @@ class ScheduleCtx {
   void register_signal(message_type type, signal&& callable);
   void register_callback(message_type type, callback&& callable);
 
-  collective_future get_future();
-
   // void wait();
   // bool ready() const noexcept;
 
@@ -151,7 +149,8 @@ class CommDispatcher {
     using const_iterator = typename container::const_iterator;
 
     ctx_map();
-    void assign(ScheduleHandle const& hdl, std::unique_ptr<ScheduleCtx>);
+    void assign(
+        ScheduleHandle const& hdl, std::unique_ptr<ScheduleCtx> /*p*/);
     void erase(iterator it);
 
     bool                            contains(ScheduleHandle const& hdl) const;
@@ -187,7 +186,7 @@ class CommDispatcher {
 
  private:
   void progress_all(bool blocking = false);
-  void handle_task(CommTask task, ScheduleCtx* const uptr);
+  static void handle_task(CommTask task, ScheduleCtx* uptr);
   void worker();
 
   channel     channel_;

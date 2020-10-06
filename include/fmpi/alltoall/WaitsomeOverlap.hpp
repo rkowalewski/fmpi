@@ -43,7 +43,7 @@ struct CollectiveArgs {
 template <class Schedule>
 struct ScheduleArgs {
   Schedule          schedule;
-  std::size_t const winsz;
+  std::size_t const winsz{};
   std::string const name;
 };
 
@@ -137,9 +137,10 @@ inline void ring_waitsome_overlap(
     auto       d_first = out;
     auto const d_last  = std::next(out, nels);
 
-    auto enough_work = [/*&config*/](
-                           typename pieces_t::const_iterator c_first,
-                           typename pieces_t::const_iterator c_last) -> bool {
+    auto enough_work =
+        [/*&config*/](
+            typename pieces_t::const_iterator /*c_first*/,
+            typename pieces_t::const_iterator /*c_last*/) -> bool {
       // auto const     npieces    = std::distance(c_first, c_last);
       // constexpr auto min_pieces = 1;
 
@@ -409,14 +410,16 @@ template <class Schedule>
 CollectiveCtx<Schedule>::CollectiveCtx(
     CollectiveArgs args, ScheduleArgs<Schedule> schedule)
   : args_(args)
-  , schedule_(schedule) {
+  , schedule_(std::move(schedule)) {
 }
 
 template <class Schedule>
 collective_future CollectiveCtx<Schedule>::execute() {
-  MPI_Aint recvlb, recvextent;
+  MPI_Aint recvlb{};
+  MPI_Aint recvextent{};
+  MPI_Aint sendlb{};
+  MPI_Aint sendextent{};
   MPI_Type_get_extent(args_.recvtype, &recvlb, &recvextent);
-  MPI_Aint sendlb, sendextent;
   MPI_Type_get_extent(args_.sendtype, &sendlb, &sendextent);
 
   constexpr auto algorithm_name = std::string_view("WaitsomeOverlap");

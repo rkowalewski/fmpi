@@ -46,9 +46,6 @@ class Context {
     return m_comm;
   }
 
-  Context const& sharedComm() const noexcept;
-  Context const& leaderComm() const noexcept;
-
   static Context const& world();
 
  private:

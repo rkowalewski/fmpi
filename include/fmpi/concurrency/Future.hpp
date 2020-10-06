@@ -21,7 +21,7 @@ class future_shared_state {
  public:
   void             wait();
   void             set_value(mpi::return_code result);
-  bool             is_ready() const noexcept;
+  [[nodiscard]] bool is_ready() const noexcept;
   mpi::return_code get_value_assume_ready() noexcept;
 };
 
@@ -41,8 +41,8 @@ class collective_promise {
   ~collective_promise();
   void swap(collective_promise& rhs) noexcept;
 
-  bool valid() const noexcept;
-  bool is_ready() const noexcept;
+  [[nodiscard]] bool valid() const noexcept;
+  [[nodiscard]] bool is_ready() const noexcept;
 
   void set_value(mpi::return_code res);
 
@@ -59,7 +59,7 @@ class collective_future {
   // Partial arrivals
   std::shared_ptr<simple_message_queue> partials_;
 
-  collective_future(std::shared_ptr<detail::future_shared_state> p);
+  explicit collective_future(std::shared_ptr<detail::future_shared_state> p);
 
  public:
   collective_future() noexcept                    = default;
@@ -73,8 +73,8 @@ class collective_future {
 
   const std::shared_ptr<simple_message_queue>& arrival_queue();
 
-  bool             valid() const noexcept;
-  bool             is_ready() const noexcept;
+  [[nodiscard]] bool valid() const noexcept;
+  [[nodiscard]] bool is_ready() const noexcept;
   void             wait();
   mpi::return_code get();
 };
