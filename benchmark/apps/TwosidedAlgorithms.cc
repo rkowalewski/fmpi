@@ -312,6 +312,8 @@ void print_topology(
   auto left  = (me > 0 && me <= last) ? me - 1 : mpi::Rank::null();
   auto right = (me < last) ? me + 1 : mpi::Rank::null();
 
+  if (not(left or right)) return;
+
   char dummy = 0;
 
   std::ostringstream os;

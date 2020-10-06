@@ -86,6 +86,7 @@ void future_shared_state::wait() {
 
 void future_shared_state::set_value(mpi::return_code result) {
   FMPI_ASSERT(!ready_);
+  FMPI_ASSERT(!value_);
   value_.emplace(result);
 
   {
