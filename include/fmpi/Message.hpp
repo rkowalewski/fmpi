@@ -15,6 +15,7 @@ enum class message_type : uint8_t
   ISEND,
   INVALID,  // DO NEVER USE
   COMMIT,
+  BARRIER,
 };
 
 struct Envelope {
