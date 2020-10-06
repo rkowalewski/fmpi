@@ -38,24 +38,38 @@ struct CollectiveArgs {
   std::size_t         recvcount;
   MPI_Datatype        recvtype;
   mpi::Context const& comm;
+
+  CollectiveArgs(
+      const void*         sendbuf_,
+      std::size_t         sendcount_,
+      MPI_Datatype        sendtype_,
+      void*               recvbuf_,
+      std::size_t         recvcount_,
+      MPI_Datatype        recvtype_,
+      mpi::Context const& comm_);
 };
 
-template <class Schedule>
 struct ScheduleArgs {
-  Schedule          schedule;
+  enum class window_type
+  {
+    SLIDING,
+    FIXED
+  };
+
   std::size_t const winsz{};
   std::string const name;
 };
 
-template <class Schedule>
 class CollectiveCtx {
  public:
-  CollectiveCtx(CollectiveArgs args, ScheduleArgs<Schedule> schedule);
-  collective_future execute();
+  CollectiveCtx(CollectiveArgs args, ScheduleArgs schedule);
+
+  template <class Schedule>
+  collective_future execute(Schedule schedule);
 
  private:
-  CollectiveArgs         args_;
-  ScheduleArgs<Schedule> schedule_;
+  CollectiveArgs args_;
+  ScheduleArgs   schedule_;
 };
 
 }  // namespace detail
@@ -85,8 +99,7 @@ inline void ring_waitsome_overlap(
       mpi::type_mapper<value_type>::type(),
       ctx};
 
-  auto schedule_args = detail::ScheduleArgs<Schedule>{
-      Schedule{ctx},
+  auto schedule_args = detail::ScheduleArgs{
       NReqs,
       std::string{Schedule::NAME} + std::string{algorithm_name} +
           std::to_string(NReqs)
@@ -110,8 +123,8 @@ inline void ring_waitsome_overlap(
   // intermediate buffer for two pipelines
   using thread_alloc = ThreadAllocator<value_type>;
 
-  auto coll = detail::CollectiveCtx<Schedule>{collective_args, schedule_args};
-  auto future = coll.execute();
+  auto coll   = detail::CollectiveCtx{collective_args, schedule_args};
+  auto future = coll.execute(Schedule{ctx});
 
   using iter_pair = std::pair<OutputIt, OutputIt>;
   using piece     = detail::Piece<value_type, thread_alloc>;
@@ -310,6 +323,213 @@ inline void ring_waitsome_overlap(
   // trace.duration("Tcomp.dequeue") = recv_stats.dequeue_time;
 }
 
+#if 0
+template <
+    class Schedule,
+    class InputIt,
+    class OutputIt,
+    class Op,
+    size_t NReqs = 1>
+inline void ring_waitall_overlap(
+    InputIt               begin,
+    OutputIt              out,
+    int                   blocksize,
+    ::mpi::Context const& ctx,
+    Op&&                  op) {
+  using value_type = typename std::iterator_traits<OutputIt>::value_type;
+  using buffer_t   = ::tlx::
+      SimpleVector<value_type, ::tlx::SimpleVectorMode::NoInitNoDestroy>;
+
+  constexpr auto algorithm_name = std::string_view("Waitall");
+
+  auto me = ctx.rank();
+  auto nr = ctx.size();
+
+  auto schedule = Schedule{ctx};
+
+  auto const name = std::string{Schedule::NAME} +
+                    std::string{algorithm_name} + std::to_string(NReqs);
+
+  auto trace = MultiTrace{std::string_view(name)};
+
+  FMPI_DBG_STREAM(
+      "running algorithm " << os.str() << ", blocksize: " << blocksize);
+
+  if (nr < 3) {
+    detail::ring_pairwise_lt3(
+        begin, out, blocksize, ctx, std::forward<Op&&>(op), trace);
+    return;
+  }
+
+  auto const totalExchanges = nr - 1;
+  auto const reqsInFlight   = std::min<std::size_t>(totalExchanges, NReqs);
+
+  auto reqWin = detail::SlidingReqWindow<value_type>{
+      reqsInFlight, static_cast<std::size_t>(blocksize)};
+
+  // We can save the local copy and do it with the merge operation itself
+  reqWin.pending_pieces().push_back(std::make_pair(
+      begin + me * blocksize, begin + me * blocksize + blocksize));
+
+  // auto const phaseCount =
+  // static_cast<std::size_t>(schedule.phaseCount(ctx));
+  auto const nrounds =
+      std::int64_t(tlx::div_ceil(totalExchanges, reqsInFlight));
+
+  std::vector<std::size_t> mergePsum;
+  mergePsum.reserve(nrounds + 2);
+  mergePsum.push_back(0);
+
+  FMPI_DBG(nrounds);
+
+  std::size_t rphase   = 0;
+  std::size_t sphase   = 0;
+  auto        mergebuf = out;
+
+  auto const nels = nr * blocksize;
+  buffer_t   buffer{nels};
+
+  // auto const nbytes = nels * sizeof(value_type);
+  // auto const allFitsInL2Cache = (nbytes < fmpi::CACHELEVEL2_SIZE);
+  // constexpr bool allFitsInL2Cache = false;
+
+  std::vector<MPI_Request> reqs(2 * reqsInFlight, MPI_REQUEST_NULL);
+
+  auto moveReqWindow = [schedule, blocksize, &ctx, sbuffer = begin, &reqs](
+                           auto initialPhases, auto& reqWin) {
+    auto const phaseCount = schedule.phaseCount();
+    auto const winsize    = reqWin.winsize();
+
+    std::size_t rphase       = 0;
+    std::size_t sphase       = 0;
+    std::tie(rphase, sphase) = initialPhases;
+
+    FMPI_DBG(initialPhases);
+
+    for (std::size_t nrreqs = 0; nrreqs < winsize && rphase < phaseCount;
+         ++rphase) {
+      // receive from
+      auto recvfrom = schedule.recvRank(rphase);
+
+      if (recvfrom == ctx.rank()) {
+        continue;
+      }
+
+      FMPI_DBG(recvfrom);
+
+      auto* recvBuf = std::next(reqWin.rbuf(), nrreqs * blocksize);
+
+      FMPI_CHECK_MPI(mpi::irecv(
+          recvBuf, blocksize, recvfrom, kTagRing, ctx, &reqs[nrreqs]));
+
+      reqWin.pending_pieces().push_back(
+          std::make_pair(recvBuf, std::next(recvBuf, blocksize)));
+
+      ++nrreqs;
+    }
+
+    for (std::size_t nsreqs = 0; nsreqs < winsize && sphase < phaseCount;
+         ++sphase) {
+      auto sendto = schedule.sendRank(sphase);
+
+      if (sendto == ctx.rank()) {
+        continue;
+      }
+
+      FMPI_DBG(sendto);
+
+      FMPI_CHECK_MPI(mpi::isend(
+          std::next(sbuffer, sendto * blocksize),
+          blocksize,
+          sendto,
+          kTagRing,
+          ctx,
+          &reqs[winsize + nsreqs++]));
+    }
+
+    return std::make_pair(rphase, sphase);
+  };
+
+  {
+    steady_timer t{trace.duration(kCommunicationTime)};
+
+    std::tie(rphase, sphase) =
+        moveReqWindow(std::make_pair(rphase, sphase), reqWin);
+
+    FMPI_CHECK_MPI(mpi::waitall(&(*std::begin(reqs)), &(*std::end(reqs))));
+
+    reqWin.buffer_swap();
+
+    FMPI_ASSERT(reqWin.pending_pieces().empty());
+    FMPI_ASSERT(!reqWin.ready_pieces().empty());
+  }
+
+  for (auto&& win : range<std::size_t>(nrounds - 1)) {
+    std::ignore = win;
+
+    {
+      steady_timer t{trace.duration(kCommunicationTime)};
+      std::tie(rphase, sphase) =
+          moveReqWindow(std::make_pair(rphase, sphase), reqWin);
+    }
+
+    {
+      steady_timer t{trace.duration(kComputationTime)};
+      op(reqWin.ready_pieces(), mergebuf);
+      auto const nMerged = reqWin.ready_pieces().size() * blocksize;
+      mergebuf += nMerged;
+      mergePsum.push_back(mergePsum.back() + nMerged);
+      reqWin.ready_pieces().clear();
+    }
+
+    {
+      steady_timer t{trace.duration(kCommunicationTime)};
+      FMPI_CHECK_MPI(mpi::waitall(&(*std::begin(reqs)), &(*std::end(reqs))));
+      reqWin.buffer_swap();
+    }
+  }
+
+  {
+    steady_timer t{trace.duration(kComputationTime)};
+
+    auto mergeSrc = &*out;
+    auto target   = buffer.begin();
+
+    // if we have intermediate merge operations then we have already merged
+    // chunks in the out buffer and use the dedicated merge buffer as
+    // destinated merged buffer. Otherwise, we merge directly into the out
+    // buffer.
+    FMPI_DBG(mergePsum);
+
+    if (mergePsum.back() > 0) {
+      FMPI_DBG(mergePsum);
+      std::transform(
+          std::begin(mergePsum),
+          std::prev(std::end(mergePsum)),
+          std::next(std::begin(mergePsum)),
+          std::back_inserter(reqWin.ready_pieces()),
+          [from = mergeSrc](auto first, auto last) {
+            return std::make_pair(
+                std::next(from, first), std::next(from, last));
+          });
+    }
+
+    FMPI_DBG("final merge");
+    FMPI_DBG(reqWin.ready_pieces().size());
+
+    op(reqWin.ready_pieces(), target);
+
+    // FMPI_DBG(reqWin.ready_pieces());
+
+    if (target != &*out) {
+      std::move(target, target + nels, out);
+    }
+  }
+
+  trace.value<int64_t>(kCommRounds) = nrounds;
+}
+#endif
+
 namespace detail {
 
 template <class T, class Allocator>
@@ -406,15 +626,41 @@ class Piece {
   }
 };
 
-template <class Schedule>
-CollectiveCtx<Schedule>::CollectiveCtx(
-    CollectiveArgs args, ScheduleArgs<Schedule> schedule)
+CollectiveCtx::CollectiveCtx(CollectiveArgs args, ScheduleArgs schedule)
   : args_(args)
   , schedule_(std::move(schedule)) {
 }
 
+CollectiveArgs::CollectiveArgs(
+    const void*         sendbuf_,
+    std::size_t         sendcount_,
+    MPI_Datatype        sendtype_,
+    void*               recvbuf_,
+    std::size_t         recvcount_,
+    MPI_Datatype        recvtype_,
+    mpi::Context const& comm_)
+  : sendbuf(sendbuf_)
+  , sendcount(sendcount_)
+  , sendtype(sendtype_)
+  , recvbuf(recvbuf_)
+  , recvcount(recvcount_)
+  , recvtype(recvtype_)
+  , comm(comm_) {
+}
+
+#if 0
+
+const void*         sendbuf;
+  std::size_t         sendcount;
+  MPI_Datatype        sendtype;
+  void*               recvbuf;
+  std::size_t         recvcount;
+  MPI_Datatype        recvtype;
+  mpi::Context const& comm;
+#endif
+
 template <class Schedule>
-collective_future CollectiveCtx<Schedule>::execute() {
+collective_future CollectiveCtx::execute(Schedule schedule) {
   MPI_Aint recvlb{};
   MPI_Aint recvextent{};
   MPI_Aint sendlb{};
@@ -423,8 +669,6 @@ collective_future CollectiveCtx<Schedule>::execute() {
   MPI_Type_get_extent(args_.sendtype, &sendlb, &sendextent);
 
   auto const& ctx = args_.comm;
-
-  auto const& commAlgo = schedule_.schedule;
 
   auto trace = MultiTrace{std::string_view(schedule_.name)};
 
@@ -435,7 +679,7 @@ collective_future CollectiveCtx<Schedule>::execute() {
   steady_timer t_init{trace.duration(detail::initialize)};
 
   // exclude the local message to MPI_Self
-  auto const n_rounds     = commAlgo.phaseCount();
+  auto const n_rounds     = schedule.phaseCount();
   auto const reqsInFlight = std::min(std::size_t(n_rounds), schedule_.winsz);
 
   // intermediate buffer for two pipelines
@@ -485,9 +729,9 @@ collective_future CollectiveCtx<Schedule>::execute() {
     FMPI_DBG("Sending essages");
     steady_timer t_dispatch{trace.duration(detail::dispatch)};
 
-    for (auto&& r : range(commAlgo.phaseCount())) {
-      auto const rpeer = commAlgo.recvRank(r);
-      auto const speer = commAlgo.sendRank(r);
+    for (auto&& r : range(schedule.phaseCount())) {
+      auto const rpeer = schedule.recvRank(r);
+      auto const speer = schedule.sendRank(r);
 
       if (rpeer != ctx.rank()) {
         auto recv = Message{rpeer, kTagRing, ctx.mpiComm()};

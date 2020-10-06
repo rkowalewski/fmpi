@@ -59,14 +59,14 @@ int main(int argc, char* argv[]) {
   auto const  p     = world.size();
 
   auto const shared_comm = mpi::splitSharedComm(world);
-  bool const is_rank0    = shared_comm.rank() == 0;
+  int const  is_rank0    = static_cast<int>(shared_comm.rank() == 0);
   int        nhosts      = 0;
 
   MPI_Allreduce(
       &is_rank0,
       &nhosts,
       1,
-      mpi::type_mapper<bool>::type(),
+      mpi::type_mapper<int>::type(),
       MPI_SUM,
       world.mpiComm());
 
