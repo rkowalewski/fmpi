@@ -187,6 +187,7 @@ class CommDispatcher {
 
  private:
   void progress_all(bool blocking = false);
+  void handle_task(CommTask task, ScheduleCtx* const uptr);
   void worker();
 
   channel     channel_;

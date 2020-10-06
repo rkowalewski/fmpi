@@ -12,23 +12,6 @@
 
 #include <fmpi/concurrency/CacheLocality.hpp>
 
-static uint32_t num_world_nodes() {
-  auto const& world = mpi::Context::world();
-  MPI_Comm    shmcomm = MPI_COMM_NULL;
-  int         shmrank = 0;
-  uint32_t    nodes   = 0;
-
-  FMPI_CHECK_MPI(MPI_Comm_split_type(
-      world.mpiComm(), MPI_COMM_TYPE_SHARED, 0, MPI_INFO_NULL, &shmcomm));
-
-  FMPI_CHECK_MPI(MPI_Comm_rank(shmcomm, &shmrank));
-  int const is_rank0 = (shmrank == 0) ? 1 : 0;
-  FMPI_CHECK_MPI(
-      MPI_Allreduce(&is_rank0, &nodes, 1, MPI_INT, MPI_SUM, world.mpiComm()));
-  FMPI_CHECK_MPI(MPI_Comm_free(&shmcomm));
-  return nodes;
-}
-
 fmpi::Pinning const& fmpi::Pinning::instance() {
   static fmpi::Pinning config{};
   return config;

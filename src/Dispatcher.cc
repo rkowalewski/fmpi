@@ -159,85 +159,89 @@ void CommDispatcher::worker() {
       auto [it, ok] = schedules_.find(task.id);
       FMPI_ASSERT(ok);
 
-      auto& up = it->second;
+      auto& uptr = it->second;
 
       if (task.type == message_type::COMMIT) {
-        FMPI_ASSERT(up->state_ == ScheduleCtx::status::pending);
-        up->complete_all();
-        up->promise_.set_value(MPI_SUCCESS);
+        FMPI_ASSERT(uptr->state_ == ScheduleCtx::status::pending);
+        uptr->complete_all();
+        uptr->promise_.set_value(MPI_SUCCESS);
         schedules_.erase(it);
         continue;
       }
 
-      auto const ti   = rtlx::to_underlying(task.type);
-      auto&      rb   = up->slots_[ti];
-      int        slot = MPI_UNDEFINED;
-      MPI_Status status;
-
-      if (rb.empty()) {
-        // complete one of pending requests and replace it with new slot
-        std::vector<MPI_Request> reqs;
-        std::vector<int>         idxs;
-
-        auto const first_slot =
-            std::accumulate(up->nslots_.begin(), up->nslots_.begin() + ti, 0);
-
-        auto const last_slot = first_slot + up->nslots_[ti];
-
-        FMPI_DBG(std::make_pair(first_slot, last_slot));
-
-        for (auto&& idx : range<int>(first_slot, last_slot)) {
-          if (up->pending_[idx].type == task.type) {
-            reqs.emplace_back(up->handles_[idx]);
-            idxs.emplace_back(idx);
-          }
-        }
-
-        auto const count =
-            std::count(std::begin(reqs), std::end(reqs), MPI_REQUEST_NULL);
-
-        FMPI_ASSERT(reqs.empty() || count == 0);
-
-        FMPI_DBG(reqs.size());
-
-        int        c   = MPI_UNDEFINED;
-        auto const ret = MPI_Waitany(reqs.size(), reqs.data(), &c, &status);
-
-        FMPI_ASSERT(ret == MPI_SUCCESS);
-        FMPI_ASSERT(c != MPI_UNDEFINED);
-
-        slot               = idxs[c];
-        up->handles_[slot] = MPI_REQUEST_NULL;
-      } else {
-        // obtain free slot from ring buffer
-        slot = rb.back();
-        rb.pop_back();
-      }
-
-      FMPI_ASSERT(up->handles_[slot] == MPI_REQUEST_NULL);
-
-      // Issue new message
-      if (up->signals_[ti]) {
-        up->signals_[ti](task.message);
-      }
-
-      // TODO: register custom message handler for each context
-      DefaultMessageHandler h{};
-      auto ret = h(task.message, up->handles_[slot], task.type);
-
-      FMPI_ASSERT(ret == MPI_SUCCESS);
-
-      std::swap(task, up->pending_[slot]);
-
-      // task holds now the previous task...
-      // so let's complete callbacks for it
-
-      if (task.valid() and up->callbacks_[ti]) {
-        up->callbacks_[ti](std::vector<Message>({task.message}));
-      }
+      handle_task(task, uptr.get());
 
       progress_all();
     }
+  }
+}
+
+void CommDispatcher::handle_task(CommTask task, ScheduleCtx* const uptr) {
+  auto const ti   = rtlx::to_underlying(task.type);
+  auto&      rb   = uptr->slots_[ti];
+  int        slot = MPI_UNDEFINED;
+  MPI_Status status;
+
+  if (rb.empty()) {
+    // complete one of pending requests and replace it with new slot
+    std::vector<MPI_Request> reqs;
+    std::vector<int>         idxs;
+
+    auto const first_slot =
+        std::accumulate(uptr->nslots_.begin(), uptr->nslots_.begin() + ti, 0);
+
+    auto const last_slot = first_slot + uptr->nslots_[ti];
+
+    FMPI_DBG(std::make_pair(first_slot, last_slot));
+
+    for (auto&& idx : range<int>(first_slot, last_slot)) {
+      if (uptr->pending_[idx].type == task.type) {
+        reqs.emplace_back(uptr->handles_[idx]);
+        idxs.emplace_back(idx);
+      }
+    }
+
+    auto const count =
+        std::count(std::begin(reqs), std::end(reqs), MPI_REQUEST_NULL);
+
+    FMPI_ASSERT(reqs.empty() || count == 0);
+
+    FMPI_DBG(reqs.size());
+
+    int        c   = MPI_UNDEFINED;
+    auto const ret = MPI_Waitany(reqs.size(), reqs.data(), &c, &status);
+
+    FMPI_ASSERT(ret == MPI_SUCCESS);
+    FMPI_ASSERT(c != MPI_UNDEFINED);
+
+    slot                 = idxs[c];
+    uptr->handles_[slot] = MPI_REQUEST_NULL;
+  } else {
+    // obtain free slot from ring buffer
+    slot = rb.back();
+    rb.pop_back();
+  }
+
+  FMPI_ASSERT(uptr->handles_[slot] == MPI_REQUEST_NULL);
+
+  // Issue new message
+  if (uptr->signals_[ti]) {
+    uptr->signals_[ti](task.message);
+  }
+
+  // TODO: register custom message handler for each context
+  DefaultMessageHandler h{};
+  auto ret = h(task.message, uptr->handles_[slot], task.type);
+
+  FMPI_ASSERT(ret == MPI_SUCCESS);
+
+  std::swap(task, uptr->pending_[slot]);
+
+  // task holds now the previous task...
+  // so let's complete callbacks for it
+
+  if (task.valid() and uptr->callbacks_[ti]) {
+    uptr->callbacks_[ti](std::vector<Message>({task.message}));
   }
 }
 
@@ -259,8 +263,8 @@ void CommDispatcher::progress_all(bool blocking) {
     sps.reserve(std::distance(first, last));
 
     for (auto it = first; it != last; ++it) {
-      auto* up = it->second.get();
-      auto& sp = sps.emplace_back(up);
+      auto* uptr = it->second.get();
+      auto& sp   = sps.emplace_back(uptr);
 
       for (auto&& i : range(sp->handles_.size())) {
         if (sp->handles_[i] != MPI_REQUEST_NULL) {

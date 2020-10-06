@@ -1,7 +1,7 @@
 #ifndef FMPI_MPI_ALGORITHM_HPP
 #define FMPI_MPI_ALGORITHM_HPP
 
-
+#include <fmpi/Math.hpp>
 #include <fmpi/mpi/Environment.hpp>
 #include <fmpi/mpi/TypeMapper.hpp>
 

@@ -9,10 +9,8 @@
 #include <fmpi/mpi/Algorithm.hpp>
 #include <fmpi/mpi/Environment.hpp>
 #include <fmpi/util/Trace.hpp>
-
-#include <tlx/simple_vector.hpp>
-
 #include <rtlx/Timer.hpp>
+#include <tlx/simple_vector.hpp>
 
 namespace fmpi {
 

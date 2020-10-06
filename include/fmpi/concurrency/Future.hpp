@@ -51,6 +51,7 @@ class collective_promise {
 
 class collective_future {
   friend class collective_promise;
+  friend collective_future make_ready_collective_future(mpi::return_code);
 
   using simple_message_queue = SimpleConcurrentDeque<Message>;
 

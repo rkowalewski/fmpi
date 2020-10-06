@@ -1,16 +1,7 @@
 #ifndef FMPI_ALLTOALL_HPP
 #define FMPI_ALLTOALL_HPP
 
-#include <mpi.h>
-
-#include <fmpi/Debug.hpp>
-#include <fmpi/NumericRange.hpp>
-
-#include <fmpi/mpi/Algorithm.hpp>
 #include <fmpi/mpi/Environment.hpp>
-
-#include <tlx/simple_vector.hpp>
-
 
 // Other AllToAll Algorithms
 
@@ -55,8 +46,8 @@ inline void mpi_alltoall(
 }  // namespace fmpi
 
 #include <fmpi/alltoall/MpiAlltoall.hpp>
-#include <fmpi/alltoall/Waitall.hpp>
-#include <fmpi/alltoall/Waitsome.hpp>
+//#include <fmpi/alltoall/Waitall.hpp>
+//#include <fmpi/alltoall/Waitsome.hpp>
 #include <fmpi/alltoall/WaitsomeOverlap.hpp>
 
 #endif

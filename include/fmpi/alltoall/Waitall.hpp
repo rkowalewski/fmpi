@@ -1,15 +1,13 @@
 #ifndef FMPI_ALLTOALL_WAITALL_HPP
 #define FMPI_ALLTOALL_WAITALL_HPP
 
-#include <sstream>
-
 #include <fmpi/NumericRange.hpp>
 #include <fmpi/Schedule.hpp>
 #include <fmpi/alltoall/Detail.hpp>
 #include <fmpi/detail/Assert.hpp>
 #include <fmpi/mpi/Environment.hpp>
 #include <fmpi/mpi/Request.hpp>
-
+#include <sstream>
 #include <tlx/math/div_ceil.hpp>
 #include <tlx/simple_vector.hpp>
 

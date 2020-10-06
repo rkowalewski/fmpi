@@ -42,8 +42,7 @@ using uniform_dist = std::conditional_t<
 template <class T>
 void init_sbuf(T* first, T* last, uint32_t p, int32_t me);
 
-void print_topology(
-    mpi::Context const& ctx, fmpi::benchmark::Params const& params);
+void print_topology(mpi::Context const& ctx, std::size_t nhosts);
 
 int main(int argc, char* argv[]) {
   // Initialize MPI
@@ -59,7 +58,13 @@ int main(int argc, char* argv[]) {
   auto const  me    = world.rank();
   auto const  p     = world.size();
 
-  if ((p % params.nhosts) != 0) {
+  auto const shared_comm = mpi::splitSharedComm(world);
+  int const  is_rank0    = shared_comm.rank() == 0;
+  int        nhosts      = 0;
+
+  MPI_Allreduce(&is_rank0, &nhosts, 1, MPI_INT, MPI_SUM, world.mpiComm());
+
+  if ((p % nhosts) != 0) {
     if (me == 0) {
       std::cout << "number of ranks must be equal on all nodes\n";
     }
@@ -110,7 +115,7 @@ int main(int argc, char* argv[]) {
     std::cout << os.str() << "\n";
   }
 
-  print_topology(world, params);
+  print_topology(world, nhosts);
 
   if (me == 0) {
     write_csv_header(std::cout);
@@ -168,7 +173,7 @@ int main(int argc, char* argv[]) {
       }
 
       Measurement m{};
-      m.nhosts    = params.nhosts;
+      m.nhosts    = nhosts;
       m.nprocs    = p;
       m.nthreads  = omp_get_max_threads();
       m.me        = me;
@@ -302,10 +307,9 @@ void init_sbuf(T* first, T* last, uint32_t p, int32_t me) {
   }
 }
 
-void print_topology(
-    mpi::Context const& ctx, fmpi::benchmark::Params const& params) {
+void print_topology(mpi::Context const& ctx, std::size_t nhosts) {
   auto const me   = ctx.rank();
-  auto const ppn  = static_cast<int32_t>(ctx.size() / params.nhosts);
+  auto const ppn  = static_cast<int32_t>(ctx.size() / nhosts);
   auto const last = mpi::Rank{ppn - 1};
 
   auto left  = (me > 0 && me <= last) ? me - 1 : mpi::Rank::null();

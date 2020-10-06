@@ -8,7 +8,15 @@
 
 namespace mpi {
 
+class Context;
+Context splitSharedComm(Context const& baseComm);
+
 class Context {
+  friend Context splitSharedComm(Context const& baseComm);
+
+  Context(MPI_Comm comm, bool free_self);
+  void free();
+
  public:
   using size_type = std::uint32_t;
 
@@ -20,7 +28,7 @@ class Context {
   Context(Context&&) = delete;
   Context& operator=(Context&&) = delete;
 
-  ~Context() = default;
+  ~Context();
 
   [[nodiscard]] constexpr Rank rank() const noexcept {
     return m_rank;
@@ -38,12 +46,16 @@ class Context {
     return m_comm;
   }
 
+  Context const& sharedComm() const noexcept;
+  Context const& leaderComm() const noexcept;
+
   static Context const& world();
 
  private:
   size_type m_size{};
   Rank      m_rank{};
   MPI_Comm  m_comm{MPI_COMM_NULL};
+  bool      m_free_self{false};
 };
 
 enum class ThreadLevel : int
@@ -57,7 +69,6 @@ enum class ThreadLevel : int
 bool initialize(int* argc, char*** argv, ThreadLevel level);
 void finalize();
 bool is_thread_main();
-auto splitSharedComm(Context const& baseComm) -> Context;
 
 }  // namespace mpi
 

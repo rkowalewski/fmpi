@@ -54,9 +54,6 @@ bool read_input(int argc, char* argv[], struct Params& params) {
   cp.set_description("Benchmark for the FMPI Algorithms Library.");
   cp.set_author("Roger Kowalewski <roger.kowaleski@nm.ifi.lmu.de>");
 
-  cp.add_param_unsigned(
-      "nodes", params.nhosts, "Number of computation nodes");
-
   cp.add_string(
       'a',
       "algos",

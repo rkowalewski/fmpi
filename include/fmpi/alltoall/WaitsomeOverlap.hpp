@@ -1,13 +1,14 @@
 #ifndef FMPI_ALLTOALL_WAITSOMEOVERLAP_HPP
 #define FMPI_ALLTOALL_WAITSOMEOVERLAP_HPP
 
-#include <fmpi/Pinning.hpp>
+#include <fmpi/Schedule.hpp>
 #include <fmpi/alltoall/Detail.hpp>
-#include <fmpi/concurrency/BufferedChannel.hpp>
 #include <fmpi/concurrency/Dispatcher.hpp>
 #include <fmpi/memory/ThreadAllocator.hpp>
 #include <fmpi/memory/detail/pointer_arithmetic.hpp>
+#include <fmpi/mpi/TypeMapper.hpp>
 #include <fmpi/util/Trace.hpp>
+#include <numeric>
 #include <string_view>
 #include <utility>
 
@@ -78,10 +79,10 @@ inline void ring_waitsome_overlap(
   auto collective_args = detail::CollectiveArgs{
       &*begin,
       static_cast<std::size_t>(blocksize),
-      type_mapper<value_type>::type(),
+      mpi::type_mapper<value_type>::type(),
       &*out,
       static_cast<std::size_t>(blocksize),
-      type_mapper<value_type>::type(),
+      mpi::type_mapper<value_type>::type(),
       ctx};
 
   auto schedule_args = detail::ScheduleArgs<Schedule>{
@@ -456,8 +457,6 @@ collective_future CollectiveCtx<Schedule>::execute() {
        recvextent,
        recvcount = args_.recvcount,
        recvtype  = args_.recvtype](Message& message) mutable {
-        // allocator some buffer
-        FMPI_ASSERT(recvextent == sizeof(double));
         auto const nbytes = recvcount * recvextent;
         auto*      buffer = buf_alloc.allocate(nbytes);
         FMPI_ASSERT(buffer);

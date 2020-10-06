@@ -17,7 +17,6 @@ struct Params {
 
  public:
   Params();
-  uint32_t                  nhosts{};
   unsigned int              niters{};
   std::size_t               smin       = 1u << 5;  // 32 bytes
   std::size_t               smax       = 1u << 7;  // 128 bytes

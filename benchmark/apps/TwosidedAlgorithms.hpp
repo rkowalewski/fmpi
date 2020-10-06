@@ -2,7 +2,7 @@
 #define TWOSIDEDALGORITHMS_HPP  // NOLINT
 
 #include <fmpi/AlltoAll.hpp>
-#include <fmpi/Bruck.hpp>
+//#include <fmpi/Bruck.hpp>
 #include <fmpi/mpi/Environment.hpp>
 #include <functional>
 #include <regex>
@@ -89,6 +89,7 @@ auto algorithm_list(std::string const& pattern, mpi::Context const& ctx)
                   RandomAccessIterator1,
                   RandomAccessIterator2,
                   Callback>),
+#if 0
           std::make_pair(
               "RingWaitall4",
               fmpi::ring_waitall<
@@ -185,6 +186,7 @@ auto algorithm_list(std::string const& pattern, mpi::Context const& ctx)
                   RandomAccessIterator2,
                   Callback,
                   16>),
+#endif
           std::make_pair(
               "RingWaitsomeOverlap4",
               fmpi::ring_waitsome_overlap<
@@ -233,6 +235,7 @@ auto algorithm_list(std::string const& pattern, mpi::Context const& ctx)
                   RandomAccessIterator2,
                   Callback,
                   16>),
+#if 0
           // Bruck Algorithms, first the original one, then a modified
           // version which omits the last local rotation step
           std::make_pair(
@@ -264,7 +267,10 @@ auto algorithm_list(std::string const& pattern, mpi::Context const& ctx)
               fmpi::bruck_mod<
                   RandomAccessIterator1,
                   RandomAccessIterator2,
-                  Callback>)};
+                  Callback>)
+#endif
+
+      };
 
   if (!pattern.empty()) {
     // remove algorithms not matching a pattern
