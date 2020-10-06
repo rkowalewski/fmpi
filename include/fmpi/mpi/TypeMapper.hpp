@@ -46,7 +46,7 @@ struct type_mapper {
 #define FMPI_MPI_DATATYPE_MAPPER(integral_type, mpi_type) \
   template <>                                             \
   struct type_mapper<integral_type> {                     \
-    static MPI_Datatype type() {                \
+    static MPI_Datatype type() {                          \
       return mpi_type;                                    \
     }                                                     \
     static constexpr std::size_t factor() {               \
@@ -82,6 +82,14 @@ struct type_mapper {
   static constexpr auto factor() -> MPI_Datatype {
     return detail::type_mapper<T>::factor();
   }
+
+#if 0
+  static constexpr std::size_t extent() {
+    MPI_Aint lb, ext;
+    MPI_Type_get_extent(recvtype, &lb, &ext);
+    auto ret = return sizeof(T);
+  }
+#endif
 };
 
 }  // namespace mpi

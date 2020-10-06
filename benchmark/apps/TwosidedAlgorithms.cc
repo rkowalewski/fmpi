@@ -186,7 +186,6 @@ int main(int argc, char* argv[]) {
         assert(barrier_success);
 
         auto total = run_algorithm(
-
             algo.second,
             sbuf.begin(),
             rbuf.begin(),

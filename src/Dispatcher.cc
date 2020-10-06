@@ -1,5 +1,7 @@
 #include <fmpi/Debug.hpp>
 #include <fmpi/NumericRange.hpp>
+#include <fmpi/Pinning.hpp>
+#include <fmpi/common/Porting.hpp>
 #include <fmpi/concurrency/Dispatcher.hpp>
 #include <fmpi/mpi/Algorithm.hpp>
 #include <numeric>
@@ -15,7 +17,7 @@ static std::atomic_int32_t last_schedule_id   = 0;
 
 }  // namespace internal
 
-CommDispatcher& dispatcher_executor() {
+CommDispatcher& static_dispatcher_pool() {
   static auto dispatcher = std::make_unique<CommDispatcher>();
   return *dispatcher;
 }
@@ -88,6 +90,10 @@ collective_future ScheduleCtx::get_future() {
 CommDispatcher::CommDispatcher()
   : channel_(internal::channel_capacity) {
   thread_ = std::thread([this]() { worker(); });
+
+  auto const& config      = Pinning::instance();
+  auto const  pin_success = pinThreadToCore(thread_, config.dispatcher_core);
+  FMPI_ASSERT(pin_success);
 }
 
 CommDispatcher::~CommDispatcher() {

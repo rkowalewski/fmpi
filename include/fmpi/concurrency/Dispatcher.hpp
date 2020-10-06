@@ -73,6 +73,7 @@ namespace detail {
 static constexpr auto n_types = rtlx::to_underlying(message_type::INVALID);
 }
 
+#if 0
 enum class status
 {
   pending,
@@ -80,6 +81,7 @@ enum class status
   resolved,
   rejected
 };
+#endif
 
 class ScheduleCtx {
   friend class CommDispatcher;
@@ -192,7 +194,7 @@ class CommDispatcher {
   std::thread thread_;
 };
 
-CommDispatcher& dispatcher_executor();
+CommDispatcher& static_dispatcher_pool();
 
 #if 0
 namespace detail {
