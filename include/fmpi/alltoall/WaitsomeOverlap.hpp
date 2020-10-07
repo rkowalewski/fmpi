@@ -1,15 +1,18 @@
 #ifndef FMPI_ALLTOALL_WAITSOMEOVERLAP_HPP
 #define FMPI_ALLTOALL_WAITSOMEOVERLAP_HPP
 
+#include <fmpi/Debug.hpp>
 #include <fmpi/Schedule.hpp>
 #include <fmpi/alltoall/Detail.hpp>
 #include <fmpi/concurrency/Dispatcher.hpp>
+#include <fmpi/detail/CollectiveArgs.hpp>
 #include <fmpi/memory/ThreadAllocator.hpp>
 #include <fmpi/memory/detail/pointer_arithmetic.hpp>
 #include <fmpi/mpi/TypeMapper.hpp>
 #include <fmpi/util/Trace.hpp>
 #include <numeric>
 #include <string_view>
+#include <tlx/math/div_ceil.hpp>
 #include <utility>
 
 namespace fmpi {
@@ -30,32 +33,7 @@ template <class T>
 using simple_vector =
     tlx::SimpleVector<T, tlx::SimpleVectorMode::NoInitNoDestroy>;
 
-struct CollectiveArgs {
-  const void*         sendbuf;
-  std::size_t         sendcount;
-  MPI_Datatype        sendtype;
-  void*               recvbuf;
-  std::size_t         recvcount;
-  MPI_Datatype        recvtype;
-  mpi::Context const& comm;
-
-  CollectiveArgs(
-      const void*         sendbuf_,
-      std::size_t         sendcount_,
-      MPI_Datatype        sendtype_,
-      void*               recvbuf_,
-      std::size_t         recvcount_,
-      MPI_Datatype        recvtype_,
-      mpi::Context const& comm_);
-};
-
 struct ScheduleArgs {
-  enum class window_type : uint8_t
-  {
-    SLIDING,
-    FIXED
-  };
-
   std::size_t const winsz{};
   std::string const name;
 };
@@ -90,7 +68,7 @@ template <
     class OutputIt,
     class Op,
     size_t NReqs = 2>
-inline void ring_waitsome_overlap(
+inline collective_future ring_waitsome_overlap(
     InputIt             begin,
     OutputIt            out,
     int                 blocksize,
@@ -116,18 +94,17 @@ inline void ring_waitsome_overlap(
 
   };
 
-  auto const nr = ctx.size();
-
   auto trace = MultiTrace{std::string_view(schedule_args.name)};
 
   FMPI_DBG_STREAM(
       "running algorithm " << schedule_args.name
                            << ", blocksize: " << blocksize);
 
-  if (nr < 3) {
+  if (ctx.size() < 3) {
     detail::ring_pairwise_lt3(
         begin, out, blocksize, ctx, std::forward<Op&&>(op), trace);
-    return;
+
+    return make_ready_future(MPI_SUCCESS);
   }
 
   auto coll   = detail::CollectiveCtx{collective_args, schedule_args};
@@ -136,6 +113,8 @@ inline void ring_waitsome_overlap(
   detail::compute<value_type>(
       collective_args, future, std::forward<Op&&>(op), trace);
 
+  return future;
+#if 0
   {
     steady_timer t_idle{trace.duration(detail::t_idle)};
     // We definitely have to wait here because although all data has arrived
@@ -144,6 +123,7 @@ inline void ring_waitsome_overlap(
     auto ret = future.get();
     FMPI_ASSERT(ret == MPI_SUCCESS);
   }
+#endif
 
   // auto const& dispatcher_stats = comm_dispatcher.stats();
   // trace.merge(dispatcher_stats.begin(), dispatcher_stats.end());
@@ -163,13 +143,13 @@ template <
     class OutputIt,
     class Op,
     size_t NReqs = 2>
-inline void ring_waitall_overlap(
+inline collective_future ring_waitall_overlap(
     InputIt             begin,
     OutputIt            out,
     int                 blocksize,
     mpi::Context const& ctx,
     Op&&                op) {
-  constexpr auto algorithm_name = std::string_view("WaitsomeOverlap");
+  constexpr auto algorithm_name = std::string_view("WaitallOverlap");
 
   using value_type = typename std::iterator_traits<InputIt>::value_type;
 
@@ -189,18 +169,17 @@ inline void ring_waitall_overlap(
 
   };
 
-  auto const nr = ctx.size();
-
   auto trace = MultiTrace{std::string_view(schedule_args.name)};
 
   FMPI_DBG_STREAM(
       "running algorithm " << schedule_args.name
                            << ", blocksize: " << blocksize);
 
-  if (nr < 3) {
+  if (ctx.size() < 3) {
     detail::ring_pairwise_lt3(
         begin, out, blocksize, ctx, std::forward<Op&&>(op), trace);
-    return;
+
+    return make_ready_future(MPI_SUCCESS);
   }
 
   auto coll   = detail::CollectiveCtx{collective_args, schedule_args};
@@ -209,6 +188,8 @@ inline void ring_waitall_overlap(
   detail::compute<value_type>(
       collective_args, future, std::forward<Op&&>(op), trace);
 
+  return future;
+#if 0
   {
     steady_timer t_idle{trace.duration(detail::t_idle)};
     // We definitely have to wait here because although all data has arrived
@@ -217,225 +198,8 @@ inline void ring_waitall_overlap(
     auto ret = future.get();
     FMPI_ASSERT(ret == MPI_SUCCESS);
   }
-
-  // auto const& dispatcher_stats = comm_dispatcher.stats();
-  // trace.merge(dispatcher_stats.begin(), dispatcher_stats.end());
-
-  // auto const recv_stats = data_channel->statistics();
-  // auto const comm_stats = comm_channel->statistics();
-
-  // trace.duration("Tcomm.enqueue") = comm_stats.enqueue_time;
-  // trace.duration("Tcomm.dequeue") = comm_stats.dequeue_time;
-  // trace.duration("Tcomp.enqueue") = recv_stats.enqueue_time;
-  // trace.duration("Tcomp.dequeue") = recv_stats.dequeue_time;
-}
-
-#if 0
-template <
-    class Schedule,
-    class InputIt,
-    class OutputIt,
-    class Op,
-    size_t NReqs = 1>
-inline void ring_waitall_overlap(
-    InputIt               begin,
-    OutputIt              out,
-    int                   blocksize,
-    ::mpi::Context const& ctx,
-    Op&&                  op) {
-  using value_type = typename std::iterator_traits<OutputIt>::value_type;
-  using buffer_t   = ::tlx::
-      SimpleVector<value_type, ::tlx::SimpleVectorMode::NoInitNoDestroy>;
-
-  constexpr auto algorithm_name = std::string_view("Waitall");
-
-  auto me = ctx.rank();
-  auto nr = ctx.size();
-
-  auto schedule = Schedule{ctx};
-
-  auto const name = std::string{Schedule::NAME} +
-                    std::string{algorithm_name} + std::to_string(NReqs);
-
-  auto trace = MultiTrace{std::string_view(name)};
-
-  FMPI_DBG_STREAM(
-      "running algorithm " << os.str() << ", blocksize: " << blocksize);
-
-  if (nr < 3) {
-    detail::ring_pairwise_lt3(
-        begin, out, blocksize, ctx, std::forward<Op&&>(op), trace);
-    return;
-  }
-
-  auto const totalExchanges = nr - 1;
-  auto const reqsInFlight   = std::min<std::size_t>(totalExchanges, NReqs);
-
-  auto reqWin = detail::SlidingReqWindow<value_type>{
-      reqsInFlight, static_cast<std::size_t>(blocksize)};
-
-  // We can save the local copy and do it with the merge operation itself
-  reqWin.pending_pieces().push_back(std::make_pair(
-      begin + me * blocksize, begin + me * blocksize + blocksize));
-
-  // auto const phaseCount =
-  // static_cast<std::size_t>(schedule.phaseCount(ctx));
-  auto const nrounds =
-      std::int64_t(tlx::div_ceil(totalExchanges, reqsInFlight));
-
-  std::vector<std::size_t> mergePsum;
-  mergePsum.reserve(nrounds + 2);
-  mergePsum.push_back(0);
-
-  FMPI_DBG(nrounds);
-
-  std::size_t rphase   = 0;
-  std::size_t sphase   = 0;
-  auto        mergebuf = out;
-
-  auto const nels = nr * blocksize;
-  buffer_t   buffer{nels};
-
-  // auto const nbytes = nels * sizeof(value_type);
-  // auto const allFitsInL2Cache = (nbytes < fmpi::CACHELEVEL2_SIZE);
-  // constexpr bool allFitsInL2Cache = false;
-
-  std::vector<MPI_Request> reqs(2 * reqsInFlight, MPI_REQUEST_NULL);
-
-  auto moveReqWindow = [schedule, blocksize, &ctx, sbuffer = begin, &reqs](
-                           auto initialPhases, auto& reqWin) {
-    auto const phaseCount = schedule.phaseCount();
-    auto const winsize    = reqWin.winsize();
-
-    std::size_t rphase       = 0;
-    std::size_t sphase       = 0;
-    std::tie(rphase, sphase) = initialPhases;
-
-    FMPI_DBG(initialPhases);
-
-    for (std::size_t nrreqs = 0; nrreqs < winsize && rphase < phaseCount;
-         ++rphase) {
-      // t_receive from
-      auto recvfrom = schedule.recvRank(rphase);
-
-      if (recvfrom == ctx.rank()) {
-        continue;
-      }
-
-      FMPI_DBG(recvfrom);
-
-      auto* recvBuf = std::next(reqWin.rbuf(), nrreqs * blocksize);
-
-      FMPI_CHECK_MPI(mpi::irecv(
-          recvBuf, blocksize, recvfrom, kTagRing, ctx, &reqs[nrreqs]));
-
-      reqWin.pending_pieces().push_back(
-          std::make_pair(recvBuf, std::next(recvBuf, blocksize)));
-
-      ++nrreqs;
-    }
-
-    for (std::size_t nsreqs = 0; nsreqs < winsize && sphase < phaseCount;
-         ++sphase) {
-      auto sendto = schedule.sendRank(sphase);
-
-      if (sendto == ctx.rank()) {
-        continue;
-      }
-
-      FMPI_DBG(sendto);
-
-      FMPI_CHECK_MPI(mpi::isend(
-          std::next(sbuffer, sendto * blocksize),
-          blocksize,
-          sendto,
-          kTagRing,
-          ctx,
-          &reqs[winsize + nsreqs++]));
-    }
-
-    return std::make_pair(rphase, sphase);
-  };
-
-  {
-    steady_timer t{trace.duration(kCommunicationTime)};
-
-    std::tie(rphase, sphase) =
-        moveReqWindow(std::make_pair(rphase, sphase), reqWin);
-
-    FMPI_CHECK_MPI(mpi::waitall(&(*std::begin(reqs)), &(*std::end(reqs))));
-
-    reqWin.buffer_swap();
-
-    FMPI_ASSERT(reqWin.pending_pieces().empty());
-    FMPI_ASSERT(!reqWin.ready_pieces().empty());
-  }
-
-  for (auto&& win : range<std::size_t>(nrounds - 1)) {
-    std::ignore = win;
-
-    {
-      steady_timer t{trace.duration(kCommunicationTime)};
-      std::tie(rphase, sphase) =
-          moveReqWindow(std::make_pair(rphase, sphase), reqWin);
-    }
-
-    {
-      steady_timer t{trace.duration(kComputationTime)};
-      op(reqWin.ready_pieces(), mergebuf);
-      auto const nMerged = reqWin.ready_pieces().size() * blocksize;
-      mergebuf += nMerged;
-      mergePsum.push_back(mergePsum.back() + nMerged);
-      reqWin.ready_pieces().clear();
-    }
-
-    {
-      steady_timer t{trace.duration(kCommunicationTime)};
-      FMPI_CHECK_MPI(mpi::waitall(&(*std::begin(reqs)), &(*std::end(reqs))));
-      reqWin.buffer_swap();
-    }
-  }
-
-  {
-    steady_timer t{trace.duration(kComputationTime)};
-
-    auto mergeSrc = &*out;
-    auto target   = buffer.begin();
-
-    // if we have intermediate merge operations then we have already merged
-    // chunks in the out buffer and use the dedicated merge buffer as
-    // destinated merged buffer. Otherwise, we merge directly into the out
-    // buffer.
-    FMPI_DBG(mergePsum);
-
-    if (mergePsum.back() > 0) {
-      FMPI_DBG(mergePsum);
-      std::transform(
-          std::begin(mergePsum),
-          std::prev(std::end(mergePsum)),
-          std::next(std::begin(mergePsum)),
-          std::back_inserter(reqWin.ready_pieces()),
-          [from = mergeSrc](auto first, auto last) {
-            return std::make_pair(
-                std::next(from, first), std::next(from, last));
-          });
-    }
-
-    FMPI_DBG("final merge");
-    FMPI_DBG(reqWin.ready_pieces().size());
-
-    op(reqWin.ready_pieces(), target);
-
-    // FMPI_DBG(reqWin.ready_pieces());
-
-    if (target != &*out) {
-      std::move(target, target + nels, out);
-    }
-  }
-
-  trace.value<int64_t>(kCommRounds) = nrounds;
-}
 #endif
+}
 
 namespace detail {
 
@@ -538,34 +302,6 @@ CollectiveCtx::CollectiveCtx(CollectiveArgs args, ScheduleArgs schedule)
   , schedule_(std::move(schedule)) {
 }
 
-CollectiveArgs::CollectiveArgs(
-    const void*         sendbuf_,
-    std::size_t         sendcount_,
-    MPI_Datatype        sendtype_,
-    void*               recvbuf_,
-    std::size_t         recvcount_,
-    MPI_Datatype        recvtype_,
-    mpi::Context const& comm_)
-  : sendbuf(sendbuf_)
-  , sendcount(sendcount_)
-  , sendtype(sendtype_)
-  , recvbuf(recvbuf_)
-  , recvcount(recvcount_)
-  , recvtype(recvtype_)
-  , comm(comm_) {
-}
-
-#if 0
-
-const void*         sendbuf;
-  std::size_t         sendcount;
-  MPI_Datatype        sendtype;
-  void*               recvbuf;
-  std::size_t         recvcount;
-  MPI_Datatype        recvtype;
-  mpi::Context const& comm;
-#endif
-
 template <class Schedule>
 collective_future CollectiveCtx::waitsome(Schedule schedule) {
   MPI_Aint recvlb{};
@@ -627,8 +363,6 @@ collective_future CollectiveCtx::waitsome(Schedule schedule) {
   auto& dispatcher = static_dispatcher_pool();
   // submit into dispatcher
   auto const hdl = dispatcher.submit(std::move(schedule_state));
-
-  // auto future = collective_future{std::move(schedule_state), queue};
 
   t_init.finish();
 
@@ -700,7 +434,6 @@ collective_future CollectiveCtx::waitall(Schedule schedule) {
 
   auto promise = collective_promise{};
   auto future  = promise.get_future();
-  auto queue   = future.arrival_queue();
   auto schedule_state =
       std::make_unique<fmpi::ScheduleCtx>(nslots, std::move(promise));
 
@@ -719,8 +452,8 @@ collective_future CollectiveCtx::waitall(Schedule schedule) {
       });
 
   schedule_state->register_callback(
-      message_type::IRECV, [sptr = queue](std::vector<Message> msgs) mutable {
-        FMPI_ASSERT(sptr);
+      message_type::IRECV,
+      [sptr = future.arrival_queue()](std::vector<Message> msgs) mutable {
         std::move(
             std::begin(msgs), std::end(msgs), std::back_inserter(*sptr));
       });
@@ -734,34 +467,44 @@ collective_future CollectiveCtx::waitall(Schedule schedule) {
   t_init.finish();
 
   {
-    FMPI_DBG("Sending essages");
+    auto const winsz = static_cast<uint32_t>(schedule_.winsz);
+    FMPI_DBG("Sending messages");
     steady_timer t_dispatch{trace.duration(detail::t_dispatch)};
 
-    for (auto&& r : range(schedule.phaseCount())) {
-      auto const rpeer = schedule.recvRank(r);
-      auto const speer = schedule.sendRank(r);
+    auto const rounds =
+        std::max(tlx::div_ceil(schedule.phaseCount(), winsz), 1u);
 
-      if (rpeer != ctx.rank()) {
-        auto recv = Message{rpeer, kTagRing, ctx.mpiComm()};
+    for (auto&& r : range(rounds)) {
+      auto const last = std::min(schedule.phaseCount(), (r + 1) * winsz);
 
-        dispatcher.schedule(hdl, message_type::IRECV, recv);
+      for (auto&& rr : range(r * winsz, last)) {
+        auto const rpeer = schedule.recvRank(rr);
+        auto const speer = schedule.sendRank(rr);
+
+        FMPI_DBG(std::make_pair(rpeer, speer));
+
+        if (rpeer != ctx.rank()) {
+          auto recv = Message{rpeer, kTagRing, ctx.mpiComm()};
+
+          dispatcher.schedule(hdl, message_type::IRECV, recv);
+        }
+
+        if (speer != ctx.rank()) {
+          auto const  offset = speer * args_.sendcount * sendextent;
+          auto const* sbuf   = fmpi::detail::add(args_.sendbuf, offset);
+          auto        send   = Message{
+              const_cast<void*>(sbuf),
+              args_.sendcount,
+              args_.sendtype,
+              speer,
+              kTagRing,
+              ctx.mpiComm()};
+
+          dispatcher.schedule(hdl, message_type::ISEND, send);
+        }
       }
-
-      if (speer != ctx.rank()) {
-        auto const  offset = speer * args_.sendcount * sendextent;
-        auto const* sbuf   = fmpi::detail::add(args_.sendbuf, offset);
-        auto        send   = Message{
-            const_cast<void*>(sbuf),
-            args_.sendcount,
-            args_.sendtype,
-            speer,
-            kTagRing,
-            ctx.mpiComm()};
-
-        dispatcher.schedule(hdl, message_type::ISEND, send);
-      }
+      dispatcher.schedule(hdl, message_type::BARRIER);
     }
-
     dispatcher.commit(hdl);
   }
 

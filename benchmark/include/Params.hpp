@@ -5,7 +5,6 @@
 #include <iosfwd>
 #include <string>
 
-namespace fmpi {
 namespace benchmark {
 
 struct Params {
@@ -34,5 +33,4 @@ void printBenchmarkPreamble(
     std::ostream& os, const std::string& prefix, const char* delim = "\n");
 
 }  // namespace benchmark
-}  // namespace fmpi
 #endif

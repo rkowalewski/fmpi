@@ -1,7 +1,5 @@
-#include <fmpi/util/Trace.hpp>
-
 #include <fmpi/Debug.hpp>
-#include <fmpi/detail/Assert.hpp>
+#include <fmpi/util/Trace.hpp>
 
 namespace fmpi {
 
@@ -53,7 +51,7 @@ MultiTrace::~MultiTrace() {
   if constexpr (kEnableTrace) {
     if (!name_.empty() && name_ != anonymous) {
       auto& global_instance = TraceStore::instance();
-      //FMPI_ASSERT(!global_instance.contains(name_));
+      // FMPI_ASSERT(!global_instance.contains(name_));
       global_instance.insert(name_, std::begin(values_), std::end(values_));
     }
   }

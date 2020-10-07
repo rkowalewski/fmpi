@@ -1,10 +1,8 @@
 #ifndef VERSION_H__INCLUDED
 
-namespace fmpi {
 namespace benchmark {
 
 static constexpr const char* FMPI_GIT_COMMIT = "@FMPI_GIT_COMMIT@";
-} // namespace benchmark
-}  // namespace fmpi
+}  // namespace benchmark
 
 #endif

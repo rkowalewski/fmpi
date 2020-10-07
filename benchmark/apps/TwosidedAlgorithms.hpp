@@ -9,6 +9,8 @@
 #include <rtlx/Timer.hpp>
 #include <rtlx/UnorderedMap.hpp>
 
+namespace benchmark {
+
 struct Measurement {
   size_t nhosts;
   size_t nprocs;
@@ -36,7 +38,7 @@ template <
     class RandomAccessIterator1,
     class RandomAccessIterator2,
     class Callback>
-using fmpi_algorithm_t = std::function<void(
+using fmpi_algorithm_t = std::function<fmpi::collective_future(
     RandomAccessIterator1,
     RandomAccessIterator2,
     int,
@@ -60,7 +62,8 @@ auto run_algorithm(
   duration d{};
   {
     rtlx::steady_timer t{d};
-    f(begin, out, blocksize, comm, std::forward<Computation>(op));
+    auto               future =
+        f(begin, out, blocksize, comm, std::forward<Computation>(op));
   }
   return d;
 }
@@ -82,62 +85,62 @@ auto algorithm_list(std::string const& pattern, mpi::Context const& ctx)
           RandomAccessIterator1,
           RandomAccessIterator2,
           Callback>>
-      algorithms{
-          std::make_pair(
-              "AlltoAll",
-              fmpi::mpi_alltoall<
-                  RandomAccessIterator1,
-                  RandomAccessIterator2,
-                  Callback>),
+      algorithms {
+    std::make_pair(
+        "AlltoAll",
+        fmpi::mpi_alltoall<
+            RandomAccessIterator1,
+            RandomAccessIterator2,
+            Callback>),
+        std::make_pair(
+            "RingWaitallOverlap4",
+            fmpi::ring_waitall_overlap<
+                fmpi::FlatHandshake,
+                RandomAccessIterator1,
+                RandomAccessIterator2,
+                Callback,
+                4>),
+        std::make_pair(
+            "RingWaitallOverlap8",
+            fmpi::ring_waitall_overlap<
+                fmpi::FlatHandshake,
+                RandomAccessIterator1,
+                RandomAccessIterator2,
+                Callback,
+                8>),
+        std::make_pair(
+            "RingWaitallOverlap16",
+            fmpi::ring_waitall_overlap<
+                fmpi::FlatHandshake,
+                RandomAccessIterator1,
+                RandomAccessIterator2,
+                Callback,
+                16>),
+        std::make_pair(
+            "OneFactorWaitallOverlap4",
+            fmpi::ring_waitall_overlap<
+                fmpi::OneFactor,
+                RandomAccessIterator1,
+                RandomAccessIterator2,
+                Callback,
+                4>),
+        std::make_pair(
+            "OneFactorWaitallOverlap8",
+            fmpi::ring_waitall_overlap<
+                fmpi::OneFactor,
+                RandomAccessIterator1,
+                RandomAccessIterator2,
+                Callback,
+                8>),
+        std::make_pair(
+            "OneFactorWaitallOverlap16",
+            fmpi::ring_waitall_overlap<
+                fmpi::OneFactor,
+                RandomAccessIterator1,
+                RandomAccessIterator2,
+                Callback,
+                16>),
 #if 0
-          std::make_pair(
-              "RingWaitall4",
-              fmpi::ring_waitall<
-                  fmpi::FlatHandshake,
-                  RandomAccessIterator1,
-                  RandomAccessIterator2,
-                  Callback,
-                  4>),
-          std::make_pair(
-              "RingWaitall8",
-              fmpi::ring_waitall<
-                  fmpi::FlatHandshake,
-                  RandomAccessIterator1,
-                  RandomAccessIterator2,
-                  Callback,
-                  8>),
-          std::make_pair(
-              "RingWaitall16",
-              fmpi::ring_waitall<
-                  fmpi::FlatHandshake,
-                  RandomAccessIterator1,
-                  RandomAccessIterator2,
-                  Callback,
-                  16>),
-          std::make_pair(
-              "OneFactorWaitall4",
-              fmpi::ring_waitall<
-                  fmpi::OneFactor,
-                  RandomAccessIterator1,
-                  RandomAccessIterator2,
-                  Callback,
-                  4>),
-          std::make_pair(
-              "OneFactorWaitall8",
-              fmpi::ring_waitall<
-                  fmpi::OneFactor,
-                  RandomAccessIterator1,
-                  RandomAccessIterator2,
-                  Callback,
-                  8>),
-          std::make_pair(
-              "OneFactorWaitall16",
-              fmpi::ring_waitall<
-                  fmpi::OneFactor,
-                  RandomAccessIterator1,
-                  RandomAccessIterator2,
-                  Callback,
-                  16>),
           std::make_pair(
               "RingWaitsome4",
               fmpi::ring_waitsome<
@@ -187,54 +190,54 @@ auto algorithm_list(std::string const& pattern, mpi::Context const& ctx)
                   Callback,
                   16>),
 #endif
-          std::make_pair(
-              "RingWaitsomeOverlap4",
-              fmpi::ring_waitsome_overlap<
-                  fmpi::FlatHandshake,
-                  RandomAccessIterator1,
-                  RandomAccessIterator2,
-                  Callback,
-                  4>),
-          std::make_pair(
-              "RingWaitsomeOverlap8",
-              fmpi::ring_waitsome_overlap<
-                  fmpi::FlatHandshake,
-                  RandomAccessIterator1,
-                  RandomAccessIterator2,
-                  Callback,
-                  8>),
-          std::make_pair(
-              "RingWaitsomeOverlap16",
-              fmpi::ring_waitsome_overlap<
-                  fmpi::FlatHandshake,
-                  RandomAccessIterator1,
-                  RandomAccessIterator2,
-                  Callback,
-                  16>),
-          std::make_pair(
-              "OneFactorWaitsomeOverlap4",
-              fmpi::ring_waitsome_overlap<
-                  fmpi::OneFactor,
-                  RandomAccessIterator1,
-                  RandomAccessIterator2,
-                  Callback,
-                  4>),
-          std::make_pair(
-              "OneFactorWaitsomeOverlap8",
-              fmpi::ring_waitsome_overlap<
-                  fmpi::OneFactor,
-                  RandomAccessIterator1,
-                  RandomAccessIterator2,
-                  Callback,
-                  8>),
-          std::make_pair(
-              "OneFactorWaitsomeOverlap16",
-              fmpi::ring_waitsome_overlap<
-                  fmpi::OneFactor,
-                  RandomAccessIterator1,
-                  RandomAccessIterator2,
-                  Callback,
-                  16>),
+        std::make_pair(
+            "RingWaitsomeOverlap4",
+            fmpi::ring_waitsome_overlap<
+                fmpi::FlatHandshake,
+                RandomAccessIterator1,
+                RandomAccessIterator2,
+                Callback,
+                4>),
+        std::make_pair(
+            "RingWaitsomeOverlap8",
+            fmpi::ring_waitsome_overlap<
+                fmpi::FlatHandshake,
+                RandomAccessIterator1,
+                RandomAccessIterator2,
+                Callback,
+                8>),
+        std::make_pair(
+            "RingWaitsomeOverlap16",
+            fmpi::ring_waitsome_overlap<
+                fmpi::FlatHandshake,
+                RandomAccessIterator1,
+                RandomAccessIterator2,
+                Callback,
+                16>),
+        std::make_pair(
+            "OneFactorWaitsomeOverlap4",
+            fmpi::ring_waitsome_overlap<
+                fmpi::OneFactor,
+                RandomAccessIterator1,
+                RandomAccessIterator2,
+                Callback,
+                4>),
+        std::make_pair(
+            "OneFactorWaitsomeOverlap8",
+            fmpi::ring_waitsome_overlap<
+                fmpi::OneFactor,
+                RandomAccessIterator1,
+                RandomAccessIterator2,
+                Callback,
+                8>),
+        std::make_pair(
+            "OneFactorWaitsomeOverlap16",
+            fmpi::ring_waitsome_overlap<
+                fmpi::OneFactor,
+                RandomAccessIterator1,
+                RandomAccessIterator2,
+                Callback,
+                16>),
 #if 0
           // Bruck Algorithms, first the original one, then a modified
           // version which omits the last local rotation step
@@ -269,8 +272,7 @@ auto algorithm_list(std::string const& pattern, mpi::Context const& ctx)
                   RandomAccessIterator2,
                   Callback>)
 #endif
-
-      };
+  };
 
   if (!pattern.empty()) {
     // remove algorithms not matching a pattern
@@ -304,5 +306,6 @@ void validate(
     std::terminate();
   }
 }
+}  // namespace benchmark
 
 #endif

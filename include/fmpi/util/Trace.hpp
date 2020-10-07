@@ -1,18 +1,14 @@
 #ifndef FMPI_UTIL_TRACE_HPP
 #define FMPI_UTIL_TRACE_HPP
+#include <boost/container/flat_map.hpp>
 #include <chrono>
+#include <fmpi/Config.hpp>
+#include <fmpi/detail/Assert.hpp>
+#include <rtlx/Timer.hpp>
 #include <string>
 #include <tuple>
 #include <unordered_map>
 #include <variant>
-
-#include <boost/container/flat_map.hpp>
-
-#include <rtlx/Timer.hpp>
-
-#include <fmpi/Config.hpp>
-#include <fmpi/Debug.hpp>
-#include <fmpi/detail/Assert.hpp>
 
 namespace fmpi {
 
@@ -89,12 +85,12 @@ class MultiTrace {
 
   template <class T>
   T& value(std::string_view key) {
-      auto it_bool = values_.insert(std::make_pair(key, mapped_type{T{}}));
-      auto &v = (it_bool.first)->second;
+    auto  it_bool = values_.insert(std::make_pair(key, mapped_type{T{}}));
+    auto& v       = (it_bool.first)->second;
 
-      FMPI_ASSERT(std::holds_alternative<T>(v));
+    FMPI_ASSERT(std::holds_alternative<T>(v));
 
-      return std::get<T>(v);
+    return std::get<T>(v);
   }
 
   duration_t& duration(std::string_view key);
@@ -107,13 +103,13 @@ class MultiTrace {
 
   template <class InputIterator>
   void merge(InputIterator first, InputIterator last) {
-  // TODO: use flat_map::merge(T&&) instead of copy
+    // TODO: use flat_map::merge(T&&) instead of copy
     values_.insert(first, last);
   }
 
  private:
-  cache            values_{};
-  //Yes we can use a string view here because
+  cache values_{};
+  // Yes we can use a string view here because
   std::string_view const name_;
 };
 

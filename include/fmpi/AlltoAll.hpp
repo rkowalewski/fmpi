@@ -1,12 +1,12 @@
 #ifndef FMPI_ALLTOALL_HPP
 #define FMPI_ALLTOALL_HPP
 
+#include <fmpi/concurrency/Future.hpp>
 #include <fmpi/mpi/Environment.hpp>
 
 // Other AllToAll Algorithms
 
 namespace fmpi {
-
 /// Forward Declarations
 
 template <
@@ -36,7 +36,7 @@ inline void ring_waitall(
     Op&&                op);
 
 template <class InputIt, class OutputIt, class Op>
-inline void mpi_alltoall(
+collective_future mpi_alltoall(
     InputIt             begin,
     OutputIt            out,
     int                 blocksize,

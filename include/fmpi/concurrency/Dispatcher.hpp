@@ -48,11 +48,14 @@ constexpr bool operator!=(
 struct CommTask {
   constexpr CommTask() = default;
 
-  constexpr CommTask(
-      message_type t, Message m, ScheduleHandle id = ScheduleHandle{})
+  constexpr CommTask(ScheduleHandle id, message_type t, Message m)
     : message(m)
     , id(id)
     , type(t) {
+  }
+
+  constexpr CommTask(ScheduleHandle id, message_type t)
+    : CommTask(id, t, Message{}) {
   }
 
   [[nodiscard]] constexpr bool valid() const noexcept {
@@ -179,15 +182,20 @@ class CommDispatcher {
 
   ScheduleHandle submit(std::unique_ptr<ScheduleCtx> ctx);
 
-  void schedule(
-      ScheduleHandle const& handle, message_type type, Message message);
+  template <class... Args>
+  void schedule(ScheduleHandle const& handle, Args&&... args) {
+    FMPI_ASSERT(schedules_.contains(handle));
+    auto       task   = CommTask{handle, std::forward<Args>(args)...};
+    auto const status = channel_.push(task);
+    FMPI_ASSERT(status == channel_op_status::success);
+  }
 
   void commit(ScheduleHandle const& hdl);
 
  private:
-  void progress_all(bool blocking = false);
+  void        progress_all(bool blocking = false);
   static void handle_task(CommTask task, ScheduleCtx* uptr);
-  void worker();
+  void        worker();
 
   channel     channel_;
   ctx_map     schedules_;

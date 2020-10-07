@@ -19,10 +19,11 @@ class future_shared_state {
   std::optional<mpi::return_code> value_;
 
  public:
-  void             wait();
-  void             set_value(mpi::return_code result);
+  future_shared_state() = default;
+  void               wait();
+  void               set_value(mpi::return_code result);
   [[nodiscard]] bool is_ready() const noexcept;
-  mpi::return_code get_value_assume_ready() noexcept;
+  mpi::return_code   get_value_assume_ready() noexcept;
 };
 
 }  // namespace detail
@@ -51,7 +52,13 @@ class collective_promise {
 
 class collective_future {
   friend class collective_promise;
-  friend collective_future make_ready_collective_future(mpi::return_code);
+  friend collective_future make_ready_future(mpi::return_code u);
+
+  enum
+  {
+    async    = 1,
+    deferred = 2
+  };
 
   using simple_message_queue = SimpleConcurrentDeque<Message>;
 
@@ -75,9 +82,11 @@ class collective_future {
 
   [[nodiscard]] bool valid() const noexcept;
   [[nodiscard]] bool is_ready() const noexcept;
-  void             wait();
-  mpi::return_code get();
+  void               wait();
+  mpi::return_code   get();
 };
+
+collective_future make_ready_future(mpi::return_code u);
 
 }  // namespace fmpi
 #endif

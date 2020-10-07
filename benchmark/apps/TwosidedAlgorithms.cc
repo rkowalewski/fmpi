@@ -49,8 +49,8 @@ int main(int argc, char* argv[]) {
   mpi::initialize(&argc, &argv, mpi::ThreadLevel::Serialized);
   auto finalizer = rtlx::scope_exit([]() { mpi::finalize(); });
 
-  fmpi::benchmark::Params params{};
-  if (!fmpi::benchmark::read_input(argc, argv, params)) {
+  benchmark::Params params{};
+  if (!benchmark::read_input(argc, argv, params)) {
     return 0;
   }
 
@@ -105,8 +105,9 @@ int main(int argc, char* argv[]) {
         omp_get_max_threads());
   };
 
-  auto ALGORITHMS = algorithm_list<iterator_t, iterator_t, decltype(merger)>(
-      params.pattern, world);
+  auto ALGORITHMS =
+      benchmark::algorithm_list<iterator_t, iterator_t, decltype(merger)>(
+          params.pattern, world);
 
   if (me == 0) {
     std::ostringstream os;
@@ -117,14 +118,14 @@ int main(int argc, char* argv[]) {
       os << kv.first << "\n";
     }
 
-    fmpi::benchmark::printBenchmarkPreamble(os, "++ ", "\n");
+    benchmark::printBenchmarkPreamble(os, "++ ", "\n");
     std::cout << os.str() << "\n";
   }
 
   print_topology(world, nhosts);
 
   if (me == 0) {
-    write_csv_header(std::cout);
+    benchmark::write_csv_header(std::cout);
   }
 
   // calibrate clock
@@ -178,7 +179,7 @@ int main(int argc, char* argv[]) {
         assert(traceStore.empty());
       }
 
-      Measurement m{};
+      benchmark::Measurement m{};
       m.nhosts    = nhosts;
       m.nprocs    = p;
       m.nthreads  = omp_get_max_threads();
@@ -196,7 +197,7 @@ int main(int argc, char* argv[]) {
         auto const barrier_success = barrier.Success(world.mpiComm());
         assert(barrier_success);
 
-        auto total = run_algorithm(
+        auto total = benchmark::run_algorithm(
             algo.second,
             sbuf.begin(),
             rbuf.begin(),
@@ -205,7 +206,7 @@ int main(int argc, char* argv[]) {
             merger);
 
         if (params.check) {
-          validate(
+          benchmark::validate(
               rbuf.begin(), rbuf.end(), correct.begin(), world, algo.first);
         }
 
@@ -241,7 +242,7 @@ std::ostream& operator<<(
   return os;
 }
 
-void write_csv_header(std::ostream& os) {
+void benchmark::write_csv_header(std::ostream& os) {
   os << "Nodes, Procs, Threads, Round, NBytes, Blocksize, Algo, Rank, "
         "Iteration, "
         "Measurement, "
@@ -254,9 +255,9 @@ std::ostream& operator<<(
   return os;
 }
 
-void write_csv_line(
-    std::ostream&      os,
-    Measurement const& params,
+void benchmark::write_csv_line(
+    std::ostream&                 os,
+    benchmark::Measurement const& params,
     std::pair<
         typename fmpi::TraceStore::key_type,
         typename fmpi::TraceStore::mapped_type> const& entry) {

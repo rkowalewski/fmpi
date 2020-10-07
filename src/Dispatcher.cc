@@ -128,14 +128,16 @@ ScheduleHandle CommDispatcher::submit(std::unique_ptr<ScheduleCtx> ctx) {
   return hdl;
 }
 
+#if 0
 void CommDispatcher::schedule(
     ScheduleHandle const& handle, message_type type, Message message) {
   // steady_timer t_enqueue{stats_.enqueue_time};
 
   FMPI_ASSERT(schedules_.contains(handle));
-  auto const status = channel_.push(CommTask{type, message, handle});
+  auto const status = channel_.push(CommTask{handle, type, message});
   FMPI_ASSERT(status == channel_op_status::success);
 }
+#endif
 
 void CommDispatcher::worker() {
   using namespace std::chrono_literals;
@@ -160,14 +162,17 @@ void CommDispatcher::worker() {
 
       auto& uptr = it->second;
 
-      if (task.type == message_type::COMMIT) {
+      if (task.type == message_type::COMMIT ||
+          task.type == message_type::BARRIER) {
         FMPI_ASSERT(uptr->state_ == ScheduleCtx::status::pending);
 
         uptr->complete_all();
 
-        uptr->promise_.set_value(MPI_SUCCESS);
+        if (task.type == message_type::COMMIT) {
+          uptr->promise_.set_value(MPI_SUCCESS);
 
-        schedules_.erase(it);
+          schedules_.erase(it);
+        }
 
         continue;
       }
@@ -249,8 +254,7 @@ void CommDispatcher::handle_task(CommTask task, ScheduleCtx* const uptr) {
 }
 
 void CommDispatcher::commit(ScheduleHandle const& hdl) {
-  auto status = channel_.push(CommTask{message_type::COMMIT, Message{}, hdl});
-  FMPI_ASSERT(status == channel_op_status::success);
+  schedule(hdl, message_type::COMMIT);
 }
 
 void CommDispatcher::progress_all(bool blocking) {

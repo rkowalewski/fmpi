@@ -12,7 +12,7 @@
 #include <tlx/cmdline_parser.hpp>
 #include <tlx/math/integer_log2.hpp>
 
-namespace fmpi::benchmark {
+namespace benchmark {
 
 template <class cT, class traits = std::char_traits<cT> >
 class basic_nullbuf : public std::basic_streambuf<cT, traits> {
@@ -188,4 +188,4 @@ Params::Params()
 {
 }
 
-}  // namespace fmpi::benchmark
+}  // namespace benchmark

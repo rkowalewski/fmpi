@@ -74,6 +74,12 @@ mpi::return_code collective_future::get() {
   return sptr->get_value_assume_ready();
 }
 
+collective_future make_ready_future(mpi::return_code u) {
+  auto state = std::make_shared<detail::future_shared_state>();
+  state->set_value(u);
+  return collective_future{state};
+}  // namespace fmpi
+
 namespace detail {
 
 void future_shared_state::wait() {

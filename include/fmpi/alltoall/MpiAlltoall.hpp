@@ -17,7 +17,7 @@ namespace fmpi {
 constexpr auto kAlltoall = std::string_view("AlltoAll");
 
 template <class InputIt, class OutputIt, class Op>
-inline void mpi_alltoall(
+collective_future mpi_alltoall(
     InputIt             begin,
     OutputIt            out,
     int                 blocksize,
@@ -60,6 +60,8 @@ inline void mpi_alltoall(
 
     op(chunks, out);
   }
+
+  return make_ready_future(MPI_SUCCESS);
 }
 }  // namespace fmpi
 #endif
