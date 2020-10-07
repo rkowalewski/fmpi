@@ -21,7 +21,7 @@ class future_shared_state {
 
  public:
   future_shared_state() = default;
-  future_shared_state(std::unique_ptr<MPI_Request>) noexcept;
+  explicit future_shared_state(std::unique_ptr<MPI_Request>) noexcept;
   void               wait();
   void               set_value(mpi::return_code result);
   [[nodiscard]] bool is_ready() const noexcept;

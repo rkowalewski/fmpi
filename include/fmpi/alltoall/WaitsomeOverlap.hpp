@@ -297,7 +297,8 @@ class Piece {
   }
 };
 
-CollectiveCtx::CollectiveCtx(CollectiveArgs args, ScheduleArgs schedule)
+inline CollectiveCtx::CollectiveCtx(
+    CollectiveArgs args, ScheduleArgs schedule)
   : args_(args)
   , sched_args_(std::move(schedule)) {
 }
@@ -549,8 +550,8 @@ void compute(
     FMPI_DBG("processing message arrivals...");
 
     // prefix sum over all processed chunks
-    auto       d_first = out;
-    auto const d_last  = std::next(out, nels);
+    auto*       d_first = out;
+    auto* const d_last  = std::next(out, nels);
 
     auto enough_work =
         [/*&config*/](
@@ -597,6 +598,7 @@ void compute(
             std::end(msgs),
             std::back_inserter(pieces),
             [palloc = &buf_alloc](auto& msg) {
+            FMPI_DBG("hello");
               auto span = gsl::span(
                   static_cast<value_type*>(msg.buffer()), msg.count());
 
@@ -641,7 +643,7 @@ void compute(
 
           FMPI_DBG(n_elements);
 
-          auto last = d_last;
+          auto* last = d_last;
 
           using diff_t = typename std::iterator_traits<T*>::difference_type;
 
@@ -696,8 +698,8 @@ void compute(
     FMPI_DBG(n_elements);
     FMPI_ASSERT(n_elements == nels);
 
-    auto       mergeBuffer = detail::simple_vector<value_type>{nels};
-    auto const last        = op(chunks, mergeBuffer.begin());
+    auto        mergeBuffer = detail::simple_vector<value_type>{nels};
+    auto* const last        = op(chunks, mergeBuffer.begin());
 
     FMPI_ASSERT(last == mergeBuffer.end());
 

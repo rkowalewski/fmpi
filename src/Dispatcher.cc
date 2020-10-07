@@ -108,31 +108,6 @@ CommDispatcher::~CommDispatcher() {
   thread_.join();
 }
 
-struct DefaultMessageHandler {
-  int operator()(Message& message, MPI_Request& req, message_type t) const {
-    if (t == message_type::IRECV) {
-      return mpi::irecv(
-          message.buffer(),
-          message.count(),
-          message.type(),
-          message.peer(),
-          message.tag(),
-          message.comm(),
-          &req);
-    }
-    FMPI_ASSERT(t == message_type::ISEND);
-
-    return mpi::isend(
-        message.buffer(),
-        message.count(),
-        message.type(),
-        message.peer(),
-        message.tag(),
-        message.comm(),
-        &req);
-  }
-};
-
 ScheduleHandle CommDispatcher::submit(std::unique_ptr<ScheduleCtx> ctx) {
   auto hdl = ScheduleHandle{internal::last_schedule_id++};
   schedules_.assign(hdl, std::move(ctx));
@@ -182,6 +157,28 @@ void CommDispatcher::worker() {
       progress_all();
     }
   }
+}
+
+static int send_message(const Message& message, MPI_Request& req) {
+  return mpi::isend(
+      message.buffer(),
+      message.count(),
+      message.type(),
+      message.peer(),
+      message.tag(),
+      message.comm(),
+      &req);
+}
+
+static int recv_message(Message& message, MPI_Request& req) {
+  return mpi::irecv(
+      message.buffer(),
+      message.count(),
+      message.type(),
+      message.peer(),
+      message.tag(),
+      message.comm(),
+      &req);
 }
 
 void CommDispatcher::handle_task(CommTask task, ScheduleCtx* const uptr) {
@@ -239,9 +236,14 @@ void CommDispatcher::handle_task(CommTask task, ScheduleCtx* const uptr) {
     uptr->signals_[ti](task.message);
   }
 
-  // TODO: register custom message handler for each context
-  DefaultMessageHandler h{};
-  auto ret = h(task.message, uptr->handles_[slot], task.type);
+  FMPI_ASSERT(
+      task.type == message_type::IRECV || task.type == message_type::ISEND);
+
+  // TODO: register default message handler, and import:
+  // consider const correctness !!!!
+  auto ret = (task.type == message_type::IRECV)
+                 ? recv_message(task.message, uptr->handles_[slot])
+                 : send_message(task.message, uptr->handles_[slot]);
 
   FMPI_ASSERT(ret == MPI_SUCCESS);
 

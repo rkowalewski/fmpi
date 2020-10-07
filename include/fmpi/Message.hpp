@@ -87,8 +87,7 @@ class Message {
   }
 
   constexpr Message(mpi::Rank peer, mpi::Tag tag, mpi::Comm comm) noexcept
-    : buf_(MutableBuffer{})
-    , envelope_(peer, tag, comm) {
+    : envelope_(peer, tag, comm) {
   }
 
   template <class T>
@@ -126,10 +125,12 @@ class Message {
   }
 
   constexpr void* buffer() {
+    FMPI_ASSERT(std::holds_alternative<MutableBuffer>(buf_));
     return std::get<MutableBuffer>(buf_).buffer;
   }
 
-  constexpr const void* buffer() const {
+  [[nodiscard]] constexpr const void* buffer() const {
+    FMPI_ASSERT(std::holds_alternative<ConstBuffer>(buf_));
     return std::get<ConstBuffer>(buf_).buffer;
   }
 
