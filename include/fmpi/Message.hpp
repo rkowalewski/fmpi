@@ -2,9 +2,11 @@
 #define FMPI_MESSAGE_HPP
 
 #include <cstddef>
+#include <fmpi/Config.hpp>
 #include <fmpi/mpi/Rank.hpp>
 #include <fmpi/mpi/TypeMapper.hpp>
 #include <gsl/span>
+#include <variant>
 
 namespace fmpi {
 
@@ -47,6 +49,14 @@ struct Envelope {
 };
 
 class Message {
+  struct ConstBuffer {
+    const void* buffer;
+  };
+
+  struct MutableBuffer {
+    void* buffer;
+  };
+
  public:
   constexpr Message() = default;
 
@@ -57,14 +67,28 @@ class Message {
       mpi::Rank    peer,
       mpi::Tag     tag,
       mpi::Comm    comm) noexcept
-    : buf_(buf)
+    : buf_(MutableBuffer{buf})
+    , count_(count)
+    , mpi_type_(type)
+    , envelope_(peer, tag, comm) {
+  }
+
+  constexpr Message(
+      const void*  buf,
+      std::size_t  count,
+      MPI_Datatype type,
+      mpi::Rank    peer,
+      mpi::Tag     tag,
+      mpi::Comm    comm) noexcept
+    : buf_(ConstBuffer{buf})
     , count_(count)
     , mpi_type_(type)
     , envelope_(peer, tag, comm) {
   }
 
   constexpr Message(mpi::Rank peer, mpi::Tag tag, mpi::Comm comm) noexcept
-    : envelope_(peer, tag, comm) {
+    : buf_(MutableBuffer{})
+    , envelope_(peer, tag, comm) {
   }
 
   template <class T>
@@ -88,23 +112,25 @@ class Message {
   constexpr Message(Message&&) noexcept = default;
   constexpr Message& operator=(Message&&) noexcept = default;
 
-  constexpr void set_buffer(void* buf, std::size_t count, MPI_Datatype type) {
-    buf_      = buf;
+  constexpr void set_buffer(void* buf, std::size_t count, MPI_Datatype type)
+      FMPI_NOEXCEPT {
+    FMPI_ASSERT(std::holds_alternative<MutableBuffer>(buf_));
+    buf_      = MutableBuffer{buf};
     count_    = count;
     mpi_type_ = type;
   }
 
   template <class T>
-  constexpr void set_buffer(gsl::span<T> buf) {
+  constexpr void set_buffer(gsl::span<T> buf) FMPI_NOEXCEPT {
     set_buffer(buf.data(), buf.size(), mpi::type_mapper<T>::type());
   }
 
-  constexpr void* buffer() noexcept {
-    return buf_;
+  constexpr void* buffer() {
+    return std::get<MutableBuffer>(buf_).buffer;
   }
 
-  [[nodiscard]] constexpr const void* buffer() const noexcept {
-    return buf_;
+  constexpr const void* buffer() const {
+    return std::get<ConstBuffer>(buf_).buffer;
   }
 
   [[nodiscard]] constexpr MPI_Datatype type() const noexcept {
@@ -128,10 +154,10 @@ class Message {
   }
 
  private:
-  void*        buf_{};
-  std::size_t  count_{};
-  MPI_Datatype mpi_type_{};
-  Envelope     envelope_{};
+  std::variant<MutableBuffer, ConstBuffer> buf_{MutableBuffer{}};
+  std::size_t                              count_{};
+  MPI_Datatype                             mpi_type_{};
+  Envelope                                 envelope_{};
 };
 
 }  // namespace fmpi

@@ -322,8 +322,9 @@ collective_future CollectiveCtx::waitsome(Schedule schedule) {
   steady_timer t_init{trace.duration(detail::t_initialize)};
 
   // exclude the local message to MPI_Self
-  auto const n_rounds     = schedule.phaseCount();
-  auto const reqsInFlight = std::min(std::size_t(n_rounds), sched_args_.winsz);
+  auto const n_rounds = schedule.phaseCount();
+  auto const reqsInFlight =
+      std::min(std::size_t(n_rounds), sched_args_.winsz);
 
   // intermediate buffer for two pipelines
   using thread_alloc = ThreadAllocator<std::byte>;
@@ -384,7 +385,7 @@ collective_future CollectiveCtx::waitsome(Schedule schedule) {
         auto const  offset = speer * args_.sendcount * sendextent;
         auto const* sbuf   = fmpi::detail::add(args_.sendbuf, offset);
         auto        send   = Message{
-            const_cast<void*>(sbuf),
+            sbuf,
             args_.sendcount,
             args_.sendtype,
             speer,
@@ -421,8 +422,9 @@ collective_future CollectiveCtx::waitall(Schedule schedule) {
   steady_timer t_init{trace.duration(detail::t_initialize)};
 
   // exclude the local message to MPI_Self
-  auto const n_rounds     = schedule.phaseCount();
-  auto const reqsInFlight = std::min(std::size_t(n_rounds), sched_args_.winsz);
+  auto const n_rounds = schedule.phaseCount();
+  auto const reqsInFlight =
+      std::min(std::size_t(n_rounds), sched_args_.winsz);
 
   // intermediate buffer for two pipelines
   using thread_alloc = ThreadAllocator<std::byte>;
@@ -493,7 +495,7 @@ collective_future CollectiveCtx::waitall(Schedule schedule) {
           auto const  offset = speer * args_.sendcount * sendextent;
           auto const* sbuf   = fmpi::detail::add(args_.sendbuf, offset);
           auto        send   = Message{
-              const_cast<void*>(sbuf),
+              sbuf,
               args_.sendcount,
               args_.sendtype,
               speer,
