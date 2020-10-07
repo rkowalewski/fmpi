@@ -598,7 +598,6 @@ void compute(
             std::end(msgs),
             std::back_inserter(pieces),
             [palloc = &buf_alloc](auto& msg) {
-            FMPI_DBG("hello");
               auto span = gsl::span(
                   static_cast<value_type*>(msg.buffer()), msg.count());
 
