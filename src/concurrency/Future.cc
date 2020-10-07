@@ -68,6 +68,10 @@ bool collective_future::is_ready() const noexcept {
   return valid() && sptr_->is_ready();
 }
 
+bool collective_future::is_deferred() const noexcept {
+  return valid() && sptr_->is_deferred();
+}
+
 mpi::return_code collective_future::get() {
   wait();
   auto sptr = std::move(sptr_);
@@ -78,15 +82,30 @@ collective_future make_ready_future(mpi::return_code u) {
   auto state = std::make_shared<detail::future_shared_state>();
   state->set_value(u);
   return collective_future{state};
+}
+
+collective_future make_mpi_future(std::unique_ptr<MPI_Request> h) {
+  auto state = std::make_shared<detail::future_shared_state>(std::move(h));
+  return collective_future{state};
 }  // namespace fmpi
 
 namespace detail {
 
-void future_shared_state::wait() {
-  std::unique_lock<std::mutex> lk(mtx_);
+future_shared_state::future_shared_state(
+    std::unique_ptr<MPI_Request> h) noexcept
+  : mpi_handle_(std::move(h)) {
+}
 
-  while (not ready_) {
-    cv_.wait(lk);
+void future_shared_state::wait() {
+  if (mpi_handle_ != nullptr and not ready_) {
+    auto ret = MPI_Wait(mpi_handle_.get(), MPI_STATUS_IGNORE);
+    value_.emplace(ret);
+    ready_ = true;
+  } else {
+    std::unique_lock<std::mutex> lk(mtx_);
+    while (not ready_) {
+      cv_.wait(lk);
+    }
   }
 }
 

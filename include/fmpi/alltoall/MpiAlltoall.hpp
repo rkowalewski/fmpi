@@ -5,6 +5,7 @@
 
 #include <fmpi/Config.hpp>
 #include <fmpi/NumericRange.hpp>
+#include <fmpi/concurrency/Future.hpp>
 #include <fmpi/detail/Assert.hpp>
 #include <fmpi/mpi/Algorithm.hpp>
 #include <fmpi/mpi/Environment.hpp>
@@ -36,8 +37,19 @@ collective_future mpi_alltoall(
 
     rbuf = std::unique_ptr<value_type[]>(new value_type[nr * blocksize]);
 
-    FMPI_CHECK_MPI(mpi::alltoall(
-        std::addressof(*begin), blocksize, &rbuf[0], blocksize, ctx));
+    auto request = std::make_unique<MPI_Request>();
+
+    FMPI_CHECK_MPI(MPI_Ialltoall(
+        std::addressof(*begin),
+        static_cast<int>(blocksize),
+        mpi::type_mapper<value_type>::type(),
+        rbuf.get(),
+        static_cast<int>(blocksize),
+        mpi::type_mapper<value_type>::type(),
+        ctx.mpiComm(),
+        request.get()));
+
+    auto future = make_mpi_future(std::move(request));
   }
 
   {

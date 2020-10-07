@@ -17,13 +17,18 @@ class future_shared_state {
   std::condition_variable         cv_;
   std::atomic_bool                ready_{false};
   std::optional<mpi::return_code> value_;
+  std::unique_ptr<MPI_Request>    mpi_handle_{nullptr};
 
  public:
   future_shared_state() = default;
+  future_shared_state(std::unique_ptr<MPI_Request>) noexcept;
   void               wait();
   void               set_value(mpi::return_code result);
   [[nodiscard]] bool is_ready() const noexcept;
   mpi::return_code   get_value_assume_ready() noexcept;
+  [[nodiscard]] bool is_deferred() const noexcept {
+    return mpi_handle_ != nullptr;
+  }
 };
 
 }  // namespace detail
@@ -53,6 +58,7 @@ class collective_promise {
 class collective_future {
   friend class collective_promise;
   friend collective_future make_ready_future(mpi::return_code u);
+  friend collective_future make_mpi_future(std::unique_ptr<MPI_Request>);
 
   enum
   {
@@ -82,11 +88,13 @@ class collective_future {
 
   [[nodiscard]] bool valid() const noexcept;
   [[nodiscard]] bool is_ready() const noexcept;
+  [[nodiscard]] bool is_deferred() const noexcept;
   void               wait();
   mpi::return_code   get();
 };
 
 collective_future make_ready_future(mpi::return_code u);
+collective_future make_mpi_future(std::unique_ptr<MPI_Request>);
 
 }  // namespace fmpi
 #endif

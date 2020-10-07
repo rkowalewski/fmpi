@@ -50,7 +50,7 @@ class CollectiveCtx {
 
  private:
   CollectiveArgs args_;
-  ScheduleArgs   schedule_;
+  ScheduleArgs   sched_args_;
 };
 
 template <class T, class Op>
@@ -299,7 +299,7 @@ class Piece {
 
 CollectiveCtx::CollectiveCtx(CollectiveArgs args, ScheduleArgs schedule)
   : args_(args)
-  , schedule_(std::move(schedule)) {
+  , sched_args_(std::move(schedule)) {
 }
 
 template <class Schedule>
@@ -313,17 +313,17 @@ collective_future CollectiveCtx::waitsome(Schedule schedule) {
 
   auto const& ctx = args_.comm;
 
-  auto trace = MultiTrace{std::string_view(schedule_.name)};
+  auto trace = MultiTrace{std::string_view(sched_args_.name)};
 
   FMPI_DBG_STREAM(
-      "running algorithm " << schedule_.name
+      "running algorithm " << sched_args_.name
                            << ", sendcount: " << args_.sendcount);
 
   steady_timer t_init{trace.duration(detail::t_initialize)};
 
   // exclude the local message to MPI_Self
   auto const n_rounds     = schedule.phaseCount();
-  auto const reqsInFlight = std::min(std::size_t(n_rounds), schedule_.winsz);
+  auto const reqsInFlight = std::min(std::size_t(n_rounds), sched_args_.winsz);
 
   // intermediate buffer for two pipelines
   using thread_alloc = ThreadAllocator<std::byte>;
@@ -412,17 +412,17 @@ collective_future CollectiveCtx::waitall(Schedule schedule) {
 
   auto const& ctx = args_.comm;
 
-  auto trace = MultiTrace{std::string_view(schedule_.name)};
+  auto trace = MultiTrace{std::string_view(sched_args_.name)};
 
   FMPI_DBG_STREAM(
-      "running algorithm " << schedule_.name
+      "running algorithm " << sched_args_.name
                            << ", sendcount: " << args_.sendcount);
 
   steady_timer t_init{trace.duration(detail::t_initialize)};
 
   // exclude the local message to MPI_Self
   auto const n_rounds     = schedule.phaseCount();
-  auto const reqsInFlight = std::min(std::size_t(n_rounds), schedule_.winsz);
+  auto const reqsInFlight = std::min(std::size_t(n_rounds), sched_args_.winsz);
 
   // intermediate buffer for two pipelines
   using thread_alloc = ThreadAllocator<std::byte>;
@@ -467,7 +467,7 @@ collective_future CollectiveCtx::waitall(Schedule schedule) {
   t_init.finish();
 
   {
-    auto const winsz = static_cast<uint32_t>(schedule_.winsz);
+    auto const winsz = static_cast<uint32_t>(sched_args_.winsz);
     FMPI_DBG("Sending messages");
     steady_timer t_dispatch{trace.duration(detail::t_dispatch)};
 
