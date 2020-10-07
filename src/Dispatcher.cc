@@ -30,11 +30,19 @@ ScheduleCtx::ScheduleCtx(
   , pending_(winsz_)
   , promise_(std::move(pr)) {
   // generate the slots
+  for (auto&& i : range(detail::n_types)) {
+    slots_[i] = tlx::RingBuffer<int>{nslots_[i]};
+  }
+
+  reset_slots();
+}
+
+inline void ScheduleCtx::reset_slots() {
   std::size_t n = 0;
   for (auto&& i : range(detail::n_types)) {
-    slots_[i] = tlx::RingBuffer<int>{nslots[i]};
+    slots_[i].clear();
     std::generate_n(
-        std::front_inserter(slots_[i]), nslots[i], [&n]() { return n++; });
+        std::front_inserter(slots_[i]), nslots_[i], [&n]() { return n++; });
   }
 }
 
@@ -71,6 +79,8 @@ inline void ScheduleCtx::complete_all() {
       callbacks_[tid](msgs[tid]);
     }
   }
+
+  reset_slots();
 }
 
 void ScheduleCtx::register_signal(message_type type, signal&& callable) {
@@ -212,6 +222,7 @@ void CommDispatcher::handle_task(CommTask task, ScheduleCtx* const uptr) {
     auto const count =
         std::count(std::begin(reqs), std::end(reqs), MPI_REQUEST_NULL);
 
+    // (reqs.size() > 0) -> (count == 0)
     FMPI_ASSERT(reqs.empty() || count == 0);
 
     FMPI_DBG(reqs.size());

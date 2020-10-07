@@ -106,13 +106,11 @@ class ScheduleCtx {
   void register_signal(message_type type, signal&& callable);
   void register_callback(message_type type, callback&& callable);
 
-  // void wait();
-  // bool ready() const noexcept;
-
  private:
   // complete all outstanding requests
   void complete_all();
-  // void notify();
+
+  void reset_slots();
 
   /// Request Handles
   std::array<std::size_t, detail::n_types> const    nslots_;
