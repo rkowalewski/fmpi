@@ -2,6 +2,7 @@
 
 #ifdef __INTEL_COMPILER
 #pragma warning(disable: 2196)  // warning #2196: routine is both "inline" and "noinline"
+//#pragma warning(disable: 1011)  // warning #1011: missing return statement at end of non-void function
 #endif
 
 #include <snmalloc.h>

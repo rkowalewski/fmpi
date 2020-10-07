@@ -21,7 +21,7 @@ enum class message_type : uint8_t
 struct Envelope {
  private:
   mpi::Comm comm_{MPI_COMM_NULL};
-  mpi::Rank peer_{};
+  mpi::Rank peer_{MPI_PROC_NULL};
   mpi::Tag  tag_{};
 
  public:

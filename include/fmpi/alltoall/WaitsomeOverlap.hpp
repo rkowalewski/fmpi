@@ -454,6 +454,9 @@ collective_future CollectiveCtx::waitall(Schedule schedule) {
   schedule_state->register_callback(
       message_type::IRECV,
       [sptr = future.arrival_queue()](std::vector<Message> msgs) mutable {
+      for (auto&& msg : msgs) {
+      FMPI_DBG(std::make_pair(msgs.size(), msg.peer()));
+      }
         std::move(
             std::begin(msgs), std::end(msgs), std::back_inserter(*sptr));
       });
