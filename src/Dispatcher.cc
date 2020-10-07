@@ -71,11 +71,6 @@ inline void ScheduleCtx::complete_all() {
     auto const tid  = rtlx::to_underlying(task.type);
     FMPI_ASSERT(task.valid());
 
-
-    if (task.type == message_type::IRECV) {
-      FMPI_DBG_STREAM("rpeer: " << std::make_pair(task.message.peer(), task.valid()));
-    }
-
     msgs[tid].emplace_back(task.message);
     task.reset();
   }
@@ -143,17 +138,6 @@ ScheduleHandle CommDispatcher::submit(std::unique_ptr<ScheduleCtx> ctx) {
   schedules_.assign(hdl, std::move(ctx));
   return hdl;
 }
-
-#if 0
-void CommDispatcher::schedule(
-    ScheduleHandle const& handle, message_type type, Message message) {
-  // steady_timer t_enqueue{stats_.enqueue_time};
-
-  FMPI_ASSERT(schedules_.contains(handle));
-  auto const status = channel_.push(CommTask{handle, type, message});
-  FMPI_ASSERT(status == channel_op_status::success);
-}
-#endif
 
 void CommDispatcher::worker() {
   using namespace std::chrono_literals;
@@ -266,11 +250,7 @@ void CommDispatcher::handle_task(CommTask task, ScheduleCtx* const uptr) {
   // task holds now the previous task...
   // so let's complete callbacks for it
 
-
   if (task.valid() and uptr->callbacks_[ti]) {
-    if ( task.type == message_type::IRECV) {
-      FMPI_DBG_STREAM("rpeer: " << std::make_pair(task.message.peer(), task.valid()));
-    }
     uptr->callbacks_[ti](std::vector<Message>({task.message}));
   }
 }
@@ -343,7 +323,6 @@ void CommDispatcher::progress_all(bool blocking) {
     auto const [sp_idx, req_idx] = ctx_handles[i];
     auto& sp                     = sps[sp_idx];
 
-
     // mark as complete
     sp->handles_[req_idx] = MPI_REQUEST_NULL;
 
@@ -352,12 +331,7 @@ void CommDispatcher::progress_all(bool blocking) {
 
     FMPI_ASSERT(task.valid());
 
-
     auto const ti = rtlx::to_underlying(task.type);
-
-    if (task.type == message_type::IRECV) {
-      FMPI_DBG_STREAM("rpeer: " << std::make_pair(task.message.peer(), task.valid()));
-    }
 
     ctx_tasks[sp_idx][ti].emplace_back(task.message);
 
