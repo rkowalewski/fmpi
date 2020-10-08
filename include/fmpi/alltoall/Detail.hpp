@@ -19,12 +19,9 @@ inline void ring_pairwise_lt3(
     int                 blocksize,
     mpi::Context const& ctx,
     MultiTrace&         multi_trace) {
-  using value_type = typename std::iterator_traits<OutputIt>::value_type;
-
-  using merge_buffer_t =
-      tlx::SimpleVector<value_type, tlx::SimpleVectorMode::NoInitNoDestroy>;
-
   auto const me = ctx.rank();
+
+  FMPI_ASSERT(ctx.size() < 3);
 
   auto other = static_cast<mpi::Rank>((ctx.size()) == 1 ? me : 1 - me);
 
@@ -41,8 +38,6 @@ inline void ring_pairwise_lt3(
         kTagBruck,
         ctx));
   }
-
-  multi_trace.value<int64_t>(kCommRounds) = 1;
 }
 }  // namespace detail
 }  // namespace fmpi

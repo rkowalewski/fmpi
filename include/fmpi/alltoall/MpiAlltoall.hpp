@@ -22,8 +22,6 @@ collective_future mpi_alltoall(
     InputIt begin, OutputIt out, int blocksize, mpi::Context const& ctx) {
   using value_type = typename std::iterator_traits<InputIt>::value_type;
 
-  auto nr = ctx.size();
-
   auto trace = MultiTrace{kAlltoall};
 
   std::unique_ptr<value_type[]> rbuf;
