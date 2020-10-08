@@ -79,6 +79,7 @@ int main(int argc, char* argv[]) {
 
   using iterator_t = typename container::iterator;
 
+#if 0
   auto merger = [](std::vector<std::pair<iterator_t, iterator_t>> seqs,
                    iterator_t                                     res) {
     // parallel merge does not support inplace merging
@@ -104,10 +105,10 @@ int main(int argc, char* argv[]) {
         tlx::MultiwayMergeSplittingAlgorithm::MWMSA_DEFAULT,
         omp_get_max_threads());
   };
+#endif
 
-  auto ALGORITHMS =
-      benchmark::algorithm_list<iterator_t, iterator_t, decltype(merger)>(
-          params.pattern, world);
+  auto ALGORITHMS = benchmark::algorithm_list<iterator_t, iterator_t>(
+      params.pattern, world);
 
   if (me == 0) {
     std::ostringstream os;
@@ -133,11 +134,11 @@ int main(int argc, char* argv[]) {
   [[maybe_unused]] bool is_clock_synced = clock.Init(world.mpiComm());
   assert(is_clock_synced);
 
-  FMPI_DBG(params.niters);
-
   if (params.smin < sizeof(value_t)) {
     params.smin = sizeof(value_t);
   }
+
+  params.smax = std::max(params.smin, params.smax);
 
   for (std::size_t blocksize = params.smin; blocksize <= params.smax;
        blocksize <<= 1) {
@@ -168,13 +169,12 @@ int main(int argc, char* argv[]) {
       // first we want to obtain the correct result which we can verify then
       // with our own algorithms
       if (params.check) {
-        correct = container(nels);
-        fmpi::mpi_alltoall(
+        correct     = container(nels);
+        auto future = fmpi::mpi_alltoall(
             sbuf.begin(),
             correct.begin(),
             static_cast<int>(sendcount),
-            world,
-            merger);
+            world);
         traceStore.erase(fmpi::kAlltoall);
         assert(traceStore.empty());
       }
@@ -202,8 +202,8 @@ int main(int argc, char* argv[]) {
             sbuf.begin(),
             rbuf.begin(),
             static_cast<int>(sendcount),
-            world,
-            merger);
+            world/*,
+            merger*/);
 
         if (params.check) {
           benchmark::validate(

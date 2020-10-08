@@ -19,6 +19,7 @@ namespace detail {
 
 template <class T>
 struct type_mapper {
+  static constexpr bool is_basic = false;
   static_assert(
       std::is_trivially_copyable<T>::value,
       "MPI always requires trivially copyable types");
@@ -46,8 +47,9 @@ struct type_mapper {
 #define FMPI_MPI_DATATYPE_MAPPER(integral_type, mpi_type) \
   template <>                                             \
   struct type_mapper<integral_type> {                     \
-    static MPI_Datatype type() {                          \
-      return mpi_type;                                    \
+    static constexpr bool is_basic = true;                \
+    static MPI_Datatype   type() {                        \
+      return mpi_type;                                  \
     }                                                     \
     static constexpr std::size_t factor() {               \
       return 1;                                           \
@@ -75,6 +77,7 @@ FMPI_MPI_DATATYPE_MAPPER(bool, MPI_C_BOOL)
 
 template <class T>
 struct type_mapper {
+  static constexpr bool is_basic = detail::type_mapper<T>::is_basic;
   static constexpr auto type() -> MPI_Datatype {
     return detail::type_mapper<T>::type();
   }

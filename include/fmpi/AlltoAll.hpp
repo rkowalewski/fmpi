@@ -9,39 +9,17 @@
 namespace fmpi {
 /// Forward Declarations
 
-template <
-    class Schedule,
-    class InputIt,
-    class OutputIt,
-    class Op,
-    size_t NReqs>
+template <class Schedule, class InputIt, class OutputIt, size_t NReqs>
 void ring_waitsome(
-    InputIt             begin,
-    OutputIt            out,
-    int                 blocksize,
-    mpi::Context const& ctx,
-    Op&&                op);
+    InputIt begin, OutputIt out, int blocksize, mpi::Context const& ctx);
 
-template <
-    class Schedule,
-    class InputIt,
-    class OutputIt,
-    class Op,
-    size_t NReqs>
+template <class Schedule, class InputIt, class OutputIt, size_t NReqs>
 inline void ring_waitall(
-    InputIt             begin,
-    OutputIt            out,
-    int                 blocksize,
-    mpi::Context const& ctx,
-    Op&&                op);
+    InputIt begin, OutputIt out, int blocksize, mpi::Context const& ctx);
 
-template <class InputIt, class OutputIt, class Op>
+template <class InputIt, class OutputIt>
 collective_future mpi_alltoall(
-    InputIt             begin,
-    OutputIt            out,
-    int                 blocksize,
-    mpi::Context const& ctx,
-    Op&&                op);
+    InputIt begin, OutputIt out, int blocksize, mpi::Context const& ctx);
 
 }  // namespace fmpi
 

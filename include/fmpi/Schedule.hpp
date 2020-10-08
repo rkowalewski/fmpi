@@ -44,8 +44,8 @@ class FlatHandshake {
   }
 
  private:
-  Rank     rank_{};
-  uint32_t nodes_{};
+  Rank const     rank_{};
+  uint32_t const nodes_{};
 };
 
 class OneFactor {
@@ -97,8 +97,8 @@ class OneFactor {
     return mod(static_cast<Rank>(phase) - rank_, static_cast<Rank>(nodes_));
   }
 
-  Rank     rank_{};
-  uint32_t nodes_{};
+  Rank const     rank_{};
+  uint32_t const nodes_{};
 };
 
 class Linear {

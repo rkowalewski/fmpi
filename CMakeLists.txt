@@ -29,6 +29,10 @@ else()
     message(STATUS "Using build type: ${CMAKE_BUILD_TYPE}")
 endif()
 
+if ("${CMAKE_BUILD_TYPE}" MATCHES ".*(D|d)ebug$")
+    set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
+endif()
+
 
 if(NOT CMAKE_DEBUG_POSTFIX)
     set(CMAKE_DEBUG_POSTFIX d)
@@ -45,7 +49,6 @@ endif()
 
 # Options
 option(FMPI_ENABLE_TRACE "enable detail time trace" ON)
-option(MPI_CXX_SKIP_MPICXX "" ON)
 option(WITH_HWLOC           "Enable hwloc support" OFF)
 
 include(${CMAKE_SOURCE_DIR}/cmake/CompilerFlags.cmake)

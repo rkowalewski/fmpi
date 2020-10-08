@@ -34,8 +34,14 @@ using simple_vector =
     tlx::SimpleVector<T, tlx::SimpleVectorMode::NoInitNoDestroy>;
 
 struct ScheduleArgs {
+  enum class window_type
+  {
+    SLIDING,
+    FIXED
+  };
   std::size_t const winsz{};
   std::string const name;
+  window_type       type = window_type::FIXED;
 };
 
 class CollectiveCtx {
@@ -62,18 +68,9 @@ void compute(
 
 }  // namespace detail
 
-template <
-    class Schedule,
-    class InputIt,
-    class OutputIt,
-    class Op,
-    size_t NReqs = 2>
+template <class Schedule, class InputIt, class OutputIt, size_t NReqs = 2>
 inline collective_future ring_waitsome_overlap(
-    InputIt             begin,
-    OutputIt            out,
-    int                 blocksize,
-    mpi::Context const& ctx,
-    Op&&                op) {
+    InputIt begin, OutputIt out, int blocksize, mpi::Context const& ctx) {
   constexpr auto algorithm_name = std::string_view("WaitsomeOverlap");
 
   using value_type = typename std::iterator_traits<InputIt>::value_type;
@@ -101,8 +98,7 @@ inline collective_future ring_waitsome_overlap(
                            << ", blocksize: " << blocksize);
 
   if (ctx.size() < 3) {
-    detail::ring_pairwise_lt3(
-        begin, out, blocksize, ctx, std::forward<Op&&>(op), trace);
+    detail::ring_pairwise_lt3(begin, out, blocksize, ctx, trace);
 
     return make_ready_future(MPI_SUCCESS);
   }
@@ -110,8 +106,10 @@ inline collective_future ring_waitsome_overlap(
   auto coll   = detail::CollectiveCtx{collective_args, schedule_args};
   auto future = coll.waitsome(Schedule{ctx});
 
+#if 0
   detail::compute<value_type>(
       collective_args, future, std::forward<Op&&>(op), trace);
+#endif
 
   return future;
 #if 0
@@ -137,18 +135,9 @@ inline collective_future ring_waitsome_overlap(
   // trace.duration("Tcomp.dequeue") = recv_stats.dequeue_time;
 }
 
-template <
-    class Schedule,
-    class InputIt,
-    class OutputIt,
-    class Op,
-    size_t NReqs = 2>
+template <class Schedule, class InputIt, class OutputIt, size_t NReqs = 2>
 inline collective_future ring_waitall_overlap(
-    InputIt             begin,
-    OutputIt            out,
-    int                 blocksize,
-    mpi::Context const& ctx,
-    Op&&                op) {
+    InputIt begin, OutputIt out, int blocksize, mpi::Context const& ctx) {
   constexpr auto algorithm_name = std::string_view("WaitallOverlap");
 
   using value_type = typename std::iterator_traits<InputIt>::value_type;
@@ -176,8 +165,7 @@ inline collective_future ring_waitall_overlap(
                            << ", blocksize: " << blocksize);
 
   if (ctx.size() < 3) {
-    detail::ring_pairwise_lt3(
-        begin, out, blocksize, ctx, std::forward<Op&&>(op), trace);
+    detail::ring_pairwise_lt3(begin, out, blocksize, ctx, trace);
 
     return make_ready_future(MPI_SUCCESS);
   }
@@ -185,8 +173,10 @@ inline collective_future ring_waitall_overlap(
   auto coll   = detail::CollectiveCtx{collective_args, schedule_args};
   auto future = coll.waitall(Schedule{ctx});
 
+#if 0
   detail::compute<value_type>(
       collective_args, future, std::forward<Op&&>(op), trace);
+#endif
 
   return future;
 #if 0
@@ -340,6 +330,8 @@ collective_future CollectiveCtx::waitsome(Schedule schedule) {
   auto schedule_state =
       std::make_unique<fmpi::ScheduleCtx>(nslots, std::move(promise));
 
+#if 0
+
   schedule_state->register_signal(
       message_type::IRECV,
       [buf_alloc,
@@ -353,6 +345,7 @@ collective_future CollectiveCtx::waitsome(Schedule schedule) {
         // add the buffer to the message
         message.set_buffer(buffer, recvcount, recvtype);
       });
+#endif
 
   schedule_state->register_callback(
       message_type::IRECV,
@@ -377,8 +370,17 @@ collective_future CollectiveCtx::waitsome(Schedule schedule) {
       auto const speer = schedule.sendRank(r);
 
       if (rpeer != ctx.rank()) {
-        auto recv = Message{rpeer, kTagRing, ctx.mpiComm()};
+        // auto recv = Message{rpeer, kTagRing, ctx.mpiComm()};
 
+        auto const offset = rpeer * args_.recvcount * recvextent;
+        auto*      rbuf   = fmpi::detail::add(args_.recvbuf, offset);
+        auto       recv   = Message{
+            rbuf,
+            args_.recvcount,
+            args_.recvtype,
+            rpeer,
+            kTagRing,
+            ctx.mpiComm()};
         dispatcher.schedule(hdl, message_type::IRECV, recv);
       }
 
@@ -396,6 +398,22 @@ collective_future CollectiveCtx::waitsome(Schedule schedule) {
         dispatcher.schedule(hdl, message_type::ISEND, send);
       }
     }
+
+    // Local Copy
+    auto const offset =
+        static_cast<std::size_t>(ctx.rank()) * args_.sendcount * sendextent;
+
+    auto const* src = fmpi::detail::add(args_.sendbuf, offset);
+    auto*       dst = fmpi::detail::add(args_.recvbuf, offset);
+    std::memcpy(dst, src, args_.sendcount * sendextent);
+
+    future.arrival_queue()->emplace_back(Message{
+        dst,
+        args_.recvcount,
+        args_.recvtype,
+        ctx.rank(),
+        kTagRing,
+        ctx.mpiComm()});
 
     dispatcher.commit(hdl);
   }
@@ -440,6 +458,7 @@ collective_future CollectiveCtx::waitall(Schedule schedule) {
   auto schedule_state =
       std::make_unique<fmpi::ScheduleCtx>(nslots, std::move(promise));
 
+#if 0
   schedule_state->register_signal(
       message_type::IRECV,
       [buf_alloc,
@@ -453,6 +472,7 @@ collective_future CollectiveCtx::waitall(Schedule schedule) {
         // add the buffer to the message
         message.set_buffer(buffer, recvcount, recvtype);
       });
+#endif
 
   schedule_state->register_callback(
       message_type::IRECV,
@@ -487,8 +507,17 @@ collective_future CollectiveCtx::waitall(Schedule schedule) {
         FMPI_DBG(std::make_pair(rpeer, speer));
 
         if (rpeer != ctx.rank()) {
-          auto recv = Message{rpeer, kTagRing, ctx.mpiComm()};
+          // auto recv = Message{rpeer, kTagRing, ctx.mpiComm()};
 
+          auto const offset = rpeer * args_.recvcount * recvextent;
+          auto*      rbuf   = fmpi::detail::add(args_.recvbuf, offset);
+          auto       recv   = Message{
+              rbuf,
+              args_.recvcount,
+              args_.recvtype,
+              rpeer,
+              kTagRing,
+              ctx.mpiComm()};
           dispatcher.schedule(hdl, message_type::IRECV, recv);
         }
 
@@ -506,8 +535,25 @@ collective_future CollectiveCtx::waitall(Schedule schedule) {
           dispatcher.schedule(hdl, message_type::ISEND, send);
         }
       }
-      dispatcher.schedule(hdl, message_type::BARRIER);
+      if (sched_args_.type == ScheduleArgs::window_type::FIXED) {
+        dispatcher.schedule(hdl, message_type::BARRIER);
+      }
     }
+    // Local Copy
+    auto const offset =
+        static_cast<std::size_t>(ctx.rank()) * args_.sendcount * sendextent;
+
+    auto const* src = fmpi::detail::add(args_.sendbuf, offset);
+    auto*       dst = fmpi::detail::add(args_.recvbuf, offset);
+    std::memcpy(dst, src, args_.sendcount * sendextent);
+
+    future.arrival_queue()->emplace_back(Message{
+        dst,
+        args_.recvcount,
+        args_.recvtype,
+        ctx.rank(),
+        kTagRing,
+        ctx.mpiComm()});
     dispatcher.commit(hdl);
   }
 

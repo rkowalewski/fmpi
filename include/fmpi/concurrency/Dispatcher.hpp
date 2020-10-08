@@ -181,11 +181,11 @@ class CommDispatcher {
   ScheduleHandle submit(std::unique_ptr<ScheduleCtx> ctx);
 
   template <class... Args>
-  void schedule(ScheduleHandle const& handle, Args&&... args) {
+  bool schedule(ScheduleHandle const& handle, Args&&... args) {
     FMPI_ASSERT(schedules_.contains(handle));
     auto       task   = CommTask{handle, std::forward<Args>(args)...};
     auto const status = channel_.push(task);
-    FMPI_ASSERT(status == channel_op_status::success);
+    return status == channel_op_status::success;
   }
 
   void commit(ScheduleHandle const& hdl);

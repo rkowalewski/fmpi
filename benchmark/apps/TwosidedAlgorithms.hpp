@@ -34,71 +34,45 @@ void write_csv_line(
         typename fmpi::TraceStore::key_type,
         typename fmpi::TraceStore::mapped_type> const& entry);
 
-template <
-    class RandomAccessIterator1,
-    class RandomAccessIterator2,
-    class Callback>
+template <class RandomAccessIterator1, class RandomAccessIterator2>
 using fmpi_algorithm_t = std::function<fmpi::collective_future(
-    RandomAccessIterator1,
-    RandomAccessIterator2,
-    int,
-    mpi::Context const&,
-    Callback)>;
+    RandomAccessIterator1, RandomAccessIterator2, int, mpi::Context const&)>;
 
-template <
-    class InputIt,
-    class OutputIt,
-    class Communication,
-    class Computation>
+template <class InputIt, class OutputIt, class Communication>
 auto run_algorithm(
     Communication&&     f,
     InputIt             begin,
     OutputIt            out,
     int                 blocksize,
-    mpi::Context const& comm,
-    Computation&&       op) {
+    mpi::Context const& comm) {
   using duration = typename rtlx::steady_timer::duration;
 
   duration d{};
   {
     rtlx::steady_timer t{d};
-    auto               future =
-        f(begin, out, blocksize, comm, std::forward<Computation>(op));
+    auto               future = f(begin, out, blocksize, comm);
   }
   return d;
 }
 
-template <
-    class RandomAccessIterator1,
-    class RandomAccessIterator2,
-    class Callback>
+template <class RandomAccessIterator1, class RandomAccessIterator2>
 auto algorithm_list(std::string const& pattern, mpi::Context const& ctx)
     -> std::unordered_map<
         std::string,
-        fmpi_algorithm_t<
-            RandomAccessIterator1,
-            RandomAccessIterator2,
-            Callback>> {
+        fmpi_algorithm_t<RandomAccessIterator1, RandomAccessIterator2>> {
   std::unordered_map<
       std::string,
-      fmpi_algorithm_t<
-          RandomAccessIterator1,
-          RandomAccessIterator2,
-          Callback>>
+      fmpi_algorithm_t<RandomAccessIterator1, RandomAccessIterator2>>
       algorithms {
     std::make_pair(
         "AlltoAll",
-        fmpi::mpi_alltoall<
-            RandomAccessIterator1,
-            RandomAccessIterator2,
-            Callback>),
+        fmpi::mpi_alltoall<RandomAccessIterator1, RandomAccessIterator2>),
         std::make_pair(
             "RingWaitallOverlap4",
             fmpi::ring_waitall_overlap<
                 fmpi::FlatHandshake,
                 RandomAccessIterator1,
                 RandomAccessIterator2,
-                Callback,
                 4>),
         std::make_pair(
             "RingWaitallOverlap8",
@@ -106,7 +80,6 @@ auto algorithm_list(std::string const& pattern, mpi::Context const& ctx)
                 fmpi::FlatHandshake,
                 RandomAccessIterator1,
                 RandomAccessIterator2,
-                Callback,
                 8>),
         std::make_pair(
             "RingWaitallOverlap16",
@@ -114,7 +87,6 @@ auto algorithm_list(std::string const& pattern, mpi::Context const& ctx)
                 fmpi::FlatHandshake,
                 RandomAccessIterator1,
                 RandomAccessIterator2,
-                Callback,
                 16>),
         std::make_pair(
             "OneFactorWaitallOverlap4",
@@ -122,7 +94,6 @@ auto algorithm_list(std::string const& pattern, mpi::Context const& ctx)
                 fmpi::OneFactor,
                 RandomAccessIterator1,
                 RandomAccessIterator2,
-                Callback,
                 4>),
         std::make_pair(
             "OneFactorWaitallOverlap8",
@@ -130,7 +101,6 @@ auto algorithm_list(std::string const& pattern, mpi::Context const& ctx)
                 fmpi::OneFactor,
                 RandomAccessIterator1,
                 RandomAccessIterator2,
-                Callback,
                 8>),
         std::make_pair(
             "OneFactorWaitallOverlap16",
@@ -138,7 +108,6 @@ auto algorithm_list(std::string const& pattern, mpi::Context const& ctx)
                 fmpi::OneFactor,
                 RandomAccessIterator1,
                 RandomAccessIterator2,
-                Callback,
                 16>),
 #if 0
           std::make_pair(
@@ -147,7 +116,6 @@ auto algorithm_list(std::string const& pattern, mpi::Context const& ctx)
                   fmpi::FlatHandshake,
                   RandomAccessIterator1,
                   RandomAccessIterator2,
-                  Callback,
                   4>),
           std::make_pair(
               "RingWaitsome8",
@@ -155,7 +123,6 @@ auto algorithm_list(std::string const& pattern, mpi::Context const& ctx)
                   fmpi::FlatHandshake,
                   RandomAccessIterator1,
                   RandomAccessIterator2,
-                  Callback,
                   8>),
           std::make_pair(
               "RingWaitsome16",
@@ -163,7 +130,6 @@ auto algorithm_list(std::string const& pattern, mpi::Context const& ctx)
                   fmpi::FlatHandshake,
                   RandomAccessIterator1,
                   RandomAccessIterator2,
-                  Callback,
                   16>),
           std::make_pair(
               "OneFactorWaitsome4",
@@ -171,7 +137,6 @@ auto algorithm_list(std::string const& pattern, mpi::Context const& ctx)
                   fmpi::OneFactor,
                   RandomAccessIterator1,
                   RandomAccessIterator2,
-                  Callback,
                   4>),
           std::make_pair(
               "OneFactorWaitsome8",
@@ -179,7 +144,6 @@ auto algorithm_list(std::string const& pattern, mpi::Context const& ctx)
                   fmpi::OneFactor,
                   RandomAccessIterator1,
                   RandomAccessIterator2,
-                  Callback,
                   8>),
           std::make_pair(
               "OneFactorWaitsome16",
@@ -187,7 +151,6 @@ auto algorithm_list(std::string const& pattern, mpi::Context const& ctx)
                   fmpi::OneFactor,
                   RandomAccessIterator1,
                   RandomAccessIterator2,
-                  Callback,
                   16>),
 #endif
         std::make_pair(
@@ -196,7 +159,6 @@ auto algorithm_list(std::string const& pattern, mpi::Context const& ctx)
                 fmpi::FlatHandshake,
                 RandomAccessIterator1,
                 RandomAccessIterator2,
-                Callback,
                 4>),
         std::make_pair(
             "RingWaitsomeOverlap8",
@@ -204,7 +166,6 @@ auto algorithm_list(std::string const& pattern, mpi::Context const& ctx)
                 fmpi::FlatHandshake,
                 RandomAccessIterator1,
                 RandomAccessIterator2,
-                Callback,
                 8>),
         std::make_pair(
             "RingWaitsomeOverlap16",
@@ -212,7 +173,6 @@ auto algorithm_list(std::string const& pattern, mpi::Context const& ctx)
                 fmpi::FlatHandshake,
                 RandomAccessIterator1,
                 RandomAccessIterator2,
-                Callback,
                 16>),
         std::make_pair(
             "OneFactorWaitsomeOverlap4",
@@ -220,7 +180,6 @@ auto algorithm_list(std::string const& pattern, mpi::Context const& ctx)
                 fmpi::OneFactor,
                 RandomAccessIterator1,
                 RandomAccessIterator2,
-                Callback,
                 4>),
         std::make_pair(
             "OneFactorWaitsomeOverlap8",
@@ -228,7 +187,6 @@ auto algorithm_list(std::string const& pattern, mpi::Context const& ctx)
                 fmpi::OneFactor,
                 RandomAccessIterator1,
                 RandomAccessIterator2,
-                Callback,
                 8>),
         std::make_pair(
             "OneFactorWaitsomeOverlap16",
@@ -236,7 +194,6 @@ auto algorithm_list(std::string const& pattern, mpi::Context const& ctx)
                 fmpi::OneFactor,
                 RandomAccessIterator1,
                 RandomAccessIterator2,
-                Callback,
                 16>),
 #if 0
           // Bruck Algorithms, first the original one, then a modified
@@ -245,32 +202,27 @@ auto algorithm_list(std::string const& pattern, mpi::Context const& ctx)
               "Bruck",
               fmpi::bruck<
                   RandomAccessIterator1,
-                  RandomAccessIterator2,
-                  Callback>),
+                  RandomAccessIterator2>),
           std::make_pair(
               "Bruck_indexed",
               fmpi::bruck_indexed<
                   RandomAccessIterator1,
-                  RandomAccessIterator2,
-                  Callback>),
+                  RandomAccessIterator2>),
           std::make_pair(
               "Bruck_interleave",
               fmpi::bruck_interleave<
                   RandomAccessIterator1,
-                  RandomAccessIterator2,
-                  Callback>),
+                  RandomAccessIterator2>),
           std::make_pair(
               "Bruck_interleave_dispatch",
               fmpi::bruck_interleave_dispatch<
                   RandomAccessIterator1,
-                  RandomAccessIterator2,
-                  Callback>),
+                  RandomAccessIterator2>),
           std::make_pair(
               "Bruck_Mod",
               fmpi::bruck_mod<
                   RandomAccessIterator1,
-                  RandomAccessIterator2,
-                  Callback>)
+                  RandomAccessIterator2>)
 #endif
   };
 
@@ -297,6 +249,8 @@ void validate(
     mpi::Context const& ctx,
     std::string const&  algo) {
   auto const is_equal = std::equal(first, last, expected);
+
+  // FMPI_DBG_RANGE(first, last);
 
   if (!is_equal) {
     std::ostringstream os;

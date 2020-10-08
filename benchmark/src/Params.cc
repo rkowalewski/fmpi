@@ -14,6 +14,7 @@
 
 namespace benchmark {
 
+namespace detail {
 template <class cT, class traits = std::char_traits<cT> >
 class basic_nullbuf : public std::basic_streambuf<cT, traits> {
   auto overflow(typename traits::int_type c) ->
@@ -35,9 +36,10 @@ class basic_onullstream : public std::basic_ostream<cT, traits> {
  private:
   basic_nullbuf<cT, traits> m_sbuf;
 };
+}  // namespace detail
 
-using onullstream  = basic_onullstream<char>;
-using wonullstream = basic_onullstream<wchar_t>;
+using onullstream = detail::basic_onullstream<char>;
+// using wonullstream = detail::basic_onullstream<wchar_t>;
 
 static auto getexepath() -> std::string {
   std::array<char, PATH_MAX> result{};
@@ -176,7 +178,7 @@ void printBenchmarkPreamble(
   os << oss.str();
 }
 
-Params::Params()
+Params::Params() noexcept
   :
 #ifdef NDEBUG
   niters(10)
@@ -186,6 +188,12 @@ Params::Params()
   , check(true)
 #endif
 {
+}
+
+void run_algorithm(CollectiveArgs args, algorithm algo, std::size_t winsz) {
+  if (algo == algorithm::one_factor) {
+
+  }
 }
 
 }  // namespace benchmark

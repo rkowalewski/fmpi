@@ -17,13 +17,9 @@ namespace fmpi {
 
 constexpr auto kAlltoall = std::string_view("AlltoAll");
 
-template <class InputIt, class OutputIt, class Op>
+template <class InputIt, class OutputIt>
 collective_future mpi_alltoall(
-    InputIt             begin,
-    OutputIt            out,
-    int                 blocksize,
-    mpi::Context const& ctx,
-    Op&&                op) {
+    InputIt begin, OutputIt out, int blocksize, mpi::Context const& ctx) {
   using value_type = typename std::iterator_traits<InputIt>::value_type;
 
   auto nr = ctx.size();
@@ -32,26 +28,29 @@ collective_future mpi_alltoall(
 
   std::unique_ptr<value_type[]> rbuf;
 
-  {
-    steady_timer tt{trace.duration(kCommunicationTime)};
+  //{
+  steady_timer tt{trace.duration(kCommunicationTime)};
 
-    rbuf = std::unique_ptr<value_type[]>(new value_type[nr * blocksize]);
+  // rbuf = std::unique_ptr<value_type[]>(new value_type[nr * blocksize]);
 
-    auto request = std::make_unique<MPI_Request>();
+  auto request = std::make_unique<MPI_Request>();
 
-    FMPI_CHECK_MPI(MPI_Ialltoall(
-        std::addressof(*begin),
-        static_cast<int>(blocksize),
-        mpi::type_mapper<value_type>::type(),
-        rbuf.get(),
-        static_cast<int>(blocksize),
-        mpi::type_mapper<value_type>::type(),
-        ctx.mpiComm(),
-        request.get()));
+  FMPI_CHECK_MPI(MPI_Ialltoall(
+      std::addressof(*begin),
+      static_cast<int>(blocksize),
+      mpi::type_mapper<value_type>::type(),
+      // rbuf.get(),
+      std::addressof(*out),
+      static_cast<int>(blocksize),
+      mpi::type_mapper<value_type>::type(),
+      ctx.mpiComm(),
+      request.get()));
 
-    auto future = make_mpi_future(std::move(request));
-  }
+  // auto future = make_mpi_future(std::move(request));
+  return make_mpi_future(std::move(request));
+  //}
 
+#if 0
   {
     steady_timer tt{trace.duration(kComputationTime)};
 
@@ -73,7 +72,9 @@ collective_future mpi_alltoall(
     op(chunks, out);
   }
 
+
   return make_ready_future(MPI_SUCCESS);
+#endif
 }
 }  // namespace fmpi
 #endif

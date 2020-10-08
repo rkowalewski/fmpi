@@ -1,3 +1,5 @@
+set(MPI_CXX_SKIP_MPICXX ON)
+
 find_package(MPI REQUIRED)
 
 # For supporting CMake < 3.9:
