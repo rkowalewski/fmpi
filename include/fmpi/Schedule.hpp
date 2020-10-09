@@ -12,23 +12,23 @@ namespace detail {
 class Schedule {
  public:
   template <typename T>
-  Schedule(const T& obj)
+  explicit Schedule(const T& obj)
     : object(std::make_shared<Model<T>>(std::move(obj))) {
   }
 
-  std::string_view name() const {
+  [[nodiscard]] std::string_view name() const {
     return object->name();
   }
 
-  mpi::Rank sendRank(uint32_t p) const {
+  [[nodiscard]] mpi::Rank sendRank(uint32_t p) const {
     return object->sendRank(p);
   }
 
-  mpi::Rank recvRank(uint32_t p) const {
+  [[nodiscard]] mpi::Rank recvRank(uint32_t p) const {
     return object->recvRank(p);
   }
 
-  uint32_t phaseCount() const {
+  [[nodiscard]] uint32_t phaseCount() const {
     return object->phaseCount();
   }
 
@@ -36,30 +36,30 @@ class Schedule {
   struct Concept {
     virtual ~Concept() {
     }
-    virtual std::string_view name() const               = 0;
-    virtual mpi::Rank        sendRank(uint32_t p) const = 0;
-    virtual mpi::Rank        recvRank(uint32_t p) const = 0;
-    virtual uint32_t         phaseCount() const         = 0;
+    [[nodiscard]] virtual std::string_view name() const               = 0;
+    [[nodiscard]] virtual mpi::Rank        sendRank(uint32_t p) const = 0;
+    [[nodiscard]] virtual mpi::Rank        recvRank(uint32_t p) const = 0;
+    [[nodiscard]] virtual uint32_t         phaseCount() const         = 0;
   };
 
   template <typename T>
   struct Model : Concept {
-    Model(const T& t)
-      : object(t) {
+    explicit Model(T t)
+      : object(std::move(t)) {
     }
-    std::string_view name() const override {
+    [[nodiscard]] std::string_view name() const override {
       return T::NAME;
     }
 
-    mpi::Rank sendRank(uint32_t p) const override {
+    [[nodiscard]] mpi::Rank sendRank(uint32_t p) const override {
       return object.sendRank(p);
     }
 
-    mpi::Rank recvRank(uint32_t p) const override {
+    [[nodiscard]] mpi::Rank recvRank(uint32_t p) const override {
       return object.recvRank(p);
     }
 
-    uint32_t phaseCount() const override {
+    [[nodiscard]] uint32_t phaseCount() const override {
       return object.phaseCount();
     }
 

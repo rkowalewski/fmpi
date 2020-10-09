@@ -50,34 +50,6 @@ int main(int argc, char* argv[]) {
 
   // using iterator_t = typename container::iterator;
 
-#if 0
-  auto merger = [](std::vector<std::pair<iterator_t, iterator_t>> seqs,
-                   iterator_t                                     res) {
-    // parallel merge does not support inplace merging
-    // nels must be the number of elements in all sequences
-    assert(!seqs.empty());
-    assert(res);
-
-    auto const size = std::accumulate(
-        std::begin(seqs),
-        std::end(seqs),
-        std::size_t(0),
-        [](auto acc, auto c) {
-          return acc + std::distance(c.first, c.second);
-        });
-
-    return tlx::parallel_multiway_merge(
-        std::begin(seqs),
-        std::end(seqs),
-        res,
-        size,
-        std::less<>{},
-        tlx::MultiwayMergeAlgorithm::MWMA_ALGORITHM_DEFAULT,
-        tlx::MultiwayMergeSplittingAlgorithm::MWMSA_DEFAULT,
-        omp_get_max_threads());
-  };
-#endif
-
   auto ALGORITHMS = benchmark::algorithm_list(params.pattern, world);
 
   if (me == 0) {
@@ -324,3 +296,31 @@ void print_topology(mpi::Context const& ctx, std::size_t nhosts) {
     MPI_Send(&dummy, 1, MPI_CHAR, 0, 0xAB, ctx.mpiComm());
   }
 }
+
+#if 0
+  auto merger = [](std::vector<std::pair<iterator_t, iterator_t>> seqs,
+                   iterator_t                                     res) {
+    // parallel merge does not support inplace merging
+    // nels must be the number of elements in all sequences
+    assert(!seqs.empty());
+    assert(res);
+
+    auto const size = std::accumulate(
+        std::begin(seqs),
+        std::end(seqs),
+        std::size_t(0),
+        [](auto acc, auto c) {
+          return acc + std::distance(c.first, c.second);
+        });
+
+    return tlx::parallel_multiway_merge(
+        std::begin(seqs),
+        std::end(seqs),
+        res,
+        size,
+        std::less<>{},
+        tlx::MultiwayMergeAlgorithm::MWMA_ALGORITHM_DEFAULT,
+        tlx::MultiwayMergeSplittingAlgorithm::MWMSA_DEFAULT,
+        omp_get_max_threads());
+  };
+#endif

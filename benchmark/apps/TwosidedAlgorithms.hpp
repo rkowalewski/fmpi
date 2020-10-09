@@ -88,11 +88,11 @@ class Alltoall_Runner {
   Alltoall_Runner()
     : name_(schedule_name<Schedule, WinT, NReqs>()) {
   }
-  std::string_view name() const noexcept {
+  [[nodiscard]] std::string_view name() const noexcept {
     return name_;
   }
 
-  fmpi::collective_future run(CollectiveArgs coll_args) const {
+  [[nodiscard]] fmpi::collective_future run(CollectiveArgs coll_args) const {
     auto sched = Schedule{coll_args.comm};
     auto opts  = fmpi::ScheduleOpts{sched, NReqs, name(), WinT};
     return fmpi::alltoall(
@@ -112,11 +112,11 @@ class Alltoall_Runner<void, WinT, NReqs> {
   static constexpr auto algo_name = std::string_view("AlltoAll");
 
  public:
-  std::string_view name() const noexcept {
+  [[nodiscard]] std::string_view name() const noexcept {
     return algo_name;
   }
 
-  fmpi::collective_future run(CollectiveArgs coll_args) const {
+  [[nodiscard]] fmpi::collective_future run(CollectiveArgs coll_args) const {
     auto request = std::make_unique<MPI_Request>();
 
     FMPI_CHECK_MPI(MPI_Ialltoall(
@@ -136,15 +136,15 @@ class Alltoall_Runner<void, WinT, NReqs> {
 class Runner {
  public:
   template <typename T>
-  Runner(const T& obj)
+  explicit Runner(const T& obj)
     : object(std::make_shared<Model<T>>(std::move(obj))) {
   }
 
-  std::string_view name() const {
+  [[nodiscard]] std::string_view name() const {
     return object->name();
   }
 
-  std::chrono::nanoseconds run(CollectiveArgs args) const {
+  [[nodiscard]] std::chrono::nanoseconds run(CollectiveArgs args) const {
     using duration = rtlx::steady_timer::duration;
 
     duration d{};
@@ -160,20 +160,22 @@ class Runner {
   struct Concept {
     virtual ~Concept() {
     }
-    virtual std::string_view        name() const                        = 0;
-    virtual fmpi::collective_future run(CollectiveArgs coll_args) const = 0;
+    [[nodiscard]] virtual std::string_view        name() const = 0;
+    [[nodiscard]] virtual fmpi::collective_future run(
+        CollectiveArgs coll_args) const = 0;
   };
 
   template <typename T>
   struct Model : Concept {
-    Model(const T& t)
-      : object(t) {
+    explicit Model(T t)
+      : object(std::move(t)) {
     }
-    std::string_view name() const override {
+    [[nodiscard]] std::string_view name() const override {
       return object.name();
     }
 
-    fmpi::collective_future run(CollectiveArgs coll_args) const override {
+    [[nodiscard]] fmpi::collective_future run(
+        CollectiveArgs coll_args) const override {
       return object.run(coll_args);
     }
 
@@ -183,7 +185,7 @@ class Runner {
   std::shared_ptr<const Concept> object;
 };
 
-std::vector<Runner> algorithm_list(
+inline std::vector<Runner> algorithm_list(
     std::string const& pattern, mpi::Context const& ctx) {
   using win_t     = fmpi::ScheduleOpts::WindowType;
   auto algorithms = std::vector<Runner>({
