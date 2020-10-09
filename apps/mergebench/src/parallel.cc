@@ -1,15 +1,13 @@
 #include <mpi.h>
 
-#include "benchmark.hpp"
-
 #include <cassert>
-
 #include <fmpi/Debug.hpp>
-#include <fmpi/NumericRange.hpp>
 #include <fmpi/Pinning.hpp>
 #include <fmpi/mpi/Environment.hpp>
-
+#include <fmpi/util/NumericRange.hpp>
 #include <tlx/algorithm.hpp>
+
+#include "benchmark.hpp"
 
 void CustomArguments(benchmark::internal::Benchmark* b) {
   constexpr long min_procs = 16;
@@ -23,7 +21,8 @@ void CustomArguments(benchmark::internal::Benchmark* b) {
          block_bytes *= 4) {
       constexpr long ws = 0;
 
-      b->Args({np, block_bytes, ws, static_cast<long>(omp_get_max_threads())});
+      b->Args(
+          {np, block_bytes, ws, static_cast<long>(omp_get_max_threads())});
     }
   }
 }

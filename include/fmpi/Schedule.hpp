@@ -2,15 +2,80 @@
 #define FMPI_SCHEDULE_HPP
 
 #include <fmpi/Config.hpp>
-#include <fmpi/Math.hpp>
-#include <fmpi/detail/Assert.hpp>
 #include <fmpi/mpi/Environment.hpp>
+#include <fmpi/util/Math.hpp>
 
 namespace fmpi {
 
-using namespace mpi;
+namespace detail {
+
+class Schedule {
+ public:
+  template <typename T>
+  Schedule(const T& obj)
+    : object(std::make_shared<Model<T>>(std::move(obj))) {
+  }
+
+  std::string_view name() const {
+    return object->name();
+  }
+
+  mpi::Rank sendRank(uint32_t p) const {
+    return object->sendRank(p);
+  }
+
+  mpi::Rank recvRank(uint32_t p) const {
+    return object->recvRank(p);
+  }
+
+  uint32_t phaseCount() const {
+    return object->phaseCount();
+  }
+
+ private:
+  struct Concept {
+    virtual ~Concept() {
+    }
+    virtual std::string_view name() const               = 0;
+    virtual mpi::Rank        sendRank(uint32_t p) const = 0;
+    virtual mpi::Rank        recvRank(uint32_t p) const = 0;
+    virtual uint32_t         phaseCount() const         = 0;
+  };
+
+  template <typename T>
+  struct Model : Concept {
+    Model(const T& t)
+      : object(t) {
+    }
+    std::string_view name() const override {
+      return T::NAME;
+    }
+
+    mpi::Rank sendRank(uint32_t p) const override {
+      return object.sendRank(p);
+    }
+
+    mpi::Rank recvRank(uint32_t p) const override {
+      return object.recvRank(p);
+    }
+
+    uint32_t phaseCount() const override {
+      return object.phaseCount();
+    }
+
+   private:
+    T object;
+  };
+
+  std::shared_ptr<const Concept> object;
+};
+
+}  // namespace detail
 
 class FlatHandshake {
+  using Rank    = mpi::Rank;
+  using Context = mpi::Context;
+
  public:
   static constexpr auto NAME = std::string_view("Ring");
 
@@ -49,6 +114,9 @@ class FlatHandshake {
 };
 
 class OneFactor {
+  using Rank    = mpi::Rank;
+  using Context = mpi::Context;
+
  public:
   static constexpr auto NAME = std::string_view("OneFactor");
 
@@ -102,6 +170,9 @@ class OneFactor {
 };
 
 class Linear {
+  using Rank    = mpi::Rank;
+  using Context = mpi::Context;
+
  public:
   static constexpr auto NAME = std::string_view("Linear");
 
@@ -110,6 +181,31 @@ class Linear {
   static auto recvRank(Context const& comm, uint32_t phase) noexcept -> Rank;
 
   static auto phaseCount(Context const& comm) noexcept -> uint32_t;
+};
+
+struct ScheduleOpts {
+  enum class WindowType
+  {
+    sliding,
+    fixed
+  };
+
+  template <class Schedule>
+  ScheduleOpts(
+      Schedule         schedule,
+      std::size_t      winsz_,
+      std::string_view name_,
+      WindowType       type_)
+    : scheduler(schedule)
+    , winsz(winsz_)
+    , name(name_)
+    , type(type_) {
+  }
+
+  detail::Schedule const scheduler;
+  std::size_t const      winsz = 0;
+  std::string_view       name;
+  WindowType const       type = WindowType::fixed;
 };
 
 }  // namespace fmpi

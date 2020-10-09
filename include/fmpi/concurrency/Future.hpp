@@ -21,7 +21,7 @@ class future_shared_state {
 
  public:
   future_shared_state() = default;
-  explicit future_shared_state(std::unique_ptr<MPI_Request>) noexcept;
+  explicit future_shared_state(std::unique_ptr<MPI_Request> /*h*/) noexcept;
   void               wait();
   void               set_value(mpi::return_code result);
   [[nodiscard]] bool is_ready() const noexcept;
@@ -58,7 +58,8 @@ class collective_promise {
 class collective_future {
   friend class collective_promise;
   friend collective_future make_ready_future(mpi::return_code u);
-  friend collective_future make_mpi_future(std::unique_ptr<MPI_Request>);
+  friend collective_future make_mpi_future(
+      std::unique_ptr<MPI_Request> /*h*/);
 
   enum
   {
@@ -94,7 +95,7 @@ class collective_future {
 };
 
 collective_future make_ready_future(mpi::return_code u);
-collective_future make_mpi_future(std::unique_ptr<MPI_Request>);
+collective_future make_mpi_future(std::unique_ptr<MPI_Request> /*h*/);
 
 }  // namespace fmpi
 #endif

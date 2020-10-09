@@ -1,43 +1,12 @@
-/*
- * Copyright (c) Facebook, Inc. and its affiliates.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
-
-#include <omp.h>
-
 #include <MPISynchronizedBarrier.hpp>
 #include <Params.hpp>
 #include <TwosidedAlgorithms.hpp>
 #include <fmpi/AlltoAll.hpp>
 #include <fmpi/Bruck.hpp>
-#include <fmpi/Random.hpp>
-#include <fmpi/concurrency/OpenMP.hpp>
+#include <fmpi/util/Random.hpp>
 #include <regex>
 #include <rtlx/ScopedLambda.hpp>
-#include <rtlx/UnorderedMap.hpp>
 #include <tlx/algorithm.hpp>
-
-// The container where we store our data
-using value_t = double;
-using container =
-    tlx::SimpleVector<value_t, tlx::SimpleVectorMode::NoInitNoDestroy>;
-
-template <class T>
-using uniform_dist = std::conditional_t<
-    std::is_integral_v<T>,
-    std::uniform_int_distribution<T>,
-    std::uniform_real_distribution<T>>;
 
 template <class T>
 void init_sbuf(T* first, T* last, uint32_t p, int32_t me);
@@ -45,6 +14,8 @@ void init_sbuf(T* first, T* last, uint32_t p, int32_t me);
 void print_topology(mpi::Context const& ctx, std::size_t nhosts);
 
 int main(int argc, char* argv[]) {
+  // Our value type
+  using value_t = double;
   // Initialize MPI
   mpi::initialize(&argc, &argv, mpi::ThreadLevel::Serialized);
   auto finalizer = rtlx::scope_exit([]() { mpi::finalize(); });
@@ -77,7 +48,7 @@ int main(int argc, char* argv[]) {
     return 0;
   }
 
-  using iterator_t = typename container::iterator;
+  // using iterator_t = typename container::iterator;
 
 #if 0
   auto merger = [](std::vector<std::pair<iterator_t, iterator_t>> seqs,
@@ -107,8 +78,7 @@ int main(int argc, char* argv[]) {
   };
 #endif
 
-  auto ALGORITHMS = benchmark::algorithm_list<iterator_t, iterator_t>(
-      params.pattern, world);
+  auto ALGORITHMS = benchmark::algorithm_list(params.pattern, world);
 
   if (me == 0) {
     std::ostringstream os;
@@ -116,7 +86,7 @@ int main(int argc, char* argv[]) {
     os << "Algorithms:\n";
 
     for (auto&& kv : ALGORITHMS) {
-      os << kv.first << "\n";
+      os << kv.name() << "\n";
     }
 
     benchmark::printBenchmarkPreamble(os, "++ ", "\n");
@@ -143,25 +113,25 @@ int main(int argc, char* argv[]) {
   for (std::size_t blocksize = params.smin; blocksize <= params.smax;
        blocksize <<= 1) {
     auto const sendcount = blocksize / sizeof(value_t);
-    FMPI_DBG(sendcount);
 
     // Required by good old 32-bit MPI
     assert(sendcount < mpi::max_int);
 
     auto const nels = sendcount * p;
 
-    auto        sbuf    = container(nels);
-    auto        rbuf    = container(nels);
-    auto        correct = container(0);
-    std::size_t step    = 1u;
+    using vector =
+        tlx::SimpleVector<value_t, tlx::SimpleVectorMode::NoInitNoDestroy>;
 
-#ifdef NDEBUG
-    auto const nwarmup = 1;
-#else
-    auto const nwarmup = 0;
-#endif
+    auto        sbuf = vector(nels);
+    auto        rbuf = vector(nels);
+    vector      correct;
+    std::size_t step = 1u;
 
-    for (auto it = 0; it < static_cast<int>(params.niters) + nwarmup; ++it) {
+    auto args = benchmark::CollectiveArgs{
+        sbuf.data(), sendcount, rbuf.data(), sendcount, world};
+
+    auto const niters = static_cast<int>(params.niters + params.warmups);
+    for (int it = 0; it < niters; ++it) {
       auto& traceStore = fmpi::TraceStore::instance();
 
       init_sbuf(sbuf.begin(), sbuf.end(), p, me);
@@ -169,14 +139,16 @@ int main(int argc, char* argv[]) {
       // first we want to obtain the correct result which we can verify then
       // with our own algorithms
       if (params.check) {
-        correct     = container(nels);
-        auto future = fmpi::mpi_alltoall(
-            sbuf.begin(),
-            correct.begin(),
-            static_cast<int>(sendcount),
-            world);
-        traceStore.erase(fmpi::kAlltoall);
-        assert(traceStore.empty());
+        correct  = vector(nels);
+        auto ret = MPI_Alltoall(
+            sbuf.data(),
+            sendcount,
+            mpi::type_mapper<value_t>::type(),
+            correct.data(),
+            sendcount,
+            mpi::type_mapper<value_t>::type(),
+            world.mpiComm());
+        assert(ret == MPI_SUCCESS);
       }
 
       benchmark::Measurement m{};
@@ -189,34 +161,26 @@ int main(int argc, char* argv[]) {
       m.blocksize = blocksize;
 
       for (auto&& algo : ALGORITHMS) {
-        FMPI_DBG_STREAM("running algorithm: " << algo.first);
-
         // We always want to guarantee that all processors start at the same
         // time, so this is a real barrier
         auto       barrier         = clock.Barrier(world.mpiComm());
         auto const barrier_success = barrier.Success(world.mpiComm());
         assert(barrier_success);
 
-        auto total = benchmark::run_algorithm(
-            algo.second,
-            sbuf.begin(),
-            rbuf.begin(),
-            static_cast<int>(sendcount),
-            world/*,
-            merger*/);
+        auto total = algo.run(args);
 
         if (params.check) {
           benchmark::validate(
-              rbuf.begin(), rbuf.end(), correct.begin(), world, algo.first);
+              rbuf.begin(), rbuf.end(), correct.begin(), world, algo.name());
         }
 
-        if (nwarmup == 0 || it > 0) {
-          m.algorithm = algo.first;
-          m.iter      = it - nwarmup + 1;
+        if (params.warmups == 0 || it > static_cast<int>(params.warmups)) {
+          m.algorithm = algo.name();
+          m.iter      = it - params.warmups + 1;
 
-          auto const& traces = traceStore.traces(algo.first);
+          auto const& traces = traceStore.traces(algo.name());
 
-          write_csv_line(
+          benchmark::write_csv_line(
               std::cout,
               m,
               std::make_pair(std::string{fmpi::kTotalTime}, total));
@@ -226,7 +190,7 @@ int main(int argc, char* argv[]) {
           }
         }
 
-        traceStore.erase(algo.first);
+        traceStore.erase(algo.name());
       }
       assert(traceStore.empty());
     }
@@ -287,10 +251,14 @@ void init_sbuf(T* first, T* last, uint32_t p, int32_t me) {
     firstprivate(p, sendcount, me, nels)
   {
 #ifdef NDEBUG
-    std::random_device    r;
-    std::seed_seq         seed_seq{r(), r(), r(), r(), r(), r()};
-    std::mt19937_64       generator(seed_seq);
-    uniform_dist<value_t> distribution;
+    using uniform_dist = std::conditional_t<
+        std::is_integral_v<T>,
+        std::uniform_int_distribution<T>,
+        std::uniform_real_distribution<T>>;
+    std::random_device r;
+    std::seed_seq      seed_seq{r(), r(), r(), r(), r(), r()};
+    std::mt19937_64    generator(seed_seq);
+    uniform_dist       distribution;
 #endif
 #pragma omp for
     for (std::size_t block = 0; block < std::size_t(p); ++block) {

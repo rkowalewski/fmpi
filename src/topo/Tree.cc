@@ -1,6 +1,6 @@
-#include <fmpi/Math.hpp>
-#include <fmpi/NumericRange.hpp>
 #include <fmpi/topo/Tree.hpp>
+#include <fmpi/util/Math.hpp>
+#include <fmpi/util/NumericRange.hpp>
 // TLX
 #include <tlx/math/ffs.hpp>
 #include <tlx/math/integer_log2.hpp>

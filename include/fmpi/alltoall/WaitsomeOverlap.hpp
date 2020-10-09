@@ -3,12 +3,11 @@
 
 #include <fmpi/Debug.hpp>
 #include <fmpi/Schedule.hpp>
-#include <fmpi/alltoall/Detail.hpp>
 #include <fmpi/concurrency/Dispatcher.hpp>
-#include <fmpi/detail/CollectiveArgs.hpp>
-#include <fmpi/memory/ThreadAllocator.hpp>
+//#include <fmpi/memory/ThreadAllocator.hpp>
 #include <fmpi/memory/detail/pointer_arithmetic.hpp>
 #include <fmpi/mpi/TypeMapper.hpp>
+#include <fmpi/util/NumericRange.hpp>
 #include <fmpi/util/Trace.hpp>
 #include <numeric>
 #include <string_view>
@@ -26,123 +25,113 @@ constexpr auto t_receive    = "Tmain.t_receive"sv;
 constexpr auto t_idle       = "Tmain.t_idle"sv;
 constexpr auto t_compute    = kComputationTime;
 
-struct ScheduleArgs {
-  enum class window_type
-  {
-    SLIDING,
-    FIXED
-  };
-  std::size_t const winsz{};
-  std::string const name;
-  window_type       type = window_type::FIXED;
-};
-
 class Alltoall {
  public:
-  Alltoall(CollectiveArgs args, ScheduleArgs schedule);
+  Alltoall(
+      const void*         sendbuf_,
+      std::size_t         sendcount_,
+      MPI_Datatype        sendtype_,
+      void*               recvbuf_,
+      std::size_t         recvcount_,
+      MPI_Datatype        recvtype_,
+      mpi::Context const& comm_,
+      ScheduleOpts const& opts_);
 
-  template <class Schedule>
-  collective_future execute(Schedule schedule);
+  collective_future execute();
 
  private:
-  const void* send_offset(mpi::Rank r) const;
-  void*       recv_offset(mpi::Rank r) const;
+  [[nodiscard]] const void* send_offset(mpi::Rank r) const;
+  [[nodiscard]] void*       recv_offset(mpi::Rank r) const;
+  void                      local_copy();
 
-  CollectiveArgs args_;
-  ScheduleArgs   sched_args_;
-  MPI_Aint       recvextent_{};
-  MPI_Aint       sendextent_{};
+  const void* const   sendbuf;
+  std::size_t const   sendcount;
+  MPI_Datatype const  sendtype;
+  void* const         recvbuf;
+  std::size_t const   recvcount;
+  MPI_Datatype const  recvtype;
+  mpi::Context const& comm;
+  MPI_Aint            recvextent_{};
+  MPI_Aint            sendextent_{};
+  ScheduleOpts const& opts;
 };
 
 }  // namespace detail
 
-template <class Schedule, class InputIt, class OutputIt, size_t NReqs = 2>
-inline collective_future ring_waitsome_overlap(
-    InputIt begin, OutputIt out, int blocksize, mpi::Context const& ctx) {
-  constexpr auto algorithm_name = std::string_view("WaitsomeOverlap");
-
-  using value_type = typename std::iterator_traits<InputIt>::value_type;
-
-  auto collective_args = detail::CollectiveArgs{
-      &*begin,
-      static_cast<std::size_t>(blocksize),
-      mpi::type_mapper<value_type>::type(),
-      &*out,
-      static_cast<std::size_t>(blocksize),
-      mpi::type_mapper<value_type>::type(),
-      ctx};
-
-  auto schedule_args = detail::ScheduleArgs{
-      NReqs,
-      std::string{Schedule::NAME} + std::string{algorithm_name} +
-          std::to_string(NReqs),
-      detail::ScheduleArgs::window_type::SLIDING
-
-  };
-
-  auto coll = detail::Alltoall{collective_args, schedule_args};
-  return coll.execute(Schedule{ctx});
-}
-
-template <class Schedule, class InputIt, class OutputIt, size_t NReqs = 2>
-inline collective_future ring_waitall_overlap(
-    InputIt begin, OutputIt out, int blocksize, mpi::Context const& ctx) {
-  constexpr auto algorithm_name = std::string_view("WaitallOverlap");
-
-  using value_type = typename std::iterator_traits<InputIt>::value_type;
-
-  auto collective_args = detail::CollectiveArgs{
-      &*begin,
-      static_cast<std::size_t>(blocksize),
-      mpi::type_mapper<value_type>::type(),
-      &*out,
-      static_cast<std::size_t>(blocksize),
-      mpi::type_mapper<value_type>::type(),
-      ctx};
-
-  auto schedule_args = detail::ScheduleArgs{
-      NReqs,
-      std::string{Schedule::NAME} + std::string{algorithm_name} +
-          std::to_string(NReqs),
-      detail::ScheduleArgs::window_type::FIXED
-
-  };
-
-  auto coll = detail::Alltoall{collective_args, schedule_args};
-  return coll.execute(Schedule{ctx});
+inline collective_future alltoall(
+    const void*         sendbuf,
+    std::size_t         sendcount,
+    MPI_Datatype        sendtype,
+    void*               recvbuf,
+    std::size_t         recvcount,
+    MPI_Datatype        recvtype,
+    mpi::Context const& ctx,
+    ScheduleOpts const& schedule_args) {
+  auto coll = detail::Alltoall{
+      sendbuf,
+      sendcount,
+      sendtype,
+      recvbuf,
+      recvcount,
+      recvtype,
+      ctx,
+      schedule_args};
+  return coll.execute();
 }
 
 namespace detail {
 
-inline Alltoall::Alltoall(CollectiveArgs args, ScheduleArgs schedule)
-  : args_(args)
-  , sched_args_(std::move(schedule)) {
+inline Alltoall::Alltoall(
+    const void*         sendbuf_,
+    std::size_t         sendcount_,
+    MPI_Datatype        sendtype_,
+    void*               recvbuf_,
+    std::size_t         recvcount_,
+    MPI_Datatype        recvtype_,
+    mpi::Context const& comm_,
+    ScheduleOpts const& opts_)
+  : sendbuf(sendbuf_)
+  , sendcount(sendcount_)
+  , sendtype(sendtype_)
+  , recvbuf(recvbuf_)
+  , recvcount(recvcount_)
+  , recvtype(recvtype_)
+  , comm(comm_)
+  , opts(opts_) {
   MPI_Aint recvlb{};
   MPI_Aint sendlb{};
-  FMPI_ASSERT(args_.recvtype == args_.sendtype);
-  MPI_Type_get_extent(args_.recvtype, &recvlb, &recvextent_);
-  MPI_Type_get_extent(args_.sendtype, &sendlb, &sendextent_);
+  FMPI_ASSERT(recvtype == sendtype);
+  MPI_Type_get_extent(recvtype, &recvlb, &recvextent_);
+  MPI_Type_get_extent(sendtype, &sendlb, &sendextent_);
 }
 
 inline void* Alltoall::recv_offset(mpi::Rank r) const {
   FMPI_ASSERT(r >= 0);
-  auto const segsz  = args_.recvcount * recvextent_;
+  auto const segsz  = recvcount * recvextent_;
   auto const offset = static_cast<std::size_t>(r) * segsz;
-  return fmpi::detail::add(args_.recvbuf, offset);
+  return fmpi::detail::add(recvbuf, offset);
 }
 
 inline const void* Alltoall::send_offset(mpi::Rank r) const {
   FMPI_ASSERT(r >= 0);
-  auto const segsz  = args_.sendcount * sendextent_;
+  auto const segsz  = sendcount * sendextent_;
   auto const offset = static_cast<std::size_t>(r) * segsz;
-  return fmpi::detail::add(args_.sendbuf, offset);
+  return fmpi::detail::add(sendbuf, offset);
 }
 
-template <class Schedule>
-inline collective_future Alltoall::execute(Schedule schedule) {
-  auto const& ctx = args_.comm;
+inline void Alltoall::local_copy() {
+  auto const& ctx = comm;
+  auto*       dst = recv_offset(ctx.rank());
+  auto const* src = send_offset(ctx.rank());
 
-  FMPI_DBG_STREAM("running algorithm " << sched_args_.name);
+  std::memcpy(dst, src, sendcount * sendextent_);
+}
+
+inline collective_future Alltoall::execute() {
+  auto const& schedule = opts.scheduler;
+  auto const& ctx      = comm;
+
+  FMPI_DBG_STREAM("running algorithm " << opts.name);
 
   if (ctx.size() < 3) {
     auto const me = ctx.rank();
@@ -150,21 +139,22 @@ inline collective_future Alltoall::execute(Schedule schedule) {
         static_cast<mpi::Rank>((ctx.size()) == 1 ? me : 1 - me);
     auto ret = MPI_Sendrecv(
         send_offset(other),
-        args_.sendcount,
-        args_.sendtype,
+        sendcount,
+        sendtype,
         other,
         kTagRing,
         recv_offset(other),
-        args_.recvcount,
-        args_.recvtype,
+        recvcount,
+        recvtype,
         other,
         kTagRing,
         ctx.mpiComm(),
         MPI_STATUS_IGNORE);
+    local_copy();
     return make_ready_future(ret);
   }
 
-  auto trace = MultiTrace{std::string_view(sched_args_.name)};
+  auto trace = MultiTrace{std::string_view(opts.name)};
 
   steady_timer t_init{trace.duration(detail::t_initialize)};
 
@@ -173,7 +163,7 @@ inline collective_future Alltoall::execute(Schedule schedule) {
   // auto buf_alloc     = thread_alloc{};
 
   auto const reqsInFlight =
-      std::min(std::size_t(schedule.phaseCount()), sched_args_.winsz);
+      std::min(std::size_t(schedule.phaseCount()), opts.winsz);
 
   std::array<std::size_t, detail::n_types> nslots{};
   nslots.fill(reqsInFlight);
@@ -188,8 +178,8 @@ inline collective_future Alltoall::execute(Schedule schedule) {
       message_type::IRECV,
       [buf_alloc,
        recvextent,
-       recvcount = args_.recvcount,
-       recvtype  = args_.recvtype](Message& message) mutable {
+       recvcount = recvcount,
+       recvtype  = recvtype](Message& message) mutable {
         auto const nbytes = recvcount * recvextent;
         auto*      buffer = buf_alloc.allocate(nbytes);
         FMPI_ASSERT(buffer);
@@ -213,7 +203,7 @@ inline collective_future Alltoall::execute(Schedule schedule) {
   t_init.finish();
 
   {
-    auto const winsz = static_cast<uint32_t>(sched_args_.winsz);
+    auto const winsz = static_cast<uint32_t>(opts.winsz);
     FMPI_DBG("Sending messages");
     steady_timer t_dispatch{trace.duration(detail::t_dispatch)};
 
@@ -233,8 +223,8 @@ inline collective_future Alltoall::execute(Schedule schedule) {
           // auto recv = Message{rpeer, kTagRing, ctx.mpiComm()};
           auto recv = Message{
               recv_offset(rpeer),
-              args_.recvcount,
-              args_.recvtype,
+              recvcount,
+              recvtype,
               rpeer,
               kTagRing,
               ctx.mpiComm()};
@@ -244,8 +234,8 @@ inline collective_future Alltoall::execute(Schedule schedule) {
         if (speer != ctx.rank()) {
           auto send = Message{
               send_offset(speer),
-              args_.sendcount,
-              args_.sendtype,
+              sendcount,
+              sendtype,
               speer,
               kTagRing,
               ctx.mpiComm()};
@@ -253,20 +243,17 @@ inline collective_future Alltoall::execute(Schedule schedule) {
           dispatcher.schedule(hdl, message_type::ISEND, send);
         }
       }
-      if (sched_args_.type == ScheduleArgs::window_type::FIXED) {
+      if (opts.type == ScheduleOpts::WindowType::fixed) {
         dispatcher.schedule(hdl, message_type::BARRIER);
       }
     }
 
-    auto*       dst = recv_offset(ctx.rank());
-    auto const* src = send_offset(ctx.rank());
-
-    std::memcpy(dst, src, args_.sendcount * sendextent_);
+    local_copy();
 
     future.arrival_queue()->emplace_back(Message{
-        dst,
-        args_.recvcount,
-        args_.recvtype,
+        recv_offset(ctx.rank()),
+        recvcount,
+        recvtype,
         ctx.rank(),
         kTagRing,
         ctx.mpiComm()});

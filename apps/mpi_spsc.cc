@@ -6,7 +6,6 @@
 #include <cassert>
 #include <cstdlib>
 #include <fmpi/Debug.hpp>
-#include <fmpi/NumericRange.hpp>
 #include <fmpi/Pinning.hpp>
 #include <fmpi/concurrency/Async.hpp>
 #include <fmpi/concurrency/BufferedChannel.hpp>
@@ -15,6 +14,7 @@
 #include <fmpi/mpi/Algorithm.hpp>
 #include <fmpi/mpi/Environment.hpp>
 #include <fmpi/mpi/Request.hpp>
+#include <fmpi/util/NumericRange.hpp>
 #include <future>
 #include <gsl/span>
 #include <iostream>

@@ -3,6 +3,7 @@
 
 #include <fmpi/mpi/Environment.hpp>
 #include <memory>
+#include <vector>
 
 namespace fmpi {
 

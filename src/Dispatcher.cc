@@ -1,9 +1,9 @@
 #include <fmpi/Debug.hpp>
-#include <fmpi/NumericRange.hpp>
 #include <fmpi/Pinning.hpp>
 #include <fmpi/common/Porting.hpp>
 #include <fmpi/concurrency/Dispatcher.hpp>
 #include <fmpi/mpi/Algorithm.hpp>
+#include <fmpi/util/NumericRange.hpp>
 #include <numeric>
 #include <utility>
 

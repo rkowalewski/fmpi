@@ -1,12 +1,11 @@
-#include "benchmark.hpp"
-
 #include <fmpi/Debug.hpp>
-#include <fmpi/NumericRange.hpp>
 #include <fmpi/Pinning.hpp>
 #include <fmpi/mpi/Environment.hpp>
-
+#include <fmpi/util/NumericRange.hpp>
 #include <tlx/algorithm.hpp>
 #include <tlx/simple_vector.hpp>
+
+#include "benchmark.hpp"
 
 void CustomArguments(benchmark::internal::Benchmark* b) {
   constexpr long min_procs = 16;
@@ -21,9 +20,9 @@ void CustomArguments(benchmark::internal::Benchmark* b) {
   for (long np = min_procs; np <= max_procs; np *= 2) {
     for (long block_bytes = min_blocksz; block_bytes <= max_blocksz;
          block_bytes *= 4) {
-
       for (long ws = min_winsz; ws <= max_winsz; ws *= 2) {
-        b->Args({np, block_bytes, ws, static_cast<long>(omp_get_max_threads())});
+        b->Args(
+            {np, block_bytes, ws, static_cast<long>(omp_get_max_threads())});
       }
     }
   }
@@ -216,6 +215,6 @@ BENCHMARK(BM_TlxMergeSequentialRecursive)
 BENCHMARK(BM_TlxMergeParallelRecursive)
     ->Apply(CustomArguments)
     ->UseRealTime();
-//BENCHMARK(BM_TlxMergeParallelRecursiveCache)
+// BENCHMARK(BM_TlxMergeParallelRecursiveCache)
 //    ->Apply(CustomArguments)
 //    ->UseRealTime();

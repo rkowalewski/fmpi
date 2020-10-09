@@ -1,10 +1,13 @@
 #ifndef FMPI_ALLTOALL_MPIALLTOALL_HPP
 #define FMPI_ALLTOALL_MPIALLTOALL_HPP
 
+
+#if 0
 #include <mpi.h>
 
 #include <fmpi/Config.hpp>
 #include <fmpi/NumericRange.hpp>
+#include <fmpi/Schedule.hpp>
 #include <fmpi/concurrency/Future.hpp>
 #include <fmpi/detail/Assert.hpp>
 #include <fmpi/mpi/Algorithm.hpp>
@@ -13,18 +16,23 @@
 #include <rtlx/Timer.hpp>
 #include <tlx/simple_vector.hpp>
 
+
 namespace fmpi {
 
 constexpr auto kAlltoall = std::string_view("AlltoAll");
 
-template <class InputIt, class OutputIt>
 collective_future mpi_alltoall(
-    InputIt begin, OutputIt out, int blocksize, mpi::Context const& ctx) {
-  using value_type = typename std::iterator_traits<InputIt>::value_type;
-
+    void*               sendbuf,
+    std::size_t         sendcount,
+    MPI_Datatype        sendtype,
+    void*               recvbuf,
+    std::size_t         recvcount,
+    MPI_Datatype        recvtype,
+    mpi::Context const& ctx,
+    ScheduleOpts /*args*/) {
   auto trace = MultiTrace{kAlltoall};
 
-  std::unique_ptr<value_type[]> rbuf;
+  // std::unique_ptr<value_type[]> rbuf;
 
   //{
   steady_timer tt{trace.duration(kCommunicationTime)};
@@ -34,13 +42,12 @@ collective_future mpi_alltoall(
   auto request = std::make_unique<MPI_Request>();
 
   FMPI_CHECK_MPI(MPI_Ialltoall(
-      std::addressof(*begin),
-      static_cast<int>(blocksize),
-      mpi::type_mapper<value_type>::type(),
-      // rbuf.get(),
-      std::addressof(*out),
-      static_cast<int>(blocksize),
-      mpi::type_mapper<value_type>::type(),
+      sendbuf,
+      sendcount,
+      sendtype,
+      recvbuf,
+      recvcount,
+      recvtype,
       ctx.mpiComm(),
       request.get()));
 
@@ -48,7 +55,6 @@ collective_future mpi_alltoall(
   return make_mpi_future(std::move(request));
   //}
 
-#if 0
   {
     steady_timer tt{trace.duration(kComputationTime)};
 
@@ -72,7 +78,7 @@ collective_future mpi_alltoall(
 
 
   return make_ready_future(MPI_SUCCESS);
-#endif
-}
 }  // namespace fmpi
+}  // namespace fmpi
+#endif
 #endif

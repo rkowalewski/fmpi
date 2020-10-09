@@ -5,9 +5,9 @@
 #include <climits>
 #include <cmath>
 #include <ctime>
-#include <fmpi/NumericRange.hpp>
 #include <fmpi/mpi/Environment.hpp>
 #include <iomanip>
+#include <iostream>
 #include <string>
 #include <tlx/cmdline_parser.hpp>
 #include <tlx/math/integer_log2.hpp>
@@ -70,8 +70,9 @@ bool read_input(int argc, char* argv[], struct Params& params) {
   cp.add_uint('p', "pmin", params.pmin, "minimum number of ranks");
   cp.add_uint('P', "pmax", params.pmax, "maximum number of ranks");
 
-  cp.add_uint(
-      'i', "iterations", params.niters, "Number of iterations per round.");
+  cp.add_uint('i', "iterations", params.niters, "Trials per round.");
+
+  cp.add_uint('w', "warmups", params.warmups, "Warmups per round.");
 
   std::size_t time_limit = params.time_limit.count();
 
@@ -182,18 +183,23 @@ Params::Params() noexcept
   :
 #ifdef NDEBUG
   niters(10)
+  , warmups(0)
   , check(false)
 #else
   niters(1)
+  , warmups(1)
   , check(true)
 #endif
 {
 }
 
-void run_algorithm(CollectiveArgs args, algorithm algo, std::size_t winsz) {
+#if 0
+void run_algorithm(
+    CollectiveArgs /*args*/, algorithm algo, std::size_t /*winsz*/) {
   if (algo == algorithm::one_factor) {
 
   }
 }
+#endif
 
 }  // namespace benchmark

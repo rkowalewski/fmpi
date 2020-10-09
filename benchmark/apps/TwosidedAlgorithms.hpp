@@ -25,6 +25,35 @@ struct Measurement {
   std::string algorithm;
 };
 
+struct CollectiveArgs {
+  template <class T>
+  constexpr CollectiveArgs(
+      const T*            sendbuf_,
+      std::size_t         sendcount_,
+      T*                  recvbuf_,
+      std::size_t         recvcount_,
+      mpi::Context const& comm_)
+    : sendbuf(sendbuf_)
+    , sendcount(sendcount_)
+    , sendtype(mpi::type_mapper<T>::type())
+    , recvbuf(recvbuf_)
+    , recvcount(recvcount_)
+    , recvtype(mpi::type_mapper<T>::type())
+    , comm(comm_) {
+    using mapper = mpi::type_mapper<T>;
+    static_assert(
+        mapper::is_basic, "Unknown MPI Type, this probably wouldn't work.");
+  }
+
+  const void* const   sendbuf;
+  std::size_t const   sendcount = 0;
+  MPI_Datatype const  sendtype  = MPI_DATATYPE_NULL;
+  void* const         recvbuf;
+  std::size_t const   recvcount = 0;
+  MPI_Datatype const  recvtype  = MPI_DATATYPE_NULL;
+  mpi::Context const& comm;
+};
+
 void write_csv_header(std::ostream& os);
 
 void write_csv_line(
@@ -34,167 +63,143 @@ void write_csv_line(
         typename fmpi::TraceStore::key_type,
         typename fmpi::TraceStore::mapped_type> const& entry);
 
-template <class RandomAccessIterator1, class RandomAccessIterator2>
-using fmpi_algorithm_t = std::function<fmpi::collective_future(
-    RandomAccessIterator1, RandomAccessIterator2, int, mpi::Context const&)>;
+template <
+    class Schedule,
+    fmpi::ScheduleOpts::WindowType WinT,
+    std::size_t                    Size>
+std::string schedule_name() {
+  using enum_t = fmpi::ScheduleOpts::WindowType;
 
-template <class InputIt, class OutputIt, class Communication>
-auto run_algorithm(
-    Communication&&     f,
-    InputIt             begin,
-    OutputIt            out,
-    int                 blocksize,
-    mpi::Context const& comm) {
-  using duration = typename rtlx::steady_timer::duration;
+  static const std::unordered_map<enum_t, std::string_view> names = {
+      {enum_t::sliding, "Waitsome"}, {enum_t::fixed, "Waitall"}};
 
-  duration d{};
-  {
-    rtlx::steady_timer t{d};
-    auto               future = f(begin, out, blocksize, comm);
-  }
-  return d;
+  return std::string{Schedule::NAME} + std::string{names.at(WinT)} +
+         std::to_string(Size);
 }
 
-template <class RandomAccessIterator1, class RandomAccessIterator2>
-auto algorithm_list(std::string const& pattern, mpi::Context const& ctx)
-    -> std::unordered_map<
-        std::string,
-        fmpi_algorithm_t<RandomAccessIterator1, RandomAccessIterator2>> {
-  std::unordered_map<
-      std::string,
-      fmpi_algorithm_t<RandomAccessIterator1, RandomAccessIterator2>>
-      algorithms {
-    std::make_pair(
-        "AlltoAll",
-        fmpi::mpi_alltoall<RandomAccessIterator1, RandomAccessIterator2>),
-        std::make_pair(
-            "RingWaitallOverlap4",
-            fmpi::ring_waitall_overlap<
-                fmpi::FlatHandshake,
-                RandomAccessIterator1,
-                RandomAccessIterator2,
-                4>),
-        std::make_pair(
-            "RingWaitallOverlap8",
-            fmpi::ring_waitall_overlap<
-                fmpi::FlatHandshake,
-                RandomAccessIterator1,
-                RandomAccessIterator2,
-                8>),
-        std::make_pair(
-            "RingWaitallOverlap16",
-            fmpi::ring_waitall_overlap<
-                fmpi::FlatHandshake,
-                RandomAccessIterator1,
-                RandomAccessIterator2,
-                16>),
-        std::make_pair(
-            "OneFactorWaitallOverlap4",
-            fmpi::ring_waitall_overlap<
-                fmpi::OneFactor,
-                RandomAccessIterator1,
-                RandomAccessIterator2,
-                4>),
-        std::make_pair(
-            "OneFactorWaitallOverlap8",
-            fmpi::ring_waitall_overlap<
-                fmpi::OneFactor,
-                RandomAccessIterator1,
-                RandomAccessIterator2,
-                8>),
-        std::make_pair(
-            "OneFactorWaitallOverlap16",
-            fmpi::ring_waitall_overlap<
-                fmpi::OneFactor,
-                RandomAccessIterator1,
-                RandomAccessIterator2,
-                16>),
-#if 0
-          std::make_pair(
-              "RingWaitsome4",
-              fmpi::ring_waitsome<
-                  fmpi::FlatHandshake,
-                  RandomAccessIterator1,
-                  RandomAccessIterator2,
-                  4>),
-          std::make_pair(
-              "RingWaitsome8",
-              fmpi::ring_waitsome<
-                  fmpi::FlatHandshake,
-                  RandomAccessIterator1,
-                  RandomAccessIterator2,
-                  8>),
-          std::make_pair(
-              "RingWaitsome16",
-              fmpi::ring_waitsome<
-                  fmpi::FlatHandshake,
-                  RandomAccessIterator1,
-                  RandomAccessIterator2,
-                  16>),
-          std::make_pair(
-              "OneFactorWaitsome4",
-              fmpi::ring_waitsome<
-                  fmpi::OneFactor,
-                  RandomAccessIterator1,
-                  RandomAccessIterator2,
-                  4>),
-          std::make_pair(
-              "OneFactorWaitsome8",
-              fmpi::ring_waitsome<
-                  fmpi::OneFactor,
-                  RandomAccessIterator1,
-                  RandomAccessIterator2,
-                  8>),
-          std::make_pair(
-              "OneFactorWaitsome16",
-              fmpi::ring_waitsome<
-                  fmpi::OneFactor,
-                  RandomAccessIterator1,
-                  RandomAccessIterator2,
-                  16>),
-#endif
-        std::make_pair(
-            "RingWaitsomeOverlap4",
-            fmpi::ring_waitsome_overlap<
-                fmpi::FlatHandshake,
-                RandomAccessIterator1,
-                RandomAccessIterator2,
-                4>),
-        std::make_pair(
-            "RingWaitsomeOverlap8",
-            fmpi::ring_waitsome_overlap<
-                fmpi::FlatHandshake,
-                RandomAccessIterator1,
-                RandomAccessIterator2,
-                8>),
-        std::make_pair(
-            "RingWaitsomeOverlap16",
-            fmpi::ring_waitsome_overlap<
-                fmpi::FlatHandshake,
-                RandomAccessIterator1,
-                RandomAccessIterator2,
-                16>),
-        std::make_pair(
-            "OneFactorWaitsomeOverlap4",
-            fmpi::ring_waitsome_overlap<
-                fmpi::OneFactor,
-                RandomAccessIterator1,
-                RandomAccessIterator2,
-                4>),
-        std::make_pair(
-            "OneFactorWaitsomeOverlap8",
-            fmpi::ring_waitsome_overlap<
-                fmpi::OneFactor,
-                RandomAccessIterator1,
-                RandomAccessIterator2,
-                8>),
-        std::make_pair(
-            "OneFactorWaitsomeOverlap16",
-            fmpi::ring_waitsome_overlap<
-                fmpi::OneFactor,
-                RandomAccessIterator1,
-                RandomAccessIterator2,
-                16>),
+template <
+    class Schedule,
+    fmpi::ScheduleOpts::WindowType WinT,
+    std::size_t                    NReqs>
+class Alltoall_Runner {
+  std::string name_;
+
+ public:
+  Alltoall_Runner()
+    : name_(schedule_name<Schedule, WinT, NReqs>()) {
+  }
+  std::string_view name() const noexcept {
+    return name_;
+  }
+
+  fmpi::collective_future run(CollectiveArgs coll_args) const {
+    auto sched = Schedule{coll_args.comm};
+    auto opts  = fmpi::ScheduleOpts{sched, NReqs, name(), WinT};
+    return fmpi::alltoall(
+        coll_args.sendbuf,
+        coll_args.sendcount,
+        coll_args.sendtype,
+        coll_args.recvbuf,
+        coll_args.recvcount,
+        coll_args.recvtype,
+        coll_args.comm,
+        opts);
+  }
+};
+
+template <fmpi::ScheduleOpts::WindowType WinT, std::size_t NReqs>
+class Alltoall_Runner<void, WinT, NReqs> {
+  static constexpr auto algo_name = std::string_view("AlltoAll");
+
+ public:
+  std::string_view name() const noexcept {
+    return algo_name;
+  }
+
+  fmpi::collective_future run(CollectiveArgs coll_args) const {
+    auto request = std::make_unique<MPI_Request>();
+
+    FMPI_CHECK_MPI(MPI_Ialltoall(
+        coll_args.sendbuf,
+        coll_args.sendcount,
+        coll_args.sendtype,
+        coll_args.recvbuf,
+        coll_args.recvcount,
+        coll_args.recvtype,
+        coll_args.comm.mpiComm(),
+        request.get()));
+
+    return fmpi::make_mpi_future(std::move(request));
+  }
+};
+
+class Runner {
+ public:
+  template <typename T>
+  Runner(const T& obj)
+    : object(std::make_shared<Model<T>>(std::move(obj))) {
+  }
+
+  std::string_view name() const {
+    return object->name();
+  }
+
+  std::chrono::nanoseconds run(CollectiveArgs args) const {
+    using duration = rtlx::steady_timer::duration;
+
+    duration d{};
+    {
+      rtlx::steady_timer t{d};
+      auto               f = object->run(args);
+      // automatically waits for future
+    }
+    return d;
+  }
+
+ private:
+  struct Concept {
+    virtual ~Concept() {
+    }
+    virtual std::string_view        name() const                        = 0;
+    virtual fmpi::collective_future run(CollectiveArgs coll_args) const = 0;
+  };
+
+  template <typename T>
+  struct Model : Concept {
+    Model(const T& t)
+      : object(t) {
+    }
+    std::string_view name() const override {
+      return object.name();
+    }
+
+    fmpi::collective_future run(CollectiveArgs coll_args) const override {
+      return object.run(coll_args);
+    }
+
+   private:
+    T object;
+  };
+  std::shared_ptr<const Concept> object;
+};
+
+std::vector<Runner> algorithm_list(
+    std::string const& pattern, mpi::Context const& ctx) {
+  using win_t     = fmpi::ScheduleOpts::WindowType;
+  auto algorithms = std::vector<Runner>({
+    Runner{Alltoall_Runner<void, win_t::fixed, 0>()},
+        Runner{Alltoall_Runner<fmpi::FlatHandshake, win_t::fixed, 4>()},
+        Runner{Alltoall_Runner<fmpi::FlatHandshake, win_t::fixed, 8>()},
+        Runner{Alltoall_Runner<fmpi::FlatHandshake, win_t::fixed, 16>()},
+        Runner{Alltoall_Runner<fmpi::FlatHandshake, win_t::sliding, 4>()},
+        Runner{Alltoall_Runner<fmpi::FlatHandshake, win_t::sliding, 8>()},
+        Runner{Alltoall_Runner<fmpi::FlatHandshake, win_t::sliding, 16>()},
+        Runner{Alltoall_Runner<fmpi::OneFactor, win_t::fixed, 4>()},
+        Runner{Alltoall_Runner<fmpi::OneFactor, win_t::fixed, 8>()},
+        Runner{Alltoall_Runner<fmpi::OneFactor, win_t::fixed, 16>()},
+        Runner{Alltoall_Runner<fmpi::OneFactor, win_t::sliding, 4>()},
+        Runner{Alltoall_Runner<fmpi::OneFactor, win_t::sliding, 8>()},
+        Runner{Alltoall_Runner<fmpi::OneFactor, win_t::sliding, 16>()},
 #if 0
           // Bruck Algorithms, first the original one, then a modified
           // version which omits the last local rotation step
@@ -224,18 +229,32 @@ auto algorithm_list(std::string const& pattern, mpi::Context const& ctx)
                   RandomAccessIterator1,
                   RandomAccessIterator2>)
 #endif
-  };
+  });
 
   if (!pattern.empty()) {
     // remove algorithms not matching a pattern
     auto const regex = std::regex(pattern);
-    rtlx::erase_if(algorithms, [regex](auto const& entry) {
-      return !std::regex_match(entry.first, regex);
-    });
+
+    algorithms.erase(
+        std::remove_if(
+            std::begin(algorithms),
+            std::end(algorithms),
+            [regex](auto const& entry) {
+              std::match_results<std::string_view::const_iterator> base_match;
+              return !std::regex_match(
+                  entry.name().begin(),
+                  entry.name().end(),
+                  base_match,
+                  regex);
+            }),
+        algorithms.end());
   }
 
   if (!fmpi::isPow2(ctx.size())) {
-    algorithms.erase("Bruck_Mod");
+    algorithms.erase(std::remove_if(
+        std::begin(algorithms), std::end(algorithms), [](auto const& entry) {
+          return entry.name().find("Bruck_Mod");
+        }));
   }
 
   return algorithms;
@@ -247,7 +266,7 @@ void validate(
     Iter1               last,
     Iter2               expected,
     mpi::Context const& ctx,
-    std::string const&  algo) {
+    std::string_view    algo) {
   auto const is_equal = std::equal(first, last, expected);
 
   // FMPI_DBG_RANGE(first, last);

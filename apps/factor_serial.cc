@@ -1,9 +1,9 @@
 #include <algorithm>
 #include <cassert>
 #include <cmath>
-#include <fmpi/Math.hpp>
-#include <fmpi/NumericRange.hpp>
 #include <fmpi/Schedule.hpp>
+#include <fmpi/util/Math.hpp>
+#include <fmpi/util/NumericRange.hpp>
 //#include <fmpi/topo/BinaryTree.hpp>
 #include <fmpi/topo/Tree.hpp>
 #include <functional>
@@ -152,7 +152,7 @@ inline auto knomial_tree(int nr, int root, int radix = 2) {
   std::vector<std::vector<RankPair>> res(nr);
 
   for (auto&& me :
-       fmpi::range(static_cast<fmpi::Rank>(0), static_cast<fmpi::Rank>(nr))) {
+       fmpi::range(static_cast<mpi::Rank>(0), static_cast<mpi::Rank>(nr))) {
     auto tree = fmpi::knomial(me, static_cast<mpi::Rank>(root), nr, radix);
     for (auto&& r : tree->destinations) {
       res[me].emplace_back(me, r);
@@ -594,7 +594,7 @@ int main(int argc, char* argv[]) {
     std::cout << "\n";
   } else {
     constexpr int root = 0;
-    print_dot_tree(knomial_tree(nr, root,3));
+    print_dot_tree(knomial_tree(nr, root, 3));
     // print_dot_tree(regular_tree(nr, root));
     // print_dot_tree(knomial_tree(nr, root, 3));
     // print_dot_tree(binary_tree(nr, root));

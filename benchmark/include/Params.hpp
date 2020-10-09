@@ -18,6 +18,7 @@ struct Params {
  public:
   Params() noexcept;
   unsigned int              niters{};
+  unsigned int              warmups{};
   std::size_t               smin       = 1u << 5;  // 32 bytes
   std::size_t               smax       = 1u << 7;  // 128 bytes
   uint32_t                  pmin       = 1u << 1;
@@ -28,6 +29,7 @@ struct Params {
   bool        check{false};  // validate correctness
 };
 
+#if 0
 struct CollectiveArgs {
  public:
 #if 0
@@ -65,7 +67,7 @@ struct CollectiveArgs {
     , comm(comm_) {
     using mapper = mpi::type_mapper<T>;
     static_assert(
-        mapper::is_basic == true,
+        static_cast<bool>(mapper::is_basic),
         "Unknown MPI Type, this probably wouldn't work.");
   }
 
@@ -86,9 +88,10 @@ enum class algorithm
   bruck
 };
 
-bool read_input(int argc, char* argv[], struct Params& params);
-
 void run_algorithm(CollectiveArgs args, algorithm algo, std::size_t winsz);
+#endif
+
+bool read_input(int argc, char* argv[], struct Params& params);
 
 void printBenchmarkPreamble(
     std::ostream& os, const std::string& prefix, const char* delim = "\n");
