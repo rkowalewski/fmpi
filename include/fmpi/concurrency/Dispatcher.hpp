@@ -74,7 +74,7 @@ struct CommTask {
 namespace detail {
 
 static constexpr auto n_types = rtlx::to_underlying(message_type::INVALID);
-}
+}  // namespace detail
 
 #if 0
 enum class status

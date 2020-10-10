@@ -1,11 +1,10 @@
-#ifndef FMPI_MATH_HPP
-#define FMPI_MATH_HPP
+#ifndef FMPI_UTIL_MATH_HPP
+#define FMPI_UTIL_MATH_HPP
 
 #include <climits>
-#include <type_traits>
 #include <cmath>
-
 #include <fmpi/detail/Assert.hpp>
+#include <type_traits>
 
 namespace fmpi {
 

@@ -1,5 +1,5 @@
-#ifndef FMPI_NUMERICRANGE_HPP
-#define FMPI_NUMERICRANGE_HPP
+#ifndef FMPI_UTIL_NUMERICRANGE_HPP
+#define FMPI_UTIL_NUMERICRANGE_HPP
 // -*- C++ -*-
 // Copyright (c) 2017, Just Software Solutions Ltd
 // Copyright (c) 2020, Roger Kowaleski

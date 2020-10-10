@@ -1,5 +1,5 @@
-#ifndef FMPI_RANDOM_HPP
-#define FMPI_RANDOM_HPP
+#ifndef FMPI_UTIL_RANDOM_HPP
+#define FMPI_UTIL_RANDOM_HPP
 
 #include <random>
 

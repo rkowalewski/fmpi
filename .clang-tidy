@@ -3,7 +3,7 @@ Checks: '*,
  -fuchsia-*,-google-*,-zircon-*,-abseil-*,
  -modernize-use-trailing-return-type,
  -modernize-use-using,
- -llvm-*
+ -cert-*
  '
 WarningsAsErrors: ''
 FormatStyle:     none
