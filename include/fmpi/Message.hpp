@@ -120,10 +120,10 @@ class Message {
   constexpr Message(Message&&) noexcept = default;
   constexpr Message& operator=(Message&&) noexcept = default;
 
-  constexpr void set_buffer(void* buf, std::size_t count, MPI_Datatype type)
+  void set_buffer(void* buf, std::size_t count, MPI_Datatype type)
       FMPI_NOEXCEPT {
     FMPI_ASSERT(std::holds_alternative<MutableBuffer>(buf_));
-    buf_      = MutableBuffer{buf};
+    buf_      = MutableBuffer{std::move(buf)};
     count_    = count;
     mpi_type_ = type;
   }
