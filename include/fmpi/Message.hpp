@@ -50,11 +50,20 @@ struct Envelope {
 
 class Message {
   struct ConstBuffer {
-    const void* buffer;
+    ConstBuffer() = default;
+    constexpr ConstBuffer(const void* buf) noexcept
+      : buffer(buf) {
+    }
+    const void* buffer = nullptr;
   };
 
   struct MutableBuffer {
-    void* buffer;
+    MutableBuffer() = default;
+
+    constexpr MutableBuffer(void* buf) noexcept
+      : buffer(buf) {
+    }
+    void* buffer = nullptr;
   };
 
  public:
