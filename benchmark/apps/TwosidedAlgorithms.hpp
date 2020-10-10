@@ -1,10 +1,12 @@
 #ifndef TWOSIDEDALGORITHMS_HPP  // NOLINT
 #define TWOSIDEDALGORITHMS_HPP  // NOLINT
 
-#include <fmpi/AlltoAll.hpp>
+#include <fmpi/Alltoall.hpp>
 //#include <fmpi/Bruck.hpp>
 #include <fmpi/mpi/Environment.hpp>
+#include <fmpi/util/Trace.hpp>
 #include <functional>
+#include <iostream>
 #include <regex>
 #include <rtlx/Timer.hpp>
 #include <rtlx/UnorderedMap.hpp>
@@ -73,7 +75,7 @@ std::string schedule_name() {
   static const std::unordered_map<enum_t, std::string_view> names = {
       {enum_t::sliding, "Waitsome"}, {enum_t::fixed, "Waitall"}};
 
-  return std::string{Schedule::NAME} + std::string{names.at(WinT)} +
+  return std::string{Schedule::name()} + std::string{names.at(WinT)} +
          std::to_string(Size);
 }
 

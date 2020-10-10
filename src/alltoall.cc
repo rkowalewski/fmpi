@@ -1,18 +1,10 @@
-#ifndef FMPI_ALLTOALL_WAITSOMEOVERLAP_HPP
-#define FMPI_ALLTOALL_WAITSOMEOVERLAP_HPP
-
+#include <cstring>
+#include <fmpi/Alltoall.hpp>
 #include <fmpi/Debug.hpp>
-#include <fmpi/Schedule.hpp>
 #include <fmpi/concurrency/Dispatcher.hpp>
-//#include <fmpi/memory/ThreadAllocator.hpp>
 #include <fmpi/memory/detail/pointer_arithmetic.hpp>
-#include <fmpi/mpi/TypeMapper.hpp>
 #include <fmpi/util/NumericRange.hpp>
 #include <fmpi/util/Trace.hpp>
-#include <numeric>
-#include <string_view>
-#include <tlx/math/div_ceil.hpp>
-#include <utility>
 
 namespace fmpi {
 
@@ -25,65 +17,9 @@ constexpr auto t_receive    = "Tmain.t_receive"sv;
 constexpr auto t_idle       = "Tmain.t_idle"sv;
 constexpr auto t_compute    = kComputationTime;
 
-class Alltoall {
- public:
-  Alltoall(
-      const void*         sendbuf_,
-      std::size_t         sendcount_,
-      MPI_Datatype        sendtype_,
-      void*               recvbuf_,
-      std::size_t         recvcount_,
-      MPI_Datatype        recvtype_,
-      mpi::Context const& comm_,
-      ScheduleOpts const& opts_);
-
-  collective_future execute();
-
- private:
-  [[nodiscard]] const void* send_offset(mpi::Rank r) const;
-  [[nodiscard]] void*       recv_offset(mpi::Rank r) const;
-  void                      local_copy();
-
-  const void* const   sendbuf;
-  std::size_t const   sendcount;
-  MPI_Datatype const  sendtype;
-  void* const         recvbuf;
-  std::size_t const   recvcount;
-  MPI_Datatype const  recvtype;
-  mpi::Context const& comm;
-  MPI_Aint            recvextent_{};
-  MPI_Aint            sendextent_{};
-  ScheduleOpts const& opts;
-};
-
-}  // namespace detail
-
-inline collective_future alltoall(
-    const void*         sendbuf,
-    std::size_t         sendcount,
-    MPI_Datatype        sendtype,
-    void*               recvbuf,
-    std::size_t         recvcount,
-    MPI_Datatype        recvtype,
-    mpi::Context const& ctx,
-    ScheduleOpts const& schedule_args) {
-  auto coll = detail::Alltoall{
-      sendbuf,
-      sendcount,
-      sendtype,
-      recvbuf,
-      recvcount,
-      recvtype,
-      ctx,
-      schedule_args};
-  return coll.execute();
-}
-
-namespace detail {
-
-inline Alltoall::Alltoall(
+Alltoall::Alltoall(
     const void*         sendbuf_,
-    std::size_t         sendcount_,
+    size_t              sendcount_,
     MPI_Datatype        sendtype_,
     void*               recvbuf_,
     std::size_t         recvcount_,
@@ -127,7 +63,7 @@ inline void Alltoall::local_copy() {
   std::memcpy(dst, src, sendcount * sendextent_);
 }
 
-inline collective_future Alltoall::execute() {
+collective_future Alltoall::execute() {
   auto const& schedule = opts.scheduler;
   auto const& ctx      = comm;
 
@@ -265,4 +201,3 @@ inline collective_future Alltoall::execute() {
 
 }  // namespace detail
 }  // namespace fmpi
-#endif

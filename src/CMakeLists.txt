@@ -1,4 +1,5 @@
 add_library(fmpi
+    alltoall.cc
     common/Porting.cc
     concurrency/CacheLocality.cc
     concurrency/Future.cc

@@ -1,16 +1,14 @@
 #include <omp.h>
 
+#include <fmpi/Pinning.hpp>
+#include <fmpi/common/Porting.hpp>
+#include <fmpi/concurrency/CacheLocality.hpp>
+#include <fmpi/detail/Assert.hpp>
+#include <fmpi/mpi/Environment.hpp>
 #include <iomanip>
 #include <iterator>
 #include <thread>
 #include <vector>
-
-#include <fmpi/Pinning.hpp>
-#include <fmpi/common/Porting.hpp>
-#include <fmpi/detail/Assert.hpp>
-#include <fmpi/mpi/Environment.hpp>
-
-#include <fmpi/concurrency/CacheLocality.hpp>
 
 fmpi::Pinning const& fmpi::Pinning::instance() {
   static fmpi::Pinning config{};
@@ -33,7 +31,7 @@ fmpi::Pinning::Pinning() {
     }
   }
 
-  //num_nodes = num_world_nodes();
+  // num_nodes = num_world_nodes();
 
   domain_size = 1;
   {
