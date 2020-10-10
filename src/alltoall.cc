@@ -11,11 +11,7 @@ namespace fmpi {
 namespace detail {
 
 using namespace std::literals::string_view_literals;
-constexpr auto t_initialize = "Tmain.t_initialize"sv;
-constexpr auto t_dispatch   = "Tmain.t_dispatch"sv;
-constexpr auto t_receive    = "Tmain.t_receive"sv;
-constexpr auto t_idle       = "Tmain.t_idle"sv;
-constexpr auto t_compute    = kComputationTime;
+constexpr auto t_copy = "Tcomm.local_copy"sv;
 
 Alltoall::Alltoall(
     const void*         sendbuf_,
@@ -69,6 +65,9 @@ collective_future Alltoall::execute() {
 
   FMPI_DBG_STREAM("running algorithm " << opts.name);
 
+  auto         trace = MultiTrace{std::string_view(opts.name)};
+  steady_timer t_schedule{trace.duration(kScheduleTime)};
+
   if (ctx.size() < 3) {
     auto const me = ctx.rank();
     auto const other =
@@ -90,10 +89,6 @@ collective_future Alltoall::execute() {
     return make_ready_future(ret);
   }
 
-  auto trace = MultiTrace{std::string_view(opts.name)};
-
-  steady_timer t_init{trace.duration(detail::t_initialize)};
-
   // intermediate buffer for two pipelines
   // using thread_alloc = ThreadAllocator<std::byte>;
   // auto buf_alloc     = thread_alloc{};
@@ -104,10 +99,10 @@ collective_future Alltoall::execute() {
   std::array<std::size_t, detail::n_types> nslots{};
   nslots.fill(reqsInFlight);
 
-  auto promise = collective_promise{};
-  auto future  = promise.get_future();
-  auto schedule_state =
-      std::make_unique<fmpi::ScheduleCtx>(nslots, std::move(promise));
+  auto promise        = collective_promise{};
+  auto future         = promise.get_future();
+  auto schedule_state = std::make_unique<fmpi::ScheduleCtx>(
+      nslots, std::move(promise), opts.name);
 
 #if 0
   schedule_state->register_signal(
@@ -136,65 +131,68 @@ collective_future Alltoall::execute() {
   // submit into dispatcher
   auto const hdl = dispatcher.submit(std::move(schedule_state));
 
-  t_init.finish();
+  auto const winsz = static_cast<uint32_t>(opts.winsz);
+  FMPI_DBG("Sending messages");
 
-  {
-    auto const winsz = static_cast<uint32_t>(opts.winsz);
-    FMPI_DBG("Sending messages");
-    steady_timer t_dispatch{trace.duration(detail::t_dispatch)};
+  auto const rounds =
+      std::max(tlx::div_ceil(schedule.phaseCount(), winsz), 1u);
 
-    auto const rounds =
-        std::max(tlx::div_ceil(schedule.phaseCount(), winsz), 1u);
+  for (auto&& r : range(rounds)) {
+    auto const last = std::min(schedule.phaseCount(), (r + 1) * winsz);
 
-    for (auto&& r : range(rounds)) {
-      auto const last = std::min(schedule.phaseCount(), (r + 1) * winsz);
+    for (auto&& rr : range(r * winsz, last)) {
+      auto const rpeer = schedule.recvRank(rr);
+      auto const speer = schedule.sendRank(rr);
 
-      for (auto&& rr : range(r * winsz, last)) {
-        auto const rpeer = schedule.recvRank(rr);
-        auto const speer = schedule.sendRank(rr);
+      FMPI_DBG(std::make_pair(rpeer, speer));
 
-        FMPI_DBG(std::make_pair(rpeer, speer));
-
-        if (rpeer != ctx.rank()) {
-          // auto recv = Message{rpeer, kTagRing, ctx.mpiComm()};
-          auto recv = Message{
-              recv_offset(rpeer),
-              recvcount,
-              recvtype,
-              rpeer,
-              kTagRing,
-              ctx.mpiComm()};
-          dispatcher.schedule(hdl, message_type::IRECV, recv);
-        }
-
-        if (speer != ctx.rank()) {
-          auto send = Message{
-              send_offset(speer),
-              sendcount,
-              sendtype,
-              speer,
-              kTagRing,
-              ctx.mpiComm()};
-
-          dispatcher.schedule(hdl, message_type::ISEND, send);
-        }
+      if (rpeer != ctx.rank()) {
+        // auto recv = Message{rpeer, kTagRing, ctx.mpiComm()};
+        auto recv = Message{
+            recv_offset(rpeer),
+            recvcount,
+            recvtype,
+            rpeer,
+            kTagRing,
+            ctx.mpiComm()};
+        dispatcher.schedule(hdl, message_type::IRECV, recv);
       }
-      if (opts.type == ScheduleOpts::WindowType::fixed) {
-        dispatcher.schedule(hdl, message_type::BARRIER);
+
+      if (speer != ctx.rank()) {
+        auto send = Message{
+            send_offset(speer),
+            sendcount,
+            sendtype,
+            speer,
+            kTagRing,
+            ctx.mpiComm()};
+
+        dispatcher.schedule(hdl, message_type::ISEND, send);
       }
     }
+    if (opts.type == ScheduleOpts::WindowType::fixed) {
+      dispatcher.schedule(hdl, message_type::BARRIER);
+    }
+  }
+
+  {
+    using scoped_timer_switch = rtlx::ScopedTimerSwitch<steady_timer>;
+
+    steady_timer t_copy{trace.duration(detail::t_copy)};
+    // we temporarily pause t_schedule and run t_copy.
+    scoped_timer_switch switcher{t_schedule, t_copy};
 
     local_copy();
-
-    future.arrival_queue()->emplace_back(Message{
-        recv_offset(ctx.rank()),
-        recvcount,
-        recvtype,
-        ctx.rank(),
-        kTagRing,
-        ctx.mpiComm()});
-    dispatcher.commit(hdl);
   }
+
+  future.arrival_queue()->emplace_back(Message{
+      recv_offset(ctx.rank()),
+      recvcount,
+      recvtype,
+      ctx.rank(),
+      kTagRing,
+      ctx.mpiComm()});
+  dispatcher.commit(hdl);
 
   return future;
 }

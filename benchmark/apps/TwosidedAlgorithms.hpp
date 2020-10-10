@@ -56,6 +56,20 @@ struct CollectiveArgs {
   mpi::Context const& comm;
 };
 
+template <class S, class R>
+struct TypedCollectiveArgs : public CollectiveArgs {
+  using send_type = S;
+  using recv_type = R;
+  constexpr TypedCollectiveArgs(
+      S const*            sendbuf_,
+      std::size_t         sendcount_,
+      R*                  recvbuf_,
+      std::size_t         recvcount_,
+      mpi::Context const& comm_)
+    : CollectiveArgs(sendbuf_, sendcount_, recvbuf_, recvcount_, comm_) {
+  }
+};
+
 void write_csv_header(std::ostream& os);
 
 void write_csv_line(
@@ -64,6 +78,65 @@ void write_csv_line(
     std::pair<
         typename fmpi::TraceStore::key_type,
         typename fmpi::TraceStore::mapped_type> const& entry);
+
+class Runner {
+ public:
+  template <typename T>
+  explicit Runner(const T& obj)
+    : object(std::make_shared<Model<T>>(std::move(obj))) {
+  }
+
+  [[nodiscard]] std::string_view name() const {
+    return object->name();
+  }
+
+  template <class S, class R>
+  [[nodiscard]] std::chrono::nanoseconds run(
+      TypedCollectiveArgs<S, R> args) const {
+    using duration = rtlx::steady_timer::duration;
+
+    duration d{};
+    {
+      rtlx::steady_timer t{d};
+      auto               f = object->run(args);
+      // automatically waits for future
+    }
+    return d;
+  }
+
+ private:
+  struct Concept {
+    virtual ~Concept() {
+    }
+    [[nodiscard]] virtual std::string_view        name() const = 0;
+    [[nodiscard]] virtual fmpi::collective_future run(
+        CollectiveArgs coll_args) const = 0;
+  };
+
+  template <typename T>
+  struct Model : Concept {
+    explicit Model(T t)
+      : object(std::move(t)) {
+    }
+    [[nodiscard]] std::string_view name() const override {
+      return object.name();
+    }
+
+    [[nodiscard]] fmpi::collective_future run(
+        CollectiveArgs coll_args) const override {
+      return object.run(coll_args);
+    }
+
+   private:
+    T object;
+  };
+  std::shared_ptr<const Concept> object;
+};
+
+std::vector<Runner> algorithm_list(
+    std::string const& pattern, mpi::Context const& ctx);
+
+namespace detail {
 
 template <
     class Schedule,
@@ -79,6 +152,8 @@ std::string schedule_name() {
          std::to_string(Size);
 }
 
+}  // namespace detail
+
 template <
     class Schedule,
     fmpi::ScheduleOpts::WindowType WinT,
@@ -88,7 +163,7 @@ class Alltoall_Runner {
 
  public:
   Alltoall_Runner()
-    : name_(schedule_name<Schedule, WinT, NReqs>()) {
+    : name_(detail::schedule_name<Schedule, WinT, NReqs>()) {
   }
   [[nodiscard]] std::string_view name() const noexcept {
     return name_;
@@ -134,155 +209,6 @@ class Alltoall_Runner<void, WinT, NReqs> {
     return fmpi::make_mpi_future(std::move(request));
   }
 };
-
-class Runner {
- public:
-  template <typename T>
-  explicit Runner(const T& obj)
-    : object(std::make_shared<Model<T>>(std::move(obj))) {
-  }
-
-  [[nodiscard]] std::string_view name() const {
-    return object->name();
-  }
-
-  [[nodiscard]] std::chrono::nanoseconds run(CollectiveArgs args) const {
-    using duration = rtlx::steady_timer::duration;
-
-    duration d{};
-    {
-      rtlx::steady_timer t{d};
-      auto               f = object->run(args);
-      // automatically waits for future
-    }
-    return d;
-  }
-
- private:
-  struct Concept {
-    virtual ~Concept() {
-    }
-    [[nodiscard]] virtual std::string_view        name() const = 0;
-    [[nodiscard]] virtual fmpi::collective_future run(
-        CollectiveArgs coll_args) const = 0;
-  };
-
-  template <typename T>
-  struct Model : Concept {
-    explicit Model(T t)
-      : object(std::move(t)) {
-    }
-    [[nodiscard]] std::string_view name() const override {
-      return object.name();
-    }
-
-    [[nodiscard]] fmpi::collective_future run(
-        CollectiveArgs coll_args) const override {
-      return object.run(coll_args);
-    }
-
-   private:
-    T object;
-  };
-  std::shared_ptr<const Concept> object;
-};
-
-inline std::vector<Runner> algorithm_list(
-    std::string const& pattern, mpi::Context const& ctx) {
-  using win_t     = fmpi::ScheduleOpts::WindowType;
-  auto algorithms = std::vector<Runner>({
-    Runner{Alltoall_Runner<void, win_t::fixed, 0>()},
-        Runner{Alltoall_Runner<fmpi::FlatHandshake, win_t::fixed, 4>()},
-        Runner{Alltoall_Runner<fmpi::FlatHandshake, win_t::fixed, 8>()},
-        Runner{Alltoall_Runner<fmpi::FlatHandshake, win_t::fixed, 16>()},
-        Runner{Alltoall_Runner<fmpi::FlatHandshake, win_t::sliding, 4>()},
-        Runner{Alltoall_Runner<fmpi::FlatHandshake, win_t::sliding, 8>()},
-        Runner{Alltoall_Runner<fmpi::FlatHandshake, win_t::sliding, 16>()},
-        Runner{Alltoall_Runner<fmpi::OneFactor, win_t::fixed, 4>()},
-        Runner{Alltoall_Runner<fmpi::OneFactor, win_t::fixed, 8>()},
-        Runner{Alltoall_Runner<fmpi::OneFactor, win_t::fixed, 16>()},
-        Runner{Alltoall_Runner<fmpi::OneFactor, win_t::sliding, 4>()},
-        Runner{Alltoall_Runner<fmpi::OneFactor, win_t::sliding, 8>()},
-        Runner{Alltoall_Runner<fmpi::OneFactor, win_t::sliding, 16>()},
-#if 0
-          // Bruck Algorithms, first the original one, then a modified
-          // version which omits the last local rotation step
-          std::make_pair(
-              "Bruck",
-              fmpi::bruck<
-                  RandomAccessIterator1,
-                  RandomAccessIterator2>),
-          std::make_pair(
-              "Bruck_indexed",
-              fmpi::bruck_indexed<
-                  RandomAccessIterator1,
-                  RandomAccessIterator2>),
-          std::make_pair(
-              "Bruck_interleave",
-              fmpi::bruck_interleave<
-                  RandomAccessIterator1,
-                  RandomAccessIterator2>),
-          std::make_pair(
-              "Bruck_interleave_dispatch",
-              fmpi::bruck_interleave_dispatch<
-                  RandomAccessIterator1,
-                  RandomAccessIterator2>),
-          std::make_pair(
-              "Bruck_Mod",
-              fmpi::bruck_mod<
-                  RandomAccessIterator1,
-                  RandomAccessIterator2>)
-#endif
-  });
-
-  if (!pattern.empty()) {
-    // remove algorithms not matching a pattern
-    auto const regex = std::regex(pattern);
-
-    algorithms.erase(
-        std::remove_if(
-            std::begin(algorithms),
-            std::end(algorithms),
-            [regex](auto const& entry) {
-              std::match_results<std::string_view::const_iterator> base_match;
-              return !std::regex_match(
-                  entry.name().begin(),
-                  entry.name().end(),
-                  base_match,
-                  regex);
-            }),
-        algorithms.end());
-  }
-
-  if (!fmpi::isPow2(ctx.size())) {
-    algorithms.erase(std::remove_if(
-        std::begin(algorithms), std::end(algorithms), [](auto const& entry) {
-          return entry.name().find("Bruck_Mod");
-        }));
-  }
-
-  return algorithms;
-}
-
-template <class Iter1, class Iter2>
-void validate(
-    Iter1               first,
-    Iter1               last,
-    Iter2               expected,
-    mpi::Context const& ctx,
-    std::string_view    algo) {
-  auto const is_equal = std::equal(first, last, expected);
-
-  // FMPI_DBG_RANGE(first, last);
-
-  if (!is_equal) {
-    std::ostringstream os;
-    os << "[ERROR] [Rank " << ctx.rank() << "] " << algo
-       << ": incorrect sequence";
-    std::cerr << os.str();
-    std::terminate();
-  }
-}
 }  // namespace benchmark
 
 #endif

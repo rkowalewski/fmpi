@@ -99,7 +99,7 @@ int main(int argc, char* argv[]) {
     vector      correct;
     std::size_t step = 1u;
 
-    auto args = benchmark::CollectiveArgs{
+    auto coll_args = benchmark::TypedCollectiveArgs{
         sbuf.data(), sendcount, rbuf.data(), sendcount, world};
 
     auto const niters = static_cast<int>(params.niters + params.warmups);
@@ -139,11 +139,18 @@ int main(int argc, char* argv[]) {
         auto const barrier_success = barrier.Success(world.mpiComm());
         assert(barrier_success);
 
-        auto total = algo.run(args);
+        auto total = algo.run(coll_args);
 
         if (params.check) {
-          benchmark::validate(
-              rbuf.begin(), rbuf.end(), correct.begin(), world, algo.name());
+          auto const is_equal =
+              std::equal(rbuf.begin(), rbuf.end(), correct.begin());
+          if (!is_equal) {
+            std::ostringstream os;
+            os << "[ERROR] [Rank " << me << "] " << algo.name()
+               << ": incorrect sequence";
+            MPI_Abort(world.mpiComm(), 1);
+            return 1;
+          }
         }
 
         if (params.warmups == 0 || it > static_cast<int>(params.warmups)) {
@@ -176,40 +183,6 @@ std::ostream& operator<<(
     std::ostream& os, const std::chrono::duration<Rep, Period>& d) {
   os << rtlx::to_seconds(d);
   return os;
-}
-
-void benchmark::write_csv_header(std::ostream& os) {
-  os << "Nodes, Procs, Threads, Round, NBytes, Blocksize, Algo, Rank, "
-        "Iteration, "
-        "Measurement, "
-        "Value\n";
-}
-
-std::ostream& operator<<(
-    std::ostream& os, typename fmpi::TraceStore::mapped_type const& v) {
-  std::visit([&os](auto const& val) { os << val; }, v);
-  return os;
-}
-
-void benchmark::write_csv_line(
-    std::ostream&                 os,
-    benchmark::Measurement const& params,
-    std::pair<
-        typename fmpi::TraceStore::key_type,
-        typename fmpi::TraceStore::mapped_type> const& entry) {
-  std::ostringstream myos;
-  myos << params.nhosts << ", ";
-  myos << params.nprocs << ", ";
-  myos << params.nthreads << ", ";
-  myos << params.step << ", ";
-  myos << params.nbytes << ", ";
-  myos << params.blocksize << ", ";
-  myos << params.algorithm << ", ";
-  myos << params.me << ", ";
-  myos << params.iter << ", ";
-  myos << entry.first << ", ";
-  myos << entry.second << "\n";
-  os << myos.str();
 }
 
 template <class T>
@@ -254,6 +227,12 @@ void init_sbuf(T* first, T* last, uint32_t p, int32_t me) {
   }
 }
 
+std::ostream& operator<<(
+    std::ostream& os, typename fmpi::TraceStore::mapped_type const& v) {
+  std::visit([&os](auto const& val) { os << val; }, v);
+  return os;
+}
+
 void print_topology(mpi::Context const& ctx, std::size_t nhosts) {
   auto const me   = ctx.rank();
   auto const ppn  = static_cast<int32_t>(ctx.size() / nhosts);
@@ -296,6 +275,113 @@ void print_topology(mpi::Context const& ctx, std::size_t nhosts) {
     MPI_Send(&dummy, 1, MPI_CHAR, 0, 0xAB, ctx.mpiComm());
   }
 }
+
+namespace benchmark {
+void write_csv_header(std::ostream& os) {
+  os << "Nodes, Procs, Threads, Round, NBytes, Blocksize, Algo, Rank, "
+        "Iteration, "
+        "Measurement, "
+        "Value\n";
+}
+
+void write_csv_line(
+    std::ostream&      os,
+    Measurement const& params,
+    std::pair<
+        typename fmpi::TraceStore::key_type,
+        typename fmpi::TraceStore::mapped_type> const& entry) {
+  std::ostringstream myos;
+  myos << params.nhosts << ", ";
+  myos << params.nprocs << ", ";
+  myos << params.nthreads << ", ";
+  myos << params.step << ", ";
+  myos << params.nbytes << ", ";
+  myos << params.blocksize << ", ";
+  myos << params.algorithm << ", ";
+  myos << params.me << ", ";
+  myos << params.iter << ", ";
+  myos << entry.first << ", ";
+  myos << entry.second << "\n";
+  os << myos.str();
+}
+
+std::vector<Runner> algorithm_list(
+    std::string const& pattern, mpi::Context const& ctx) {
+  using win_t     = fmpi::ScheduleOpts::WindowType;
+  auto algorithms = std::vector<Runner>({
+    Runner{Alltoall_Runner<void, win_t::fixed, 0>()},
+        Runner{Alltoall_Runner<fmpi::FlatHandshake, win_t::fixed, 4>()},
+        Runner{Alltoall_Runner<fmpi::FlatHandshake, win_t::fixed, 8>()},
+        Runner{Alltoall_Runner<fmpi::FlatHandshake, win_t::fixed, 16>()},
+        Runner{Alltoall_Runner<fmpi::FlatHandshake, win_t::sliding, 4>()},
+        Runner{Alltoall_Runner<fmpi::FlatHandshake, win_t::sliding, 8>()},
+        Runner{Alltoall_Runner<fmpi::FlatHandshake, win_t::sliding, 16>()},
+        Runner{Alltoall_Runner<fmpi::OneFactor, win_t::fixed, 4>()},
+        Runner{Alltoall_Runner<fmpi::OneFactor, win_t::fixed, 8>()},
+        Runner{Alltoall_Runner<fmpi::OneFactor, win_t::fixed, 16>()},
+        Runner{Alltoall_Runner<fmpi::OneFactor, win_t::sliding, 4>()},
+        Runner{Alltoall_Runner<fmpi::OneFactor, win_t::sliding, 8>()},
+        Runner{Alltoall_Runner<fmpi::OneFactor, win_t::sliding, 16>()},
+#if 0
+          // Bruck Algorithms, first the original one, then a modified
+          // version which omits the last local rotation step
+          std::make_pair(
+              "Bruck",
+              fmpi::bruck<
+                  RandomAccessIterator1,
+                  RandomAccessIterator2>),
+          std::make_pair(
+              "Bruck_indexed",
+              fmpi::bruck_indexed<
+                  RandomAccessIterator1,
+                  RandomAccessIterator2>),
+          std::make_pair(
+              "Bruck_interleave",
+              fmpi::bruck_interleave<
+                  RandomAccessIterator1,
+                  RandomAccessIterator2>),
+          std::make_pair(
+              "Bruck_interleave_dispatch",
+              fmpi::bruck_interleave_dispatch<
+                  RandomAccessIterator1,
+                  RandomAccessIterator2>),
+          std::make_pair(
+              "Bruck_Mod",
+              fmpi::bruck_mod<
+                  RandomAccessIterator1,
+                  RandomAccessIterator2>)
+#endif
+  });
+
+  if (!pattern.empty()) {
+    // remove algorithms not matching a pattern
+    auto const regex = std::regex(pattern);
+
+    algorithms.erase(
+        std::remove_if(
+            std::begin(algorithms),
+            std::end(algorithms),
+            [regex](auto const& entry) {
+              std::match_results<std::string_view::const_iterator> base_match;
+              return !std::regex_match(
+                  entry.name().begin(),
+                  entry.name().end(),
+                  base_match,
+                  regex);
+            }),
+        algorithms.end());
+  }
+
+  if (!fmpi::isPow2(ctx.size())) {
+    algorithms.erase(std::remove_if(
+        std::begin(algorithms), std::end(algorithms), [](auto const& entry) {
+          return entry.name().find("Bruck_Mod");
+        }));
+  }
+
+  return algorithms;
+}
+}  // namespace benchmark
 
 #if 0
   auto merger = [](std::vector<std::pair<iterator_t, iterator_t>> seqs,

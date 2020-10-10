@@ -4,6 +4,7 @@
 #include <fmpi/concurrency/Dispatcher.hpp>
 #include <fmpi/mpi/Algorithm.hpp>
 #include <fmpi/util/NumericRange.hpp>
+#include <fmpi/util/Trace.hpp>
 #include <numeric>
 #include <utility>
 
@@ -36,6 +37,24 @@ ScheduleCtx::ScheduleCtx(
   }
 
   reset_slots();
+}
+
+ScheduleCtx::ScheduleCtx(
+    std::array<std::size_t, detail::n_types> nslots,
+    collective_promise                       pr,
+    std::string_view                         trace_name)
+  : ScheduleCtx(nslots, std::move(pr)) {
+  trace_name_ = trace_name;
+
+  time_ = timer::clock::now().time_since_epoch();
+}
+
+ScheduleCtx::~ScheduleCtx() {
+  if constexpr (kEnableTrace) {
+    auto       trace = MultiTrace{trace_name_};
+    auto const time  = timer::clock::now().time_since_epoch() - time_;
+    trace.duration(std::string_view(kCommunicationTime)) = time;
+  }
 }
 
 inline void ScheduleCtx::reset_slots() {
@@ -310,8 +329,6 @@ void CommDispatcher::progress_all(bool blocking) {
     FMPI_ASSERT(ret == MPI_SUCCESS);
 
     idxs_completed.resize((n == MPI_UNDEFINED) ? 0 : n);
-
-    FMPI_DBG(std::make_pair(reqs.size(), idxs_completed.size()));
   }
 
   if (idxs_completed.empty()) {

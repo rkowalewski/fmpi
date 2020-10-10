@@ -32,6 +32,7 @@ constexpr std::size_t kCacheLineSize =
 constexpr auto kTotalTime         = std::string_view{"Ttotal"};
 constexpr auto kComputationTime   = std::string_view{"Tcomp"};
 constexpr auto kCommunicationTime = std::string_view{"Tcomm.time"};
+constexpr auto kScheduleTime      = std::string_view{"Tcomm.schedule"};
 constexpr auto kCommRounds        = std::string_view{"Tcomm.iterations"};
 
 constexpr int kTagRing  = 110435;

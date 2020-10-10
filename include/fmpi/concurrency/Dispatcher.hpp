@@ -10,6 +10,7 @@
 #include <fmpi/memory/HeapAllocator.hpp>
 #include <list>
 #include <rtlx/Enum.hpp>
+#include <rtlx/Timer.hpp>
 #include <tlx/container/ring_buffer.hpp>
 #include <tlx/delegate.hpp>
 
@@ -91,6 +92,7 @@ class ScheduleCtx {
 
   using signal   = tlx::delegate<void(Message&)>;
   using callback = tlx::delegate<void(std::vector<Message>)>;
+  using timer    = rtlx::Timer<>;
 
   enum class status
   {
@@ -100,8 +102,15 @@ class ScheduleCtx {
   };
 
  public:
-  explicit ScheduleCtx(
+  ScheduleCtx(
       std::array<std::size_t, detail::n_types> nslots, collective_promise pr);
+
+  ScheduleCtx(
+      std::array<std::size_t, detail::n_types> nslots,
+      collective_promise                       pr,
+      std::string_view                         trace_name);
+
+  ~ScheduleCtx();
 
   void register_signal(message_type type, signal&& callable);
   void register_callback(message_type type, callback&& callable);
@@ -128,6 +137,9 @@ class ScheduleCtx {
 
   // promise to notify waiting tasks
   collective_promise promise_{};
+
+  std::string_view trace_name_{};
+  timer::duration  time_{};
 };
 
 class CommDispatcher {

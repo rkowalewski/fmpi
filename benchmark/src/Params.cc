@@ -183,11 +183,11 @@ Params::Params() noexcept
   :
 #ifdef NDEBUG
   niters(10)
-  , warmups(0)
+  , warmups(1)
   , check(false)
 #else
   niters(1)
-  , warmups(1)
+  , warmups(0)
   , check(true)
 #endif
 {
