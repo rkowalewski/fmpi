@@ -4,8 +4,10 @@
 #include <chrono>
 #include <fmpi/mpi/Environment.hpp>
 #include <fmpi/mpi/TypeMapper.hpp>
+#include <fmpi/util/Trace.hpp>
 #include <iosfwd>
 #include <string>
+#include <vector>
 
 namespace benchmark {
 
@@ -29,28 +31,29 @@ struct Params {
   bool        check{false};  // validate correctness
 };
 
-#if 0
-struct CollectiveArgs {
- public:
-#if 0
-  constexpr CollectiveArgs(
-      const void*         sendbuf_,
-      std::size_t         sendcount_,
-      MPI_Datatype        sendtype_,
-      void*               recvbuf_,
-      std::size_t         recvcount_,
-      MPI_Datatype        recvtype_,
-      mpi::Context const& comm_)
-    : sendbuf(sendbuf_)
-    , sendcount(sendcount_)
-    , sendtype(sendtype_)
-    , recvbuf(recvbuf_)
-    , recvcount(recvcount_)
-    , recvtype(recvtype_)
-    , comm(comm_) {
-  }
-#endif
+struct Measurement {
+  size_t nhosts;
+  size_t nprocs;
+  size_t nthreads;
+  int    me;
 
+  size_t step;
+  size_t nbytes;
+  size_t blocksize;
+  size_t iter;
+
+  std::string algorithm;
+};
+
+struct Times {
+  using vector_times =
+      std::vector<std::pair<std::string, std::chrono::nanoseconds>>;
+
+  vector_times const             traces;
+  std::chrono::nanoseconds const total_time;
+};
+
+struct CollectiveArgs {
   template <class T>
   constexpr CollectiveArgs(
       const T*            sendbuf_,
@@ -67,11 +70,9 @@ struct CollectiveArgs {
     , comm(comm_) {
     using mapper = mpi::type_mapper<T>;
     static_assert(
-        static_cast<bool>(mapper::is_basic),
-        "Unknown MPI Type, this probably wouldn't work.");
+        mapper::is_basic, "Unknown MPI Type, this probably wouldn't work.");
   }
 
- private:
   const void* const   sendbuf;
   std::size_t const   sendcount = 0;
   MPI_Datatype const  sendtype  = MPI_DATATYPE_NULL;
@@ -81,20 +82,29 @@ struct CollectiveArgs {
   mpi::Context const& comm;
 };
 
-enum class algorithm
-{
-  one_factor,
-  flat_handshake,
-  bruck
+template <class S, class R>
+struct TypedCollectiveArgs : public CollectiveArgs {
+  using send_type = S;
+  using recv_type = R;
+  constexpr TypedCollectiveArgs(
+      S const*            sendbuf_,
+      std::size_t         sendcount_,
+      R*                  recvbuf_,
+      std::size_t         recvcount_,
+      mpi::Context const& comm_)
+    : CollectiveArgs(sendbuf_, sendcount_, recvbuf_, recvcount_, comm_) {
+  }
 };
-
-void run_algorithm(CollectiveArgs args, algorithm algo, std::size_t winsz);
-#endif
 
 bool read_input(int argc, char* argv[], struct Params& params);
 
 void printBenchmarkPreamble(
     std::ostream& os, const std::string& prefix, const char* delim = "\n");
+
+void write_csv_header(std::ostream& os);
+
+void write_csv(
+    std::ostream& os, Measurement const& params, Times const& times);
 
 }  // namespace benchmark
 #endif

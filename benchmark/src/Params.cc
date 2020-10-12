@@ -193,13 +193,48 @@ Params::Params() noexcept
 {
 }
 
-#if 0
-void run_algorithm(
-    CollectiveArgs /*args*/, algorithm algo, std::size_t /*winsz*/) {
-  if (algo == algorithm::one_factor) {
+void write_csv_header(std::ostream& os) {
+  os << "Nodes, Procs, Threads, Round, NBytes, Blocksize, Algo, Rank, "
+        "Iteration, "
+        "Measurement, "
+        "Value\n";
+}
 
-  }
+#if 0
+std::ostream& operator<<(
+    std::ostream& os, typename fmpi::TraceStore::mapped_type const& v) {
+  std::visit([&os](auto const& val) { os << val; }, v);
+  return os;
 }
 #endif
+
+template <class Rep, class Period>
+std::ostream& operator<<(
+    std::ostream& os, const std::chrono::duration<Rep, Period>& d) {
+  os << rtlx::to_seconds(d);
+  return os;
+}
+
+void write_csv(
+    std::ostream& os, Measurement const& params, Times const& times) {
+  auto times_copy = times.traces;
+  times_copy.push_back(std::make_pair("Ttotal", times.total_time));
+
+  for (auto&& entry : times_copy) {
+    std::ostringstream myos;
+    myos << params.nhosts << ", ";
+    myos << params.nprocs << ", ";
+    myos << params.nthreads << ", ";
+    myos << params.step << ", ";
+    myos << params.nbytes << ", ";
+    myos << params.blocksize << ", ";
+    myos << params.algorithm << ", ";
+    myos << params.me << ", ";
+    myos << params.iter << ", ";
+    myos << entry.first << ", ";
+    myos << entry.second << "\n";
+    os << myos.str();
+  }
+}
 
 }  // namespace benchmark

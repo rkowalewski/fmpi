@@ -6,7 +6,6 @@
 #include <fmpi/util/Random.hpp>
 #include <regex>
 #include <rtlx/ScopedLambda.hpp>
-#include <tlx/algorithm.hpp>
 
 template <class T>
 void init_sbuf(T* first, T* last, uint32_t p, int32_t me);
@@ -33,6 +32,10 @@ int main(int argc, char* argv[]) {
   int const  is_rank0    = static_cast<int>(shared_comm.rank() == 0);
   int        nhosts      = 0;
 
+  int wait = 0;
+  while (wait)
+    ;
+
   MPI_Allreduce(
       &is_rank0,
       &nhosts,
@@ -50,7 +53,7 @@ int main(int argc, char* argv[]) {
 
   // using iterator_t = typename container::iterator;
 
-  auto ALGORITHMS = benchmark::algorithm_list(params.pattern, world);
+  auto ALGORITHMS = algorithm_list(params.pattern, world);
 
   if (me == 0) {
     std::ostringstream os;
@@ -103,9 +106,8 @@ int main(int argc, char* argv[]) {
         sbuf.data(), sendcount, rbuf.data(), sendcount, world};
 
     auto const niters = static_cast<int>(params.niters + params.warmups);
-    for (int it = 0; it < niters; ++it) {
-      auto& traceStore = fmpi::TraceStore::instance();
 
+    for (int it = 0; it < niters; ++it) {
       init_sbuf(sbuf.begin(), sbuf.end(), p, me);
 
       // first we want to obtain the correct result which we can verify then
@@ -120,7 +122,9 @@ int main(int argc, char* argv[]) {
             sendcount,
             mpi::type_mapper<value_t>::type(),
             world.mpiComm());
+
         assert(ret == MPI_SUCCESS);
+        std::sort(std::begin(correct), std::end(correct));
       }
 
       benchmark::Measurement m{};
@@ -139,7 +143,7 @@ int main(int argc, char* argv[]) {
         auto const barrier_success = barrier.Success(world.mpiComm());
         assert(barrier_success);
 
-        auto total = algo.run(coll_args);
+        auto times = algo.run(coll_args);
 
         if (params.check) {
           auto const is_equal =
@@ -157,32 +161,13 @@ int main(int argc, char* argv[]) {
           m.algorithm = algo.name();
           m.iter      = it - params.warmups + 1;
 
-          auto const& traces = traceStore.traces(algo.name());
-
-          benchmark::write_csv_line(
-              std::cout,
-              m,
-              std::make_pair(std::string{fmpi::kTotalTime}, total));
-
-          for (auto&& entry : traces) {
-            write_csv_line(std::cout, m, entry);
-          }
+          benchmark::write_csv(std::cout, m, times);
         }
-
-        traceStore.erase(algo.name());
       }
-      assert(traceStore.empty());
     }
   }
 
   return 0;
-}
-
-template <class Rep, class Period>
-std::ostream& operator<<(
-    std::ostream& os, const std::chrono::duration<Rep, Period>& d) {
-  os << rtlx::to_seconds(d);
-  return os;
 }
 
 template <class T>
@@ -225,12 +210,6 @@ void init_sbuf(T* first, T* last, uint32_t p, int32_t me) {
 #endif
     }
   }
-}
-
-std::ostream& operator<<(
-    std::ostream& os, typename fmpi::TraceStore::mapped_type const& v) {
-  std::visit([&os](auto const& val) { os << val; }, v);
-  return os;
 }
 
 void print_topology(mpi::Context const& ctx, std::size_t nhosts) {
@@ -276,34 +255,80 @@ void print_topology(mpi::Context const& ctx, std::size_t nhosts) {
   }
 }
 
-namespace benchmark {
-void write_csv_header(std::ostream& os) {
-  os << "Nodes, Procs, Threads, Round, NBytes, Blocksize, Algo, Rank, "
-        "Iteration, "
-        "Measurement, "
-        "Value\n";
+namespace detail {
+
+template <
+    class Schedule,
+    fmpi::ScheduleOpts::WindowType WinT,
+    std::size_t                    Size>
+std::string schedule_name() {
+  using enum_t = fmpi::ScheduleOpts::WindowType;
+
+  static const std::unordered_map<enum_t, std::string_view> names = {
+      {enum_t::sliding, "Waitsome"}, {enum_t::fixed, "Waitall"}};
+
+  return std::string{Schedule::name()} + std::string{names.at(WinT)} +
+         std::to_string(Size);
 }
 
-void write_csv_line(
-    std::ostream&      os,
-    Measurement const& params,
-    std::pair<
-        typename fmpi::TraceStore::key_type,
-        typename fmpi::TraceStore::mapped_type> const& entry) {
-  std::ostringstream myos;
-  myos << params.nhosts << ", ";
-  myos << params.nprocs << ", ";
-  myos << params.nthreads << ", ";
-  myos << params.step << ", ";
-  myos << params.nbytes << ", ";
-  myos << params.blocksize << ", ";
-  myos << params.algorithm << ", ";
-  myos << params.me << ", ";
-  myos << params.iter << ", ";
-  myos << entry.first << ", ";
-  myos << entry.second << "\n";
-  os << myos.str();
-}
+}  // namespace detail
+
+template <
+    class Schedule,
+    fmpi::ScheduleOpts::WindowType WinT,
+    std::size_t                    NReqs>
+class Alltoall_Runner {
+  std::string name_;
+
+ public:
+  Alltoall_Runner()
+    : name_(detail::schedule_name<Schedule, WinT, NReqs>()) {
+  }
+  [[nodiscard]] std::string_view name() const noexcept {
+    return name_;
+  }
+
+  [[nodiscard]] fmpi::collective_future run(
+      benchmark::CollectiveArgs coll_args) const {
+    auto sched = Schedule{coll_args.comm};
+    auto opts  = fmpi::ScheduleOpts{sched, NReqs, name(), WinT};
+    return fmpi::alltoall(
+        coll_args.sendbuf,
+        coll_args.sendcount,
+        coll_args.sendtype,
+        coll_args.recvbuf,
+        coll_args.recvcount,
+        coll_args.recvtype,
+        coll_args.comm,
+        opts);
+  }
+};
+
+template <fmpi::ScheduleOpts::WindowType WinT, std::size_t NReqs>
+class Alltoall_Runner<void, WinT, NReqs> {
+ public:
+  [[nodiscard]] constexpr std::string_view name() const noexcept {
+    using namespace std::literals::string_view_literals;
+    return "Alltoall"sv;
+  }
+
+  [[nodiscard]] fmpi::collective_future run(
+      benchmark::CollectiveArgs coll_args) const {
+    auto request = std::make_unique<MPI_Request>();
+
+    FMPI_CHECK_MPI(MPI_Ialltoall(
+        coll_args.sendbuf,
+        coll_args.sendcount,
+        coll_args.sendtype,
+        coll_args.recvbuf,
+        coll_args.recvcount,
+        coll_args.recvtype,
+        coll_args.comm.mpiComm(),
+        request.get()));
+
+    return fmpi::make_mpi_future(std::move(request));
+  }
+};
 
 std::vector<Runner> algorithm_list(
     std::string const& pattern, mpi::Context const& ctx) {
@@ -363,25 +388,29 @@ std::vector<Runner> algorithm_list(
             std::end(algorithms),
             [regex](auto const& entry) {
               std::match_results<std::string_view::const_iterator> base_match;
+              auto const& name = entry.name();
               return !std::regex_match(
-                  entry.name().begin(),
-                  entry.name().end(),
-                  base_match,
-                  regex);
+                  name.begin(), name.end(), base_match, regex);
             }),
         algorithms.end());
   }
 
   if (!fmpi::isPow2(ctx.size())) {
-    algorithms.erase(std::remove_if(
-        std::begin(algorithms), std::end(algorithms), [](auto const& entry) {
-          return entry.name().find("Bruck_Mod");
-        }));
+    algorithms.erase(
+        std::remove_if(
+            std::begin(algorithms),
+            std::end(algorithms),
+            [](auto const& entry) {
+              return entry.name().find("Bruck_Mod") not_eq
+                     std::string_view::npos;
+            }),
+        algorithms.end());
   }
+
+  FMPI_DBG(algorithms.size());
 
   return algorithms;
 }
-}  // namespace benchmark
 
 #if 0
   auto merger = [](std::vector<std::pair<iterator_t, iterator_t>> seqs,

@@ -105,13 +105,6 @@ class ScheduleCtx {
   ScheduleCtx(
       std::array<std::size_t, detail::n_types> nslots, collective_promise pr);
 
-  ScheduleCtx(
-      std::array<std::size_t, detail::n_types> nslots,
-      collective_promise                       pr,
-      std::string_view                         trace_name);
-
-  ~ScheduleCtx();
-
   void register_signal(message_type type, signal&& callable);
   void register_callback(message_type type, callback&& callable);
 
@@ -137,9 +130,6 @@ class ScheduleCtx {
 
   // promise to notify waiting tasks
   collective_promise promise_{};
-
-  std::string_view trace_name_{};
-  timer::duration  time_{};
 };
 
 class CommDispatcher {

@@ -12,20 +12,23 @@
 
 namespace fmpi {
 
+class MultiTrace;
+
 class TraceStore {
  public:
   /// values
   using duration_t = std::chrono::nanoseconds;
   using integer_t  = int64_t;
 
-  using key_type    = std::string;
-  using mapped_type = std::variant<duration_t, integer_t>;
+  using key_type = std::string;
+  // using mapped_type = std::variant<duration_t, integer_t>;
+  using mapped_type = duration_t;
 
  private:
-  using multi_trace = boost::container::flat_map<key_type, mapped_type>;
+  using multi_trace = std::unordered_map<key_type, mapped_type>;
 
   using context   = std::string;
-  using container = boost::container::flat_map<context, multi_trace>;
+  using container = std::unordered_map<context, multi_trace>;
 
   TraceStore();
 
@@ -33,14 +36,7 @@ class TraceStore {
   TraceStore(const TraceStore& src) = delete;
   TraceStore& operator=(const TraceStore& rhs) = delete;
 
-  template <class InputIterator>
-  void insert(std::string_view ctx, InputIterator first, InputIterator last) {
-    if constexpr (kEnableTrace) {
-      if (std::distance(first, last) > 0) {
-        m_traces[context(ctx)].insert(first, last);
-      }
-    }
-  }
+  void insert(std::string_view ctx, multi_trace const& source);
 
   void erase(std::string_view /*ctx*/);
 
@@ -71,7 +67,7 @@ class MultiTrace {
   static constexpr auto anonymous = std::string_view("<anonymous>");
 
  public:
-  using cache = std::unordered_map<std::string_view, mapped_type>;
+  using cache = std::unordered_map<std::string, mapped_type>;
 
   explicit MultiTrace();
   explicit MultiTrace(std::string_view ctx);
@@ -83,34 +79,16 @@ class MultiTrace {
 
   ~MultiTrace();
 
-  template <class T>
-  T& value(std::string_view key) {
-    auto  it_bool = values_.insert(std::make_pair(key, mapped_type{T{}}));
-    auto& v       = (it_bool.first)->second;
-
-    FMPI_ASSERT(std::holds_alternative<T>(v));
-
-    return std::get<T>(v);
-  }
-
   duration_t& duration(std::string_view key);
-
-  [[nodiscard]] std::string_view name() const noexcept;
 
   cache const& values() const noexcept {
     return values_;
   }
 
-  template <class InputIterator>
-  void merge(InputIterator first, InputIterator last) {
-    // TODO: use flat_map::merge(T&&) instead of copy
-    values_.insert(first, last);
-  }
-
  private:
   cache values_{};
   // Yes we can use a string view here because
-  std::string_view const name_;
+  std::string const name_;
 };
 
 using steady_timer = rtlx::steady_timer;

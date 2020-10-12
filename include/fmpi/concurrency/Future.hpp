@@ -61,12 +61,6 @@ class collective_future {
   friend collective_future make_mpi_future(
       std::unique_ptr<MPI_Request> /*h*/);
 
-  enum
-  {
-    async    = 1,
-    deferred = 2
-  };
-
   using simple_message_queue = SimpleConcurrentDeque<Message>;
 
   std::shared_ptr<detail::future_shared_state> sptr_;

@@ -208,7 +208,7 @@ struct ScheduleOpts {
 
   detail::Schedule const scheduler;
   std::size_t const      winsz = 0;
-  std::string_view const name;
+  std::string const      name;
   WindowType const       type = WindowType::fixed;
 };
 

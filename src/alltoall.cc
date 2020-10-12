@@ -72,21 +72,31 @@ collective_future Alltoall::execute() {
     auto const me = ctx.rank();
     auto const other =
         static_cast<mpi::Rank>((ctx.size()) == 1 ? me : 1 - me);
-    auto ret = MPI_Sendrecv(
-        send_offset(other),
-        sendcount,
-        sendtype,
-        other,
-        kTagRing,
+
+    auto request = std::make_unique<MPI_Request>();
+
+    auto ret = MPI_Irecv(
         recv_offset(other),
         recvcount,
         recvtype,
         other,
         kTagRing,
         ctx.mpiComm(),
-        MPI_STATUS_IGNORE);
+        request.get());
+
+    FMPI_ASSERT(ret == MPI_SUCCESS);
+
+    MPI_Send(
+        send_offset(other),
+        sendcount,
+        sendtype,
+        other,
+        kTagRing,
+        ctx.mpiComm());
+
     local_copy();
-    return make_ready_future(ret);
+
+    return make_mpi_future(std::move(request));
   }
 
   // intermediate buffer for two pipelines
@@ -99,10 +109,10 @@ collective_future Alltoall::execute() {
   std::array<std::size_t, detail::n_types> nslots{};
   nslots.fill(reqsInFlight);
 
-  auto promise        = collective_promise{};
-  auto future         = promise.get_future();
-  auto schedule_state = std::make_unique<fmpi::ScheduleCtx>(
-      nslots, std::move(promise), opts.name);
+  auto promise = collective_promise{};
+  auto future  = promise.get_future();
+  auto schedule_state =
+      std::make_unique<fmpi::ScheduleCtx>(nslots, std::move(promise));
 
 #if 0
   schedule_state->register_signal(

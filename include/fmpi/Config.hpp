@@ -29,11 +29,17 @@ constexpr std::size_t kCacheAlignment =
 constexpr std::size_t kCacheLineSize =
     std::hardware_constructive_interference_size;
 
-constexpr auto kTotalTime         = std::string_view{"Ttotal"};
-constexpr auto kComputationTime   = std::string_view{"Tcomp"};
+// constexpr auto kTotalTime = std::string_view{"Ttotal"};
+
+// constexpr auto kComputationTime = std::string_view{"Tcomp"};
+// Time to perform communication (for example in the dispatcher)
 constexpr auto kCommunicationTime = std::string_view{"Tcomm.time"};
-constexpr auto kScheduleTime      = std::string_view{"Tcomm.schedule"};
-constexpr auto kCommRounds        = std::string_view{"Tcomm.iterations"};
+// Time to initiate non-blocking communication
+constexpr auto kScheduleTime = std::string_view{"Tcomm.schedule"};
+// Idle time between communication and compute (e.g., in a blocking
+// wait)
+constexpr auto kIdle = std::string_view{"Tcomm.idle"};
+// constexpr auto kCommRounds        = std::string_view{"Tcomm.iterations"};
 
 constexpr int kTagRing  = 110435;
 constexpr int kTagBruck = 110436;

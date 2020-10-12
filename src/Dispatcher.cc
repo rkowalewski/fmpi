@@ -39,24 +39,6 @@ ScheduleCtx::ScheduleCtx(
   reset_slots();
 }
 
-ScheduleCtx::ScheduleCtx(
-    std::array<std::size_t, detail::n_types> nslots,
-    collective_promise                       pr,
-    std::string_view                         trace_name)
-  : ScheduleCtx(nslots, std::move(pr)) {
-  trace_name_ = trace_name;
-
-  time_ = timer::clock::now().time_since_epoch();
-}
-
-ScheduleCtx::~ScheduleCtx() {
-  if constexpr (kEnableTrace) {
-    auto       trace = MultiTrace{trace_name_};
-    auto const time  = timer::clock::now().time_since_epoch() - time_;
-    trace.duration(std::string_view(kCommunicationTime)) = time;
-  }
-}
-
 inline void ScheduleCtx::reset_slots() {
   std::size_t n = 0;
   for (auto&& i : range(detail::n_types)) {
@@ -124,6 +106,7 @@ CommDispatcher::CommDispatcher()
 }
 
 CommDispatcher::~CommDispatcher() {
+  // FMPI_DBG("destroying dispatcher");
   channel_.close();
   thread_.join();
 }
