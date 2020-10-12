@@ -97,15 +97,27 @@ int main(int argc, char* argv[]) {
     using vector =
         tlx::SimpleVector<value_t, tlx::SimpleVectorMode::NoInitNoDestroy>;
 
-    auto        sbuf = vector(nels);
-    auto        rbuf = vector(nels);
-    vector      correct;
-    std::size_t step = 1u;
+    auto   sbuf = vector(nels);
+    auto   rbuf = vector(nels);
+    vector correct;
+    // std::size_t step = 1u;
 
     auto coll_args = benchmark::TypedCollectiveArgs{
         sbuf.data(), sendcount, rbuf.data(), sendcount, world};
 
     auto const niters = static_cast<int>(params.niters + params.warmups);
+
+    std::unordered_map<std::string, std::vector<benchmark::Times>>
+        measurements;
+
+    benchmark::Measurement m{};
+    m.nhosts   = nhosts;
+    m.nprocs   = p;
+    m.nthreads = omp_get_max_threads();
+    m.me       = me;
+    // m.step      = step++;
+    m.nbytes    = nels * p * sizeof(value_t);
+    m.blocksize = blocksize;
 
     for (int it = 0; it < niters; ++it) {
       init_sbuf(sbuf.begin(), sbuf.end(), p, me);
@@ -127,15 +139,6 @@ int main(int argc, char* argv[]) {
         std::sort(std::begin(correct), std::end(correct));
       }
 
-      benchmark::Measurement m{};
-      m.nhosts    = nhosts;
-      m.nprocs    = p;
-      m.nthreads  = omp_get_max_threads();
-      m.me        = me;
-      m.step      = step++;
-      m.nbytes    = nels * p * sizeof(value_t);
-      m.blocksize = blocksize;
-
       for (auto&& algo : ALGORITHMS) {
         // We always want to guarantee that all processors start at the same
         // time, so this is a real barrier
@@ -144,6 +147,10 @@ int main(int argc, char* argv[]) {
         assert(barrier_success);
 
         auto times = algo.run(coll_args);
+
+        if (params.warmups == 0 || it > static_cast<int>(params.warmups)) {
+          measurements[std::string(algo.name())].push_back(times);
+        }
 
         if (params.check) {
           auto const is_equal =
@@ -157,13 +164,23 @@ int main(int argc, char* argv[]) {
           }
         }
 
-        if (params.warmups == 0 || it > static_cast<int>(params.warmups)) {
-          m.algorithm = algo.name();
-          m.iter      = it - params.warmups + 1;
+        // if (params.warmups == 0 || it > static_cast<int>(params.warmups)) {
+        //  m.algorithm = algo.name();
+        //  m.iter      = it - params.warmups + 1;
 
-          benchmark::write_csv(std::cout, m, times);
-        }
+        //  benchmark::write_csv(std::cout, m, times);
+        //}
       }
+    }
+
+    for (auto&& algo : ALGORITHMS) {
+      auto& results = measurements[std::string(algo.name())];
+      std::sort(std::begin(results), std::end(results));
+
+      m.algorithm = algo.name();
+      auto med    = (results.size() + 1) / 2;
+
+      benchmark::write_csv(std::cout, m, results[med]);
     }
   }
 

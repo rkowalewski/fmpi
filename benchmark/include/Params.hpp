@@ -49,9 +49,11 @@ struct Times {
   using vector_times =
       std::vector<std::pair<std::string, std::chrono::nanoseconds>>;
 
-  vector_times const             traces;
-  std::chrono::nanoseconds const total_time;
+  vector_times             traces;
+  std::chrono::nanoseconds total_time;
 };
+
+bool operator<(const Times& lhs, const Times& rhs);
 
 struct CollectiveArgs {
   template <class T>

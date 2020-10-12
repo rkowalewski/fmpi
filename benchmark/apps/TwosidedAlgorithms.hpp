@@ -29,46 +29,43 @@ class Runner {
     using namespace std::literals::string_view_literals;
     using duration = rtlx::steady_timer::duration;
 
-    auto& traceStore = fmpi::TraceStore::instance();
-
-    int wait = 0;
-    while (wait)
-      ;
-
     benchmark::Times::vector_times times;
-    auto& d_total = times.emplace_back(Ttotal, duration{}).second;
+    auto                           d_total = duration{};
 
     using simple_vector =
         tlx::SimpleVector<R, tlx::SimpleVectorMode::NoInitNoDestroy>;
 
     simple_vector buffer(args.recvcount * args.comm.size());
 
-    rtlx::steady_timer timer{d_total};
-    // 1) Communication
-    auto future = object->run(args);
+    {
+      rtlx::steady_timer timer{d_total};
+      // 1) Communication
+      auto future = object->run(args);
 
-    // 2) Computation
-    auto benches =
-        benchmark::merge_async(args, std::move(future), buffer.data());
+      // 2) Computation + Communication Overlap
+      times = benchmark::merge_async(args, std::move(future), buffer.data());
 
-    std::move(
-        std::begin(buffer), std::end(buffer), static_cast<R*>(args.recvbuf));
+      std::move(
+          std::begin(buffer),
+          std::end(buffer),
+          static_cast<R*>(args.recvbuf));
 
-    // 3 Stop timer
-    timer.finish();
+    }  // 3 Stop timer
 
-    // Collect Traces
-    std::copy(
-        std::begin(benches), std::end(benches), std::back_inserter(times));
+    times.emplace_back(Ttotal, d_total);
 
-    auto const& traces = traceStore.traces(name());
+    {
+      // Collect Traces
+      auto&       traceStore = fmpi::TraceStore::instance();
+      auto const& traces     = traceStore.traces(name());
 
-    std::copy(
-        std::begin(traces), std::end(traces), std::back_inserter(times));
+      std::copy(
+          std::begin(traces), std::end(traces), std::back_inserter(times));
 
-    traceStore.erase(name());
+      traceStore.erase(name());
 
-    assert(traceStore.empty());
+      assert(traceStore.empty());
+    }
 
     return benchmark::Times{times, d_total};
   }

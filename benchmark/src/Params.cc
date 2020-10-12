@@ -194,8 +194,8 @@ Params::Params() noexcept
 }
 
 void write_csv_header(std::ostream& os) {
-  os << "Nodes, Procs, Threads, Round, NBytes, Blocksize, Algo, Rank, "
-        "Iteration, "
+  // os << "Nodes, Procs, Threads, Round, NBytes, Blocksize, Algo, Rank, "
+  os << "Nodes, Procs, Threads, NBytes, Blocksize, Algo, Rank, "
         "Measurement, "
         "Value\n";
 }
@@ -217,24 +217,25 @@ std::ostream& operator<<(
 
 void write_csv(
     std::ostream& os, Measurement const& params, Times const& times) {
-  auto times_copy = times.traces;
-  times_copy.push_back(std::make_pair("Ttotal", times.total_time));
-
-  for (auto&& entry : times_copy) {
+  for (auto&& entry : times.traces) {
     std::ostringstream myos;
     myos << params.nhosts << ", ";
     myos << params.nprocs << ", ";
     myos << params.nthreads << ", ";
-    myos << params.step << ", ";
+    // myos << params.step << ", ";
     myos << params.nbytes << ", ";
     myos << params.blocksize << ", ";
     myos << params.algorithm << ", ";
     myos << params.me << ", ";
-    myos << params.iter << ", ";
+    // myos << params.iter << ", ";
     myos << entry.first << ", ";
     myos << entry.second << "\n";
     os << myos.str();
   }
+}
+
+bool operator<(const Times& lhs, const Times& rhs) {
+  return lhs.total_time < rhs.total_time;
 }
 
 }  // namespace benchmark
