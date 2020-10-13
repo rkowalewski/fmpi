@@ -1,6 +1,7 @@
 #ifndef FMPI_CONTAINER_FIXEDVECTOR_HPP
 #define FMPI_CONTAINER_FIXEDVECTOR_HPP
 
+#include <fmpi/memory/DefaultInitAllocator.hpp>
 #include <vector>
 
 namespace fmpi {
@@ -22,6 +23,9 @@ struct FixedVector : private std::vector<T, A> {
   using FixedVector::vector::size;
   using FixedVector::vector::operator[];
 };
+
+template <class T, class A = std::allocator<T>>
+using SimpleVector = FixedVector<T, fmpi::default_init_allocator<T, A>>;
 }  // namespace fmpi
 
 #endif

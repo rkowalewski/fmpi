@@ -35,6 +35,7 @@ class Alltoall {
   mpi::Context const& comm;
   MPI_Aint            recvextent_{};
   MPI_Aint            sendextent_{};
+  int32_t const       sendrecvtag_{};
   ScheduleOpts const& opts;
 };
 

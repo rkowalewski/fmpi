@@ -26,7 +26,7 @@ params <- add_argument(params, "--output", help = "output file", default = "-")
 
 argv <- parse_args(params)
 
-df.in <- util.read_csv(argv$input, col_names=TRUE, col_types="iiii?iciicd")
+df.in <- util.read_csv(argv$input, col_names=TRUE, col_types="iii?icicd")
 
 ci <- function(n, sd_x, prob = .95) {
   z_t <- qt(1 - (1 - prob) / 2, df = n - 1)
@@ -78,7 +78,8 @@ df.stats <- df.in %>%
                 ) %>%
     arrange(median, .by_group = TRUE) %>%
     ungroup() %>%
+    filter(Measurement == "Ttotal") %>%
     mutate(avg_ci = ci(n, sd, ci_prob),
-           PPN = Procs / Nodes)
+            PPN = Procs / Nodes)
 
 util.write_csv(df.stats, argv$output)

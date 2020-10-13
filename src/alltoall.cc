@@ -29,10 +29,12 @@ Alltoall::Alltoall(
   , recvcount(recvcount_)
   , recvtype(recvtype_)
   , comm(comm_)
+  , sendrecvtag_(kTagRing)
   , opts(opts_) {
   MPI_Aint recvlb{};
   MPI_Aint sendlb{};
   FMPI_ASSERT(recvtype == sendtype);
+  FMPI_DBG(sendrecvtag_);
   MPI_Type_get_extent(recvtype, &recvlb, &recvextent_);
   MPI_Type_get_extent(sendtype, &sendlb, &sendextent_);
 }
@@ -80,7 +82,7 @@ collective_future Alltoall::execute() {
         recvcount,
         recvtype,
         other,
-        kTagRing,
+        sendrecvtag_,
         ctx.mpiComm(),
         request.get());
 
@@ -91,7 +93,7 @@ collective_future Alltoall::execute() {
         sendcount,
         sendtype,
         other,
-        kTagRing,
+        sendrecvtag_,
         ctx.mpiComm());
 
     local_copy();
@@ -154,7 +156,7 @@ collective_future Alltoall::execute() {
       auto const rpeer = schedule.recvRank(rr);
       auto const speer = schedule.sendRank(rr);
 
-      FMPI_DBG(std::make_pair(rpeer, speer));
+      FMPI_DBG(std::make_tuple(rpeer, speer, sendrecvtag_));
 
       if (rpeer != ctx.rank()) {
         // auto recv = Message{rpeer, kTagRing, ctx.mpiComm()};
@@ -163,7 +165,7 @@ collective_future Alltoall::execute() {
             recvcount,
             recvtype,
             rpeer,
-            kTagRing,
+            sendrecvtag_,
             ctx.mpiComm()};
         dispatcher.schedule(hdl, message_type::IRECV, recv);
       }
@@ -174,7 +176,7 @@ collective_future Alltoall::execute() {
             sendcount,
             sendtype,
             speer,
-            kTagRing,
+            sendrecvtag_,
             ctx.mpiComm()};
 
         dispatcher.schedule(hdl, message_type::ISEND, send);
@@ -200,7 +202,7 @@ collective_future Alltoall::execute() {
       recvcount,
       recvtype,
       ctx.rank(),
-      kTagRing,
+      sendrecvtag_,
       ctx.mpiComm()});
   dispatcher.commit(hdl);
 

@@ -6,6 +6,7 @@
 #include <fmpi/util/Random.hpp>
 #include <regex>
 #include <rtlx/ScopedLambda.hpp>
+#include <tlx/math/round_to_power_of_two.hpp>
 
 template <class T>
 void init_sbuf(T* first, T* last, uint32_t p, int32_t me);
@@ -25,42 +26,24 @@ int main(int argc, char* argv[]) {
   }
 
   const auto& world = mpi::Context::world();
-  auto const  me    = world.rank();
-  auto const  p     = world.size();
 
-  auto const shared_comm = mpi::splitSharedComm(world);
-  int const  is_rank0    = static_cast<int>(shared_comm.rank() == 0);
-  int        nhosts      = 0;
+  auto const nhosts = num_nodes(world);
 
-  int wait = 0;
-  while (wait)
-    ;
-
-  MPI_Allreduce(
-      &is_rank0,
-      &nhosts,
-      1,
-      mpi::type_mapper<int>::type(),
-      MPI_SUM,
-      world.mpiComm());
-
-  if ((p % nhosts) != 0) {
-    if (me == 0) {
+  if ((world.size() % nhosts) != 0) {
+    if (world.rank() == 0) {
       std::cout << "number of ranks must be equal on all nodes\n";
     }
     return 0;
   }
 
-  // using iterator_t = typename container::iterator;
+  auto algorithms = algorithm_list(params.pattern, world);
 
-  auto ALGORITHMS = algorithm_list(params.pattern, world);
-
-  if (me == 0) {
+  if (world.rank() == 0) {
     std::ostringstream os;
 
     os << "Algorithms:\n";
 
-    for (auto&& kv : ALGORITHMS) {
+    for (auto&& kv : algorithms) {
       os << kv.name() << "\n";
     }
 
@@ -70,121 +53,127 @@ int main(int argc, char* argv[]) {
 
   print_topology(world, nhosts);
 
-  if (me == 0) {
-    benchmark::write_csv_header(std::cout);
+  if (algorithms.empty()) {
+    return EXIT_SUCCESS;
   }
 
-  // calibrate clock
-  auto                  clock           = SynchronizedClock{};
-  [[maybe_unused]] bool is_clock_synced = clock.Init(world.mpiComm());
-  assert(is_clock_synced);
+  if (world.rank() == 0) {
+    benchmark::write_csv_header(std::cout);
+  }
 
   if (params.smin < sizeof(value_t)) {
     params.smin = sizeof(value_t);
   }
 
-  params.smax = std::max(params.smin, params.smax);
+  params.smax = std::max(params.smax, params.smin);
 
-  for (std::size_t blocksize = params.smin; blocksize <= params.smax;
-       blocksize <<= 1) {
-    auto const sendcount = blocksize / sizeof(value_t);
+  // Array Buffers: do not use make_unique as it has value initialization,
+  // which we do not want.
+  using storage        = std::unique_ptr<value_t[]>;
+  auto const max_bytes = tlx::round_down_to_power_of_two(params.smax + 1);
+  auto const max_size  = max_bytes * params.pmax / sizeof(value_t);
+  auto       sbuf      = storage(new value_t[max_size]);
+  auto       rbuf      = storage(new value_t[max_size]);
+  auto       correct   = storage(new value_t[(params.check) ? max_size : 0]);
 
-    // Required by good old 32-bit MPI
-    assert(sendcount < mpi::max_int);
+  fmpi::SimpleVector<int> ranks(world.size());
+  std::iota(std::begin(ranks), std::end(ranks), 0);
 
-    auto const nels = sendcount * p;
+  for (uint32_t nprocs = params.pmin; nprocs < params.pmax + 1; nprocs *= 2) {
+    MPI_Barrier(world.mpiComm());
+    /* create communicator for nprocs */
+    MPI_Group group;
+    MPI_Comm  comm;
+    MPI_Group_incl(world.mpiGroup(), nprocs, ranks.data(), &group);
+    MPI_Comm_create(world.mpiComm(), group, &comm);
 
-    using vector =
-        tlx::SimpleVector<value_t, tlx::SimpleVectorMode::NoInitNoDestroy>;
+    if (world.rank() >= static_cast<int>(nprocs)) continue;
 
-    auto   sbuf = vector(nels);
-    auto   rbuf = vector(nels);
-    vector correct;
-    // std::size_t step = 1u;
+    mpi::Context ctx{comm};
 
-    auto coll_args = benchmark::TypedCollectiveArgs{
-        sbuf.data(), sendcount, rbuf.data(), sendcount, world};
+    assert(ctx.size() == nprocs);
 
-    auto const niters = static_cast<int>(params.niters + params.warmups);
+    auto                  clock           = SynchronizedClock{};
+    [[maybe_unused]] bool is_clock_synced = clock.Init(ctx.mpiComm());
+    assert(is_clock_synced);
 
-    std::unordered_map<std::string, std::vector<benchmark::Times>>
-        measurements;
+    for (std::size_t blocksize = params.smin; blocksize <= params.smax;
+         blocksize <<= 1) {
+      auto const sendcount = blocksize / sizeof(value_t);
 
-    benchmark::Measurement m{};
-    m.nhosts   = nhosts;
-    m.nprocs   = p;
-    m.nthreads = omp_get_max_threads();
-    m.me       = me;
-    // m.step      = step++;
-    m.nbytes    = nels * p * sizeof(value_t);
-    m.blocksize = blocksize;
+      // Required by good old 32-bit MPI
+      assert(sendcount < mpi::max_int);
 
-    for (int it = 0; it < niters; ++it) {
-      init_sbuf(sbuf.begin(), sbuf.end(), p, me);
+      auto const nels = sendcount * ctx.size();
 
-      // first we want to obtain the correct result which we can verify then
-      // with our own algorithms
-      if (params.check) {
-        correct  = vector(nels);
-        auto ret = MPI_Alltoall(
-            sbuf.data(),
-            sendcount,
-            mpi::type_mapper<value_t>::type(),
-            correct.data(),
-            sendcount,
-            mpi::type_mapper<value_t>::type(),
-            world.mpiComm());
+      assert(nels <= max_size);
 
-        assert(ret == MPI_SUCCESS);
-        std::sort(std::begin(correct), std::end(correct));
-      }
+      auto coll_args = benchmark::TypedCollectiveArgs{
+          sbuf.get(), sendcount, rbuf.get(), sendcount, ctx};
 
-      for (auto&& algo : ALGORITHMS) {
-        // We always want to guarantee that all processors start at the same
-        // time, so this is a real barrier
-        auto       barrier         = clock.Barrier(world.mpiComm());
-        auto const barrier_success = barrier.Success(world.mpiComm());
-        assert(barrier_success);
+      for (auto&& benchmark : algorithms) {
+        for (auto&& w : fmpi::range(0u, params.warmups)) {
+          // warumup iterations
+          init_sbuf(sbuf.get(), sbuf.get() + nels, ctx.size(), ctx.rank());
 
-        auto times = algo.run(coll_args);
+          if (params.check) {
+            calculate_correct_result(benchmark::TypedCollectiveArgs{
+                sbuf.get(), sendcount, correct.get(), sendcount, ctx});
+          }
 
-        if (params.warmups == 0 || it > static_cast<int>(params.warmups)) {
-          measurements[std::string(algo.name())].push_back(times);
-        }
+          std::ignore = w;
+          benchmark.run(coll_args);
 
-        if (params.check) {
-          auto const is_equal =
-              std::equal(rbuf.begin(), rbuf.end(), correct.begin());
-          if (!is_equal) {
-            std::ostringstream os;
-            os << "[ERROR] [Rank " << me << "] " << algo.name()
-               << ": incorrect sequence";
-            MPI_Abort(world.mpiComm(), 1);
+          if (params.check and
+              not check_result(coll_args, correct.get(), benchmark.name())) {
             return 1;
           }
         }
 
-        // if (params.warmups == 0 || it > static_cast<int>(params.warmups)) {
-        //  m.algorithm = algo.name();
-        //  m.iter      = it - params.warmups + 1;
+        MPI_Barrier(ctx.mpiComm());
 
-        //  benchmark::write_csv(std::cout, m, times);
-        //}
+        fmpi::SimpleVector<benchmark::Times> results(params.niters);
+
+        for (auto&& i : fmpi::range(params.niters)) {
+          init_sbuf(sbuf.get(), sbuf.get() + nels, ctx.size(), ctx.rank());
+          // We always want to guarantee that all processors start at the same
+          // time, so this is a real barrier
+          auto       barrier         = clock.Barrier(ctx.mpiComm());
+          auto const barrier_success = barrier.Success(ctx.mpiComm());
+          assert(barrier_success);
+
+          auto times = benchmark.run(coll_args);
+
+          results[i] = times;
+        }
+
+        if (results.empty()) {
+          continue;
+        }
+
+        // median of measurements
+        auto const middle =
+            std::min(results.size() - 1, (results.size() + 1) / 2);
+
+        auto const med = std::next(std::begin(results), middle);
+        std::sort(std::begin(results), std::end(results));
+
+        benchmark::Measurement m{};
+        m.nhosts    = num_nodes(ctx);
+        m.nprocs    = ctx.size();
+        m.nthreads  = omp_get_max_threads();
+        m.me        = ctx.rank();
+        m.nbytes    = nels * ctx.size() * sizeof(value_t);
+        m.blocksize = blocksize;
+        m.algorithm = benchmark.name();
+
+        benchmark::write_csv(std::cout, m, *med);
+        MPI_Barrier(ctx.mpiComm());
       }
-    }
-
-    for (auto&& algo : ALGORITHMS) {
-      auto& results = measurements[std::string(algo.name())];
-      std::sort(std::begin(results), std::end(results));
-
-      m.algorithm = algo.name();
-      auto med    = (results.size() + 1) / 2;
-
-      benchmark::write_csv(std::cout, m, results[med]);
     }
   }
 
-  return 0;
+  return EXIT_SUCCESS;
 }
 
 template <class T>
@@ -427,6 +416,22 @@ std::vector<Runner> algorithm_list(
   FMPI_DBG(algorithms.size());
 
   return algorithms;
+}
+
+uint32_t num_nodes(mpi::Context const& comm) {
+  auto const shared_comm = mpi::splitSharedComm(comm);
+  int const  is_rank0    = static_cast<int>(shared_comm.rank() == 0);
+  int        nhosts      = 0;
+
+  MPI_Allreduce(
+      &is_rank0,
+      &nhosts,
+      1,
+      mpi::type_mapper<int>::type(),
+      MPI_SUM,
+      comm.mpiComm());
+
+  return nhosts;
 }
 
 #if 0

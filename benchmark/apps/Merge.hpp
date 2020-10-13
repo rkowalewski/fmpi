@@ -3,6 +3,7 @@
 
 #include <Params.hpp>
 #include <fmpi/Debug.hpp>
+#include <fmpi/Pinning.hpp>
 #include <fmpi/concurrency/Future.hpp>
 #include <fmpi/memory/ThreadAllocator.hpp>
 #include <fmpi/util/NumericRange.hpp>
@@ -158,27 +159,12 @@ vector_times merge_pieces(
 
     // prefix sum over all processed chunks
 
-    auto enough_work =
-        [/*&config*/](
-            typename pieces_t::const_iterator /*c_first*/,
-            typename pieces_t::const_iterator /*c_last*/) -> bool {
-      // auto const     npieces    = std::distance(c_first, c_last);
-      // constexpr auto min_pieces = 1;
+    auto enough_work = [](std::size_t n) -> bool {
+      auto const nbytes     = n * sizeof(value_type);
+      auto&      config     = fmpi::Pinning::instance();
+      auto const ncpus_rank = std::size_t(config.domain_size);
 
-      // auto const nbytes = std::accumulate(
-      //    c_first, c_last, std::size_t(0), [](auto acc, auto const& c) {
-      //      return acc + std::visit(
-      //                       [](auto&& v) -> std::size_t {
-      //                         return v.size() * sizeof(value_type);
-      //                       },
-      //                       c);
-      //    });
-
-      // auto const ncpus_rank = std::size_t(config.domain_size);
-      return false;
-
-      // return npieces > min_pieces && (nbytes >= (kCacheSizeL2 *
-      // ncpus_rank));
+      return nbytes >= (fmpi::kCacheSizeL2 * ncpus_rank);
     };
 
     std::vector<fmpi::Message> msgs;
@@ -206,7 +192,18 @@ vector_times merge_pieces(
       msgs.clear();
       n_exchanges -= m;
 
-      if (enough_work(pieces.begin(), pieces.end())) {
+      auto const n_elements = std::accumulate(
+          std::begin(pieces),
+          std::end(pieces),
+          std::size_t(0),
+          [](auto const& acc, auto const& c) {
+            auto const n = std::visit(
+                [](auto&& v) -> std::size_t { return v.size(); }, c);
+            return acc + n;
+          });
+
+      constexpr auto min_pieces = std::size_t(1);
+      if (pieces.size() > min_pieces and enough_work(n_elements)) {
         // we temporarily pause t_receive and run t_comp.
         scoped_timer_switch switcher{t_receive, t_merge};
         // merge all chunks
@@ -224,14 +221,6 @@ vector_times merge_pieces(
                     return std::make_pair(v.begin(), v.end());
                   },
                   c);
-            });
-
-        auto const n_elements = std::accumulate(
-            std::begin(chunks),
-            std::end(chunks),
-            std::size_t(0),
-            [](auto const& acc, auto const& c) {
-              return acc + std::distance(c.first, c.second);
             });
 
         FMPI_DBG(n_elements);

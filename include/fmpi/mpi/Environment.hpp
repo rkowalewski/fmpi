@@ -3,7 +3,7 @@
 
 #include <mpi.h>
 
-#include <cstdint>
+#include <atomic>
 #include <fmpi/mpi/Rank.hpp>
 
 namespace mpi {
@@ -46,13 +46,21 @@ class Context {
     return m_comm;
   }
 
+  [[nodiscard]] constexpr MPI_Group mpiGroup() const noexcept {
+    return m_group;
+  }
+
+  int32_t collectiveTag() const;
+
   static Context const& world();
 
  private:
-  size_type m_size{};
-  Rank      m_rank{};
-  MPI_Comm  m_comm{MPI_COMM_NULL};
-  bool      m_free_self{false};
+  MPI_Comm                    m_comm{MPI_COMM_NULL};
+  MPI_Group                   m_group{};
+  size_type                   m_size{};
+  Rank                        m_rank{};
+  mutable std::atomic_int32_t m_collective_tag{};
+  bool                        m_free_self{false};
 };
 
 enum class ThreadLevel : int

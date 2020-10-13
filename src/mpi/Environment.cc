@@ -1,29 +1,52 @@
 #include <mpi.h>
 
+#include <fmpi/Debug.hpp>
+#include <fmpi/container/FixedVector.hpp>
 #include <fmpi/mpi/Environment.hpp>
+#include <limits>
 #include <rtlx/Enum.hpp>
 
 namespace mpi {
 
 static MPI_Comm comm_world = MPI_COMM_NULL;
 
-static bool initialized = false;
+static bool    initialized = false;
+static int32_t mpi_tag_ub  = 32767;
 
 Context::Context(MPI_Comm comm, bool free_self)
   : m_comm(comm)
+  , m_collective_tag(mpi_tag_ub)
   , m_free_self(free_self) {
   int sz = 0;
 
-  int rank = 0;
-  FMPI_CHECK_MPI(MPI_Comm_size(m_comm, &sz));
-  m_size = sz;
+  int32_t flag;
+  // Assert that MPI is initialized
+  FMPI_CHECK_MPI(MPI_Initialized(&flag));
+  FMPI_ASSERT(flag);
 
+  // Rank
+  int rank = 0;
   FMPI_CHECK_MPI(MPI_Comm_rank(m_comm, &rank));
   m_rank = Rank{rank};
+
+  FMPI_CHECK_MPI(MPI_Comm_group(m_comm, &m_group));
+
+  // Size
+  FMPI_CHECK_MPI(MPI_Comm_size(m_comm, &sz));
+  m_size = sz;
 }
 
 Context::Context(MPI_Comm comm)
-  : Context(comm, false) {
+  : Context(comm, true) {
+}
+
+int32_t Context::collectiveTag() const {
+  return m_collective_tag--;
+  // auto ret = m_collective_tag--;
+  // if (m_collective_tag == -1) {
+  //  m_collective_tag = MPI_TAG_UB;
+  //}
+  // return ret;
 }
 
 Context::~Context() {
@@ -71,6 +94,17 @@ bool initialize(int* argc, char*** argv, ThreadLevel level) {
   auto const success = init == MPI_SUCCESS && dup == MPI_SUCCESS;
 
   initialized = success && required <= provided;
+
+  // Maximum tag value
+  int32_t flag, tag_ub;
+  MPI_Comm_get_attr(MPI_COMM_WORLD, MPI_TAG_UB, &tag_ub, &flag);
+
+  // For whatever reason, OpenMPI provides different values on different ranks
+  // although this does not conform with the MPI-3 standard. See
+  // section 8.1.2.
+  if (flag) {
+    MPI_Allreduce(&tag_ub, &mpi_tag_ub, 1, MPI_INT, MPI_MIN, MPI_COMM_WORLD);
+  }
 
   return initialized;
 }

@@ -17,7 +17,6 @@ static constexpr auto five_seconds = 5s;
 }  // namespace detail
 
 struct Params {
- public:
   Params() noexcept;
   unsigned int              niters{};
   unsigned int              warmups{};
@@ -29,6 +28,14 @@ struct Params {
 
   std::string pattern{};     // pattern for algorithm selection
   bool        check{false};  // validate correctness
+};
+
+struct Times {
+  using vector_times =
+      std::vector<std::pair<std::string, std::chrono::nanoseconds>>;
+
+  vector_times             traces;
+  std::chrono::nanoseconds total_time;
 };
 
 struct Measurement {
@@ -43,14 +50,7 @@ struct Measurement {
   size_t iter;
 
   std::string algorithm;
-};
-
-struct Times {
-  using vector_times =
-      std::vector<std::pair<std::string, std::chrono::nanoseconds>>;
-
-  vector_times             traces;
-  std::chrono::nanoseconds total_time;
+  Times       times;
 };
 
 bool operator<(const Times& lhs, const Times& rhs);
