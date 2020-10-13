@@ -178,13 +178,35 @@ class Linear {
   using Context = mpi::Context;
 
  public:
-  static constexpr auto NAME = std::string_view("Linear");
+  constexpr Linear() = default;
 
-  static auto sendRank(Context const& comm, uint32_t phase) noexcept -> Rank;
+  constexpr explicit Linear(Context const& ctx) FMPI_NOEXCEPT
+    : Linear(ctx.size(), ctx.rank()) {
+  }
 
-  static auto recvRank(Context const& comm, uint32_t phase) noexcept -> Rank;
+  constexpr Linear(uint32_t nodes, Rank rank) FMPI_NOEXCEPT : rank_(rank),
+                                                              nodes_(nodes) {
+  }
 
-  static auto phaseCount(Context const& comm) noexcept -> uint32_t;
+  [[nodiscard]] constexpr Rank sendRank(uint32_t phase) const FMPI_NOEXCEPT {
+    return Rank{static_cast<int>(phase)};
+  }
+
+  [[nodiscard]] constexpr Rank recvRank(uint32_t phase) const FMPI_NOEXCEPT {
+    return Rank{static_cast<int>(phase)};
+  }
+
+  [[nodiscard]] constexpr uint32_t phaseCount() const FMPI_NOEXCEPT {
+    return nodes_;
+  }
+
+  static constexpr std::string_view name() noexcept {
+    return std::string_view("Linear");
+  }
+
+ private:
+  Rank const     rank_{};
+  uint32_t const nodes_{};
 };
 
 struct ScheduleOpts {
