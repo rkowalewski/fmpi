@@ -65,11 +65,21 @@ def process_options(args, cwd):
 
     options = {}
 
+    partitionspec = "--partition {partition} ".format(partition=args.partition)
+
+    if (args.cluster):
+        partitionspec = partitionspec + "--clusters {cluster} ".format(cluster=args.cluster)
+
+    if (args.qos):
+        partitionspec = partitionspec + "--qos {qos} ".format(qos=args.qos)
+
+
     options['binary'] = args.binary
     options['nodes'] = args.nodes
     options['ntasks'] = args.ntasks
     options['threads'] = args.threads
-    options['partition'] = args.partition
+    options['clusters'] = args.cluster
+    options['partitionspec'] = partitionspec
     options['time'] = args.time
     options['jobname'] = args.jobname
     options['directory'] = cwd
@@ -93,6 +103,8 @@ if __name__ == "__main__":
                         help='number of threads per task')
     parser.add_argument('--time', help='wallclock time for job', required=True)
     parser.add_argument('--partition', help='slurm partition', required=True)
+    parser.add_argument('--cluster', help='slurm cluster', required=False, default="")
+    parser.add_argument('--qos', help='quality of service', required=False, default="")
     parser.add_argument(
         '--jobname', help='job name (if empty, the basename of the binary is used)')
     parser.add_argument(

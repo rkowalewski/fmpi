@@ -10,7 +10,7 @@
 #SBATCH --mail-type=END
 #SBATCH --mail-user=roger.kowalewski@ifi.lmu.de
 # Job options
-#SBATCH --clusters=$partition
+#SBATCH $partitionspec
 # Wall clock limit:
 #SBATCH --time=$time
 #Number of nodes and MPI tasks per node:
