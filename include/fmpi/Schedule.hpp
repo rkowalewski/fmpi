@@ -218,20 +218,26 @@ struct ScheduleOpts {
 
   template <class Schedule>
   ScheduleOpts(
-      Schedule         schedule,
-      std::size_t      winsz_,
+      Schedule         schedule_,
+      uint32_t         winsz_,
       std::string_view name_,
       WindowType       type_)
-    : scheduler(schedule)
-    , winsz(winsz_)
+    : schedule(schedule_)
+    , winsz(std::min(schedule.phaseCount(), winsz_))
+    , type(type_)
+#ifndef NDEBUG
     , name(name_)
-    , type(type_) {
+#endif
+  {
+    std::ignore = name_;
   }
 
-  detail::Schedule const scheduler;
-  std::size_t const      winsz = 0;
-  std::string const      name;
-  WindowType const       type = WindowType::fixed;
+  detail::Schedule const schedule;
+  uint32_t const         winsz = 0;
+  WindowType const       type  = WindowType::fixed;
+#ifndef NDEBUG
+  std::string const name;
+#endif
 };
 
 }  // namespace fmpi

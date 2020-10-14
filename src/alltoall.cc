@@ -11,7 +11,7 @@ namespace fmpi {
 namespace detail {
 
 using namespace std::literals::string_view_literals;
-constexpr auto t_copy = "Tcomm.local_copy"sv;
+//constexpr auto t_copy = "Tcomm.local_copy"sv;
 
 Alltoall::Alltoall(
     const void*         sendbuf_,
@@ -62,13 +62,13 @@ inline void Alltoall::local_copy() {
 }
 
 collective_future Alltoall::execute() {
-  auto const& schedule = opts.scheduler;
+  auto const& schedule = opts.schedule;
   auto const& ctx      = comm;
 
   FMPI_DBG_STREAM("running algorithm " << opts.name);
 
-  //auto         trace = MultiTrace{std::string_view(opts.name)};
-  //steady_timer t_schedule{trace.duration(kScheduleTime)};
+  // auto         trace = MultiTrace{std::string_view(opts.name)};
+  // steady_timer t_schedule{trace.duration(kScheduleTime)};
 
   if (ctx.size() < 3) {
     auto const me = ctx.rank();
@@ -105,11 +105,8 @@ collective_future Alltoall::execute() {
   // using thread_alloc = ThreadAllocator<std::byte>;
   // auto buf_alloc     = thread_alloc{};
 
-  auto const reqsInFlight =
-      std::min(std::size_t(schedule.phaseCount()), opts.winsz);
-
   std::array<std::size_t, detail::n_types> nslots{};
-  nslots.fill(reqsInFlight);
+  nslots.fill(opts.winsz);
 
   auto promise = collective_promise{};
   auto future  = promise.get_future();
@@ -143,16 +140,13 @@ collective_future Alltoall::execute() {
   // submit into dispatcher
   auto const hdl = dispatcher.submit(std::move(schedule_state));
 
-  auto const winsz = static_cast<uint32_t>(opts.winsz);
-  FMPI_DBG("Sending messages");
-
   auto const rounds =
-      std::max(tlx::div_ceil(schedule.phaseCount(), winsz), 1u);
+      std::max(tlx::div_ceil(schedule.phaseCount(), opts.winsz), 1u);
 
   for (auto&& r : range(rounds)) {
-    auto const last = std::min(schedule.phaseCount(), (r + 1) * winsz);
+    auto const last = std::min(schedule.phaseCount(), (r + 1) * opts.winsz);
 
-    for (auto&& rr : range(r * winsz, last)) {
+    for (auto&& rr : range(r * opts.winsz, last)) {
       auto const rpeer = schedule.recvRank(rr);
       auto const speer = schedule.sendRank(rr);
 
@@ -188,11 +182,11 @@ collective_future Alltoall::execute() {
   }
 
   {
-    //using scoped_timer_switch = rtlx::ScopedTimerSwitch<steady_timer>;
+    // using scoped_timer_switch = rtlx::ScopedTimerSwitch<steady_timer>;
 
-    //steady_timer t_copy{trace.duration(detail::t_copy)};
+    // steady_timer t_copy{trace.duration(detail::t_copy)};
     // we temporarily pause t_schedule and run t_copy.
-    //scoped_timer_switch switcher{t_schedule, t_copy};
+    // scoped_timer_switch switcher{t_schedule, t_copy};
 
     local_copy();
 

@@ -279,10 +279,7 @@ std::string schedule_name() {
 
 }  // namespace detail
 
-template <
-    class Schedule,
-    fmpi::ScheduleOpts::WindowType WinT,
-    std::size_t                    NReqs>
+template <class Schedule, fmpi::ScheduleOpts::WindowType WinT, uint32_t NReqs>
 class Alltoall_Runner {
   std::string name_;
 
@@ -310,7 +307,32 @@ class Alltoall_Runner {
   }
 };
 
-template <fmpi::ScheduleOpts::WindowType WinT, std::size_t NReqs>
+template <fmpi::ScheduleOpts::WindowType WinT, uint32_t NReqs>
+class Alltoall_Runner<fmpi::Linear, WinT, NReqs> {
+  std::string name_;
+
+ public:
+  [[nodiscard]] std::string_view name() const noexcept {
+    return std::string_view("Linear");
+  }
+
+  [[nodiscard]] fmpi::collective_future run(
+      benchmark::CollectiveArgs coll_args) const {
+    auto sched = fmpi::Linear{coll_args.comm};
+    auto opts  = fmpi::ScheduleOpts{sched, NReqs, name(), WinT};
+    return fmpi::alltoall(
+        coll_args.sendbuf,
+        coll_args.sendcount,
+        coll_args.sendtype,
+        coll_args.recvbuf,
+        coll_args.recvcount,
+        coll_args.recvtype,
+        coll_args.comm,
+        opts);
+  }
+};
+
+template <fmpi::ScheduleOpts::WindowType WinT, uint32_t NReqs>
 class Alltoall_Runner<void, WinT, NReqs> {
  public:
   [[nodiscard]] constexpr std::string_view name() const noexcept {
@@ -353,7 +375,10 @@ std::vector<Runner> algorithm_list(
         Runner{Alltoall_Runner<fmpi::OneFactor, win_t::sliding, 4>()},
         Runner{Alltoall_Runner<fmpi::OneFactor, win_t::sliding, 8>()},
         Runner{Alltoall_Runner<fmpi::OneFactor, win_t::sliding, 16>()},
-        Runner{Alltoall_Runner<fmpi::Linear, win_t::sliding, 16>()},
+        Runner{Alltoall_Runner<
+            fmpi::Linear,
+            win_t::sliding,
+            std::numeric_limits<uint32_t>::max()>()},
 #if 0
           // Bruck Algorithms, first the original one, then a modified
           // version which omits the last local rotation step

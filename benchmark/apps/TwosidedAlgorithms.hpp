@@ -11,7 +11,7 @@
 #include <regex>
 #include <rtlx/Timer.hpp>
 
-static constexpr auto Ttotal = std::string_view("Ttotal");
+static constexpr auto Ttotal    = std::string_view("Ttotal");
 static constexpr auto Tschedule = std::string_view("Tschedule");
 
 uint32_t num_nodes(mpi::Context const& comm);
@@ -33,14 +33,18 @@ class Runner {
     using duration = rtlx::steady_timer::duration;
 
     benchmark::Times::vector_times times;
-    auto                           d_total = duration{};
+    auto                           d_total    = duration{};
+    auto                           d_schedule = duration{};
 
     fmpi::SimpleVector<R> buffer(args.recvcount * args.comm.size());
 
     {
       rtlx::steady_timer timer{d_total};
+
       // 1) Communication
-      auto future = communication->run(args);
+      rtlx::steady_timer t_schedule{d_schedule};
+      auto               future = communication->run(args);
+      t_schedule.finish();
 
       // 2) Computation + Communication Overlap
       times = benchmark::merge_async(args, std::move(future), buffer.data());
@@ -53,6 +57,7 @@ class Runner {
     }  // 3 Stop timer
 
     times.emplace_back(Ttotal, d_total);
+    times.emplace_back(Tschedule, d_schedule);
 
     {
       // Collect Traces
