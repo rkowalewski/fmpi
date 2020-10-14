@@ -66,6 +66,7 @@ int main(int argc, char* argv[]) {
   }
 
   params.smax = std::max(params.smax, params.smin);
+  params.pmax = std::max(params.pmax, params.pmin);
 
   // Array Buffers: do not use make_unique as it has value initialization,
   // which we do not want.

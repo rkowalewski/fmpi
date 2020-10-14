@@ -11,7 +11,7 @@ namespace fmpi {
 namespace detail {
 
 using namespace std::literals::string_view_literals;
-//constexpr auto t_copy = "Tcomm.local_copy"sv;
+// constexpr auto t_copy = "Tcomm.local_copy"sv;
 
 Alltoall::Alltoall(
     const void*         sendbuf_,
@@ -129,12 +129,14 @@ collective_future Alltoall::execute() {
       });
 #endif
 
+#if 0
   schedule_state->register_callback(
       message_type::IRECV,
       [sptr = future.arrival_queue()](std::vector<Message> msgs) mutable {
         std::move(
             std::begin(msgs), std::end(msgs), std::back_inserter(*sptr));
       });
+#endif
 
   auto& dispatcher = static_dispatcher_pool();
   // submit into dispatcher
@@ -150,34 +152,53 @@ collective_future Alltoall::execute() {
       auto const rpeer = schedule.recvRank(rr);
       auto const speer = schedule.sendRank(rr);
 
-      FMPI_DBG(std::make_tuple(rpeer, speer, sendrecvtag_));
+      Message      msg;
+      message_type type = message_type::INVALID;
 
-      if (rpeer != ctx.rank()) {
-        // auto recv = Message{rpeer, kTagRing, ctx.mpiComm()};
-        auto recv = Message{
+      if (rpeer != ctx.rank() and speer != ctx.rank()) {
+        msg = Message{
+            send_offset(speer),
+            sendcount,
+            sendtype,
+            speer,
+            sendrecvtag_,
             recv_offset(rpeer),
             recvcount,
             recvtype,
             rpeer,
             sendrecvtag_,
             ctx.mpiComm()};
-        dispatcher.schedule(hdl, message_type::IRECV, recv);
-      }
-
-      if (speer != ctx.rank()) {
-        auto send = Message{
+        type = message_type::ISENDRECV;
+      } else if (rpeer != ctx.rank()) {
+        // auto recv = Message{rpeer, kTagRing, ctx.mpiComm()};
+        msg = make_receive(
+            recv_offset(rpeer),
+            recvcount,
+            recvtype,
+            rpeer,
+            sendrecvtag_,
+            ctx.mpiComm());
+        type = message_type::IRECV;
+      } else if (speer != ctx.rank()) {
+        msg = make_send(
             send_offset(speer),
             sendcount,
             sendtype,
             speer,
             sendrecvtag_,
-            ctx.mpiComm()};
+            ctx.mpiComm());
+        type = message_type::ISEND;
+      }
 
-        dispatcher.schedule(hdl, message_type::ISEND, send);
+      if (type != message_type::INVALID) {
+        dispatcher.schedule(hdl, type, msg);
       }
     }
+
     if (opts.type == ScheduleOpts::WindowType::fixed) {
       dispatcher.schedule(hdl, message_type::BARRIER);
+    } else {
+      dispatcher.schedule(hdl, message_type::WAITSOME);
     }
   }
 
@@ -190,18 +211,17 @@ collective_future Alltoall::execute() {
 
     local_copy();
 
-    future.arrival_queue()->emplace_back(Message{
+    future.arrival_queue()->emplace_back(make_receive(
         recv_offset(ctx.rank()),
         recvcount,
         recvtype,
         ctx.rank(),
         sendrecvtag_,
-        ctx.mpiComm()});
+        ctx.mpiComm()));
   }
 
   dispatcher.commit(hdl);
   return future;
 }
-
 }  // namespace detail
 }  // namespace fmpi

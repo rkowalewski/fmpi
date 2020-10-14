@@ -45,9 +45,9 @@ if (argv$input == "-") {
 data <- data.in %>%
     filter(Measurement == "Ttotal") %>%
     group_by(Nodes,Procs,Threads, Blocksize) %>%
-    mutate(Ttotal_speedup = median[Algo == "AlltoAll"] / median) %>%
+    mutate(Ttotal_speedup = median[Algo == "Alltoall"] / median) %>%
     ungroup() %>%
-    filter(Algo != "AlltoAll")
+    filter(Algo != "Alltoall")
 
 if (nrow(data) == 0) {
     stop("no data available")

@@ -111,6 +111,7 @@ class ScheduleCtx {
  private:
   // complete all outstanding requests
   void complete_all();
+  void complete_some();
 
   void reset_slots();
 
@@ -185,7 +186,7 @@ class CommDispatcher {
   template <class... Args>
   bool schedule(ScheduleHandle const& handle, Args&&... args) {
     FMPI_ASSERT(schedules_.contains(handle));
-    auto       task   = CommTask{handle, std::forward<Args>(args)...};
+    auto task = CommTask{handle, std::forward<Args>(args)...};
     auto const status = channel_.push(task);
     return status == channel_op_status::success;
   }
@@ -194,7 +195,7 @@ class CommDispatcher {
 
  private:
   void        progress_all(bool blocking = false);
-  static void handle_task(CommTask task, ScheduleCtx* uptr);
+  static void dispatch_task(CommTask task, ScheduleCtx* uptr);
   void        worker();
 
   channel     channel_;

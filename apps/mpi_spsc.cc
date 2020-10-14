@@ -155,17 +155,24 @@ int run() {
       fmpi::message_type::IRECV, [&buf_alloc](fmpi::Message& message) {
         // allocator some buffer
         auto* b = buf_alloc.allocate(blocksize);
-        message.set_buffer(gsl::span(b, blocksize));
+
+        message = fmpi::make_receive(
+            b,
+            blocksize,
+            message.recvtype(),
+            message.source(),
+            message.recvtag(),
+            message.comm());
       });
 
   schedule_ctx->register_callback(
       fmpi::message_type::IRECV,
       [&ready_tasks](std::vector<fmpi::Message> msgs) {
         for (auto&& msg : msgs) {
-          auto span =
-              gsl::span(static_cast<value_type*>(msg.buffer()), msg.count());
+          auto span = gsl::span(
+              static_cast<value_type*>(msg.recvbuffer()), msg.recvcount());
 
-          ready_tasks.push(std::make_pair(msg.peer(), span));
+          ready_tasks.push(std::make_pair(msg.source(), span));
         }
       });
 
@@ -173,6 +180,7 @@ int run() {
   auto hdl = dispatcher.submit(std::move(schedule_ctx));
 
   for (auto&& peer : fmpi::range(mpi::Rank(0), mpi::Rank(world.size()))) {
+#if 0
     constexpr int mpi_tag = 123;
     auto recv_message     = fmpi::Message{peer, mpi_tag, world.mpiComm()};
 
@@ -185,6 +193,7 @@ int run() {
         world.mpiComm());
 
     dispatcher.schedule(hdl, fmpi::message_type::ISEND, send_message);
+#endif
   }
 
   iterator ret;

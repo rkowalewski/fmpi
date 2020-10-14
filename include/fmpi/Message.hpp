@@ -16,10 +16,13 @@ enum class message_type : uint8_t
   IRECV = 0,
   ISEND,
   INVALID,  // DO NEVER USE
+  ISENDRECV,
   COMMIT,
   BARRIER,
+  WAITSOME,
 };
 
+#if 0
 struct Envelope {
  private:
   mpi::Comm comm_{MPI_COMM_NULL};
@@ -47,128 +50,169 @@ struct Envelope {
     return tag_;
   }
 };
+#endif
 
 class Message {
-  struct ConstBuffer {
-    ConstBuffer() = default;
-    constexpr ConstBuffer(const void* buf) noexcept
-      : buffer(buf) {
-    }
-    const void* buffer = nullptr;
-  };
-
-  struct MutableBuffer {
-    MutableBuffer() = default;
-
-    constexpr MutableBuffer(void* buf) noexcept
-      : buffer(buf) {
-    }
-    void* buffer = nullptr;
-  };
-
  public:
   constexpr Message() = default;
 
   constexpr Message(
-      void*        buf,
-      std::size_t  count,
-      MPI_Datatype type,
-      mpi::Rank    peer,
-      mpi::Tag     tag,
+      const void*  sendbuf,
+      std::size_t  sendcount,
+      MPI_Datatype sendtype,
+      mpi::Rank    dst,
+      int          sendtag,
+      void*        recvbuf,
+      std::size_t  recvcount,
+      MPI_Datatype recvtype,
+      mpi::Rank    source,
+      int          recvtag,
       mpi::Comm    comm) noexcept
-    : buf_(MutableBuffer{buf})
-    , count_(count)
-    , mpi_type_(type)
-    , envelope_(peer, tag, comm) {
+    : sendbuf_(sendbuf)
+    , sendcount_(sendcount)
+    , sendtype_(sendtype)
+    , dst_(dst)
+    , sendtag_(sendtag)
+    , recvbuf_(recvbuf)
+    , recvcount_(recvcount)
+    , recvtype_(recvtype)
+    , source_(source)
+    , recvtag_(recvtag)
+    , comm_(comm) {
   }
 
+  template <class T, class U>
   constexpr Message(
-      const void*  buf,
-      std::size_t  count,
-      MPI_Datatype type,
-      mpi::Rank    peer,
-      mpi::Tag     tag,
-      mpi::Comm    comm) noexcept
-    : buf_(ConstBuffer{buf})
-    , count_(count)
-    , mpi_type_(type)
-    , envelope_(peer, tag, comm) {
-  }
-
-  constexpr Message(mpi::Rank peer, mpi::Tag tag, mpi::Comm comm) noexcept
-    : envelope_(peer, tag, comm) {
-  }
-
-  template <class T>
-  constexpr Message(
-      gsl::span<T> span,
-      mpi::Rank    peer,
-      mpi::Tag     tag,
+      gsl::span<T> sendbuf,
+      mpi::Rank    dst,
+      int          sendtag,
+      gsl::span<U> recvbuf,
+      mpi::Rank    src,
+      int          recvtag,
       mpi::Comm    comm) noexcept
     : Message(
-          span.data(),
-          span.size(),
+          sendbuf.data(),
+          sendbuf.size(),
           mpi::type_mapper<T>::type(),
-          peer,
-          tag,
+          dst,
+          sendtag,
+          recvbuf.data(),
+          recvbuf.size(),
+          mpi::type_mapper<U>::type(),
+          src,
+          recvtag,
           comm) {
   }
 
+#if 0
   constexpr Message(const Message&) = default;
   constexpr Message& operator=(Message const&) = default;
 
   constexpr Message(Message&&) noexcept = default;
   constexpr Message& operator=(Message&&) noexcept = default;
+#endif
 
-  void set_buffer(void* buf, std::size_t count, MPI_Datatype type)
-      FMPI_NOEXCEPT {
-    FMPI_ASSERT(std::holds_alternative<MutableBuffer>(buf_));
-    buf_      = MutableBuffer{std::move(buf)};
-    count_    = count;
-    mpi_type_ = type;
+  constexpr const void* sendbuffer() const noexcept {
+    return sendbuf_;
   }
 
-  template <class T>
-  constexpr void set_buffer(gsl::span<T> buf) FMPI_NOEXCEPT {
-    set_buffer(buf.data(), buf.size(), mpi::type_mapper<T>::type());
+  constexpr MPI_Datatype sendtype() const noexcept {
+    return sendtype_;
   }
 
-  constexpr void* buffer() {
-    FMPI_ASSERT(std::holds_alternative<MutableBuffer>(buf_));
-    return std::get<MutableBuffer>(buf_).buffer;
+  constexpr std::size_t sendcount() const noexcept {
+    return sendcount_;
   }
 
-  [[nodiscard]] constexpr const void* buffer() const {
-    FMPI_ASSERT(std::holds_alternative<ConstBuffer>(buf_));
-    return std::get<ConstBuffer>(buf_).buffer;
+  constexpr int sendtag() const noexcept {
+    return sendtag_;
   }
 
-  [[nodiscard]] constexpr MPI_Datatype type() const noexcept {
-    return mpi_type_;
+  constexpr void* recvbuffer() const noexcept {
+    return recvbuf_;
   }
 
-  [[nodiscard]] constexpr std::size_t count() const noexcept {
-    return count_;
+  constexpr MPI_Datatype recvtype() const noexcept {
+    return recvtype_;
   }
 
-  [[nodiscard]] constexpr mpi::Rank peer() const noexcept {
-    return envelope_.peer();
+  constexpr std::size_t recvcount() const noexcept {
+    return recvcount_;
   }
 
-  [[nodiscard]] constexpr mpi::Comm comm() const noexcept {
-    return envelope_.comm();
+  constexpr int recvtag() const noexcept {
+    return recvtag_;
   }
 
-  [[nodiscard]] constexpr mpi::Tag tag() const noexcept {
-    return envelope_.tag();
+  constexpr mpi::Comm comm() const noexcept {
+    return comm_;
   }
 
- private:
-  std::variant<MutableBuffer, ConstBuffer> buf_{MutableBuffer{}};
-  std::size_t                              count_{};
-  MPI_Datatype                             mpi_type_{};
-  Envelope                                 envelope_{};
+  constexpr mpi::Rank source() const noexcept {
+    return source_;
+  }
+
+  constexpr mpi::Rank dest() const noexcept {
+    return dst_;
+  }
+
+  // Send buffer
+  void const*  sendbuf_   = nullptr;
+  std::size_t  sendcount_ = 0;
+  MPI_Datatype sendtype_  = MPI_DATATYPE_NULL;
+  mpi::Rank    dst_       = mpi::Rank::null();
+  int          sendtag_   = 0;
+  // Recv buffer
+  void*        recvbuf_   = nullptr;
+  std::size_t  recvcount_ = 0;
+  MPI_Datatype recvtype_  = MPI_DATATYPE_NULL;
+  mpi::Rank    source_    = mpi::Rank::null();
+  int          recvtag_   = 0;
+  // Comm
+  MPI_Comm comm_ = MPI_COMM_NULL;
 };
+
+inline Message make_send(
+    void const*  sendbuf,
+    std::size_t  sendcount,
+    MPI_Datatype sendtype,
+    mpi::Rank    dst,
+    int          sendtag,
+    mpi::Comm    comm) noexcept {
+  return Message(
+      sendbuf,
+      sendcount,
+      sendtype,
+      dst,
+      sendtag,
+      nullptr,
+      0u,
+      MPI_DATATYPE_NULL,
+      mpi::Rank::null(),
+      -1,
+      comm);
+}
+
+inline Message make_receive(
+    void*        recvbuf,
+    std::size_t  recvcount,
+    MPI_Datatype recvtype,
+    mpi::Rank    source,
+    int          recvtag,
+    mpi::Comm    comm) noexcept {
+  return Message(
+      nullptr,
+      0u,
+      MPI_DATATYPE_NULL,
+      mpi::Rank::null(),
+      -1,
+      recvbuf,
+      recvcount,
+      recvtype,
+      source,
+      recvtag,
+      comm);
+}
 
 }  // namespace fmpi
 

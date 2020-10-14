@@ -48,6 +48,40 @@ inline void ScheduleCtx::reset_slots() {
   }
 }
 
+inline void ScheduleCtx::complete_some() {
+  FixedVector<MPI_Status> statuses(handles_.size());
+  std::vector<int>        idxs_completed(handles_.size());
+  int                     n = MPI_UNDEFINED;
+
+  auto const ret = MPI_Waitsome(
+      handles_.size(),
+      handles_.data(),
+      &n,
+      idxs_completed.data(),
+      statuses.data());
+
+  FMPI_ASSERT(ret == MPI_SUCCESS);
+
+  idxs_completed.resize((n == MPI_UNDEFINED) ? 0 : n);
+
+  std::array<std::vector<Message>, detail::n_types> msgs;
+
+  for (auto&& idx : idxs_completed) {
+    auto&      task = pending_[idx];
+    auto const tid  = rtlx::to_underlying(task.type);
+    FMPI_ASSERT(task.valid());
+
+    msgs[tid].emplace_back(task.message);
+    task.reset();
+  }
+
+  for (auto&& tid : range(detail::n_types)) {
+    if ((not msgs[tid].empty()) and callbacks_[tid]) {
+      callbacks_[tid](msgs[tid]);
+    }
+  }
+}
+
 inline void ScheduleCtx::complete_all() {
   FixedVector<MPI_Status> statuses(handles_.size());
 
@@ -98,6 +132,7 @@ void ScheduleCtx::register_callback(message_type type, callback&& callable) {
 
 CommDispatcher::CommDispatcher()
   : channel_(internal::channel_capacity) {
+  // FMPI_DBG("contructing dispatcher");
   thread_ = std::thread([this]() { worker(); });
 
   auto const& config      = Pinning::instance();
@@ -106,7 +141,6 @@ CommDispatcher::CommDispatcher()
 }
 
 CommDispatcher::~CommDispatcher() {
-  // FMPI_DBG("destroying dispatcher");
   channel_.close();
   thread_.join();
 }
@@ -123,6 +157,8 @@ void CommDispatcher::worker() {
     // fetch new task, however, wait at most 1us
     CommTask task;
     auto     status = channel_.pop(task, 1us);
+
+    // FMPI_DBG(sched_getcpu());
 
     if (status == channel_op_status::closed) {
       constexpr bool blocking = true;
@@ -141,21 +177,29 @@ void CommDispatcher::worker() {
       auto& uptr = it->second;
 
       if (task.type == message_type::COMMIT ||
-          task.type == message_type::BARRIER) {
+          task.type == message_type::BARRIER ||
+          task.type == message_type::WAITSOME) {
         FMPI_ASSERT(uptr->state_ == ScheduleCtx::status::pending);
 
-        uptr->complete_all();
+        if (task.type == message_type::WAITSOME) {
+          uptr->complete_some();
+        } else {
+          uptr->complete_all();
+        }
 
         if (task.type == message_type::COMMIT) {
           uptr->promise_.set_value(MPI_SUCCESS);
 
           schedules_.erase(it);
         }
-
-        continue;
+      } else if (task.type == message_type::ISENDRECV) {
+        task.type = message_type::IRECV;
+        dispatch_task(task, uptr.get());
+        task.type = message_type::ISEND;
+        dispatch_task(task, uptr.get());
+      } else {
+        dispatch_task(task, uptr.get());
       }
-
-      handle_task(task, uptr.get());
 
       progress_all();
     }
@@ -164,27 +208,27 @@ void CommDispatcher::worker() {
 
 static int send_message(const Message& message, MPI_Request& req) {
   return mpi::isend(
-      message.buffer(),
-      message.count(),
-      message.type(),
-      message.peer(),
-      message.tag(),
+      message.sendbuffer(),
+      message.sendcount(),
+      message.sendtype(),
+      message.dest(),
+      message.sendtag(),
       message.comm(),
       &req);
 }
 
 static int recv_message(Message& message, MPI_Request& req) {
   return mpi::irecv(
-      message.buffer(),
-      message.count(),
-      message.type(),
-      message.peer(),
-      message.tag(),
+      message.recvbuffer(),
+      message.recvcount(),
+      message.recvtype(),
+      message.source(),
+      message.recvtag(),
       message.comm(),
       &req);
 }
 
-void CommDispatcher::handle_task(CommTask task, ScheduleCtx* const uptr) {
+void CommDispatcher::dispatch_task(CommTask task, ScheduleCtx* const uptr) {
   auto const ti   = rtlx::to_underlying(task.type);
   auto&      rb   = uptr->slots_[ti];
   int        slot = MPI_UNDEFINED;
