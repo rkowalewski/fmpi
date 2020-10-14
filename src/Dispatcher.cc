@@ -67,12 +67,14 @@ inline void ScheduleCtx::complete_some() {
   std::array<std::vector<Message>, detail::n_types> msgs;
 
   for (auto&& idx : idxs_completed) {
-    auto&      task = pending_[idx];
-    auto const tid  = rtlx::to_underlying(task.type);
+    auto& task = pending_[idx];
+    auto const tid = rtlx::to_underlying(task.type);
     FMPI_ASSERT(task.valid());
 
     msgs[tid].emplace_back(task.message);
     task.reset();
+
+    slots_[tid].push_front(idx);
   }
 
   for (auto&& tid : range(detail::n_types)) {
