@@ -22,7 +22,7 @@ using vector_times =
 namespace detail {
 
 using namespace std::literals::string_view_literals;
-constexpr auto t_receive = "Tcomm.receive"sv;
+constexpr auto t_receive = "Tcomm.idle"sv;
 constexpr auto t_merge   = "Tmerge"sv;
 
 template <class S, class R>
@@ -61,12 +61,11 @@ vector_times merge_async(
   using scoped_timer = rtlx::steady_timer;
   using duration     = scoped_timer::duration;
 
-  if (future.is_deferred() || future.is_ready()) {
-    // if (1) {
+  // if (future.is_deferred() || future.is_ready()) {
+  if (1) {
     vector_times times;
-    times.emplace_back(fmpi::kIdle, duration{});
+    times.emplace_back(detail::t_receive, duration{});
     times.emplace_back(detail::t_merge, duration{});
-
     {
       scoped_timer t_comp{times[0].second};
 

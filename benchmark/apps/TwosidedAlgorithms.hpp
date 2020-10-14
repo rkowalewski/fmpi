@@ -12,7 +12,7 @@
 #include <rtlx/Timer.hpp>
 
 static constexpr auto Ttotal    = std::string_view("Ttotal");
-static constexpr auto Tschedule = std::string_view("Tschedule");
+static constexpr auto Tschedule = std::string_view("Tcomm.schedule");
 
 uint32_t num_nodes(mpi::Context const& comm);
 
@@ -31,6 +31,7 @@ class Runner {
   benchmark::Times run(benchmark::TypedCollectiveArgs<S, R> args) const {
     using namespace std::literals::string_view_literals;
     using duration = rtlx::steady_timer::duration;
+    using namespace std::chrono_literals;
 
     benchmark::Times::vector_times times;
     auto                           d_total    = duration{};
@@ -71,6 +72,18 @@ class Runner {
 
       assert(traceStore.empty());
     }
+
+    auto comms = std::partition(
+        std::begin(times), std::end(times), [](const auto& pair) {
+          return pair.first.find("Tcomm") not_eq std::string::npos;
+        });
+
+    auto t_comm = std::accumulate(
+        std::begin(times), comms, 0ns, [](const auto& acc, const auto& pair) {
+          return acc + pair.second;
+        });
+
+    times.emplace_back("Tcomm", t_comm);
 
     return benchmark::Times{times, d_total};
   }
