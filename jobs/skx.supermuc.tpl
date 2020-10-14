@@ -19,7 +19,7 @@
 # For benchmarking disable dynamic frequency scaling
 #SBATCH --ear=off
 # Job options
-#SBATCH --partition $partition
+#SBATCH $partitionspec
 #Number of nodes and MPI tasks per node:
 #SBATCH --nodes=$nodes
 #SBATCH --ntasks-per-node=$ntasks

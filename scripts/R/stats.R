@@ -76,7 +76,7 @@ df.stats <- df.in %>%
                      med_upperCI=~medianCI(., ci_prob)[3]
                   )
                 ) %>%
-    arrange(median, .by_group = TRUE) %>%
+    #arrange(median, .by_group = TRUE) #%>%
     ungroup() %>%
     # filter(Measurement == "Ttotal") %>%
     mutate(avg_ci = ci(n, sd, ci_prob),
