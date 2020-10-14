@@ -129,7 +129,7 @@ collective_future Alltoall::execute() {
       });
 #endif
 
-#if 0
+#if 1
   schedule_state->register_callback(
       message_type::IRECV,
       [sptr = future.arrival_queue()](std::vector<Message> msgs) mutable {
