@@ -62,7 +62,7 @@ int main(int argc, char* argv[]) {
   }
 
   params.smax = tlx::round_down_to_power_of_two(params.smax + 1);
-  params.smin = tlx::round_down_to_power_of_two(params.smin + 1);
+  params.smin = tlx::round_up_to_power_of_two(params.smin + 1);
 
   if (params.smin < sizeof(value_t)) {
     params.smin = sizeof(value_t);
