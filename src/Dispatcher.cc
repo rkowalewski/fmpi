@@ -200,9 +200,8 @@ void CommDispatcher::worker() {
       } else {
         dispatch_task(task, uptr.get());
       }
-
-      progress_all();
     }
+    progress_all();
   }
 }
 
