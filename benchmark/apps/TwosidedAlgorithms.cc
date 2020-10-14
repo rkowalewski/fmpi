@@ -61,6 +61,9 @@ int main(int argc, char* argv[]) {
     benchmark::write_csv_header(std::cout);
   }
 
+  params.smax = tlx::round_down_to_power_of_two(params.smax + 1);
+  params.smin = tlx::round_down_to_power_of_two(params.smin + 1);
+
   if (params.smin < sizeof(value_t)) {
     params.smin = sizeof(value_t);
   }
@@ -70,12 +73,11 @@ int main(int argc, char* argv[]) {
 
   // Array Buffers: do not use make_unique as it has value initialization,
   // which we do not want.
-  using storage        = std::unique_ptr<value_t[]>;
-  auto const max_bytes = tlx::round_down_to_power_of_two(params.smax + 1);
-  auto const max_size  = max_bytes * params.pmax / sizeof(value_t);
-  auto       sbuf      = storage(new value_t[max_size]);
-  auto       rbuf      = storage(new value_t[max_size]);
-  auto       correct   = storage(new value_t[(params.check) ? max_size : 0]);
+  using storage       = std::unique_ptr<value_t[]>;
+  auto const max_size = params.smax * params.pmax / sizeof(value_t);
+  auto       sbuf     = storage(new value_t[max_size]);
+  auto       rbuf     = storage(new value_t[max_size]);
+  auto       correct  = storage(new value_t[(params.check) ? max_size : 0]);
 
   fmpi::SimpleVector<int> ranks(world.size());
   std::iota(std::begin(ranks), std::end(ranks), 0);
