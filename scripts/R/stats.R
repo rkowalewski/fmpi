@@ -78,7 +78,7 @@ df.stats <- df.in %>%
                 ) %>%
     arrange(median, .by_group = TRUE) %>%
     ungroup() %>%
-    filter(Measurement == "Ttotal") %>%
+    # filter(Measurement == "Ttotal") %>%
     mutate(avg_ci = ci(n, sd, ci_prob),
             PPN = Procs / Nodes)
 

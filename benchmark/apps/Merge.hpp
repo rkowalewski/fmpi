@@ -148,8 +148,10 @@ vector_times merge_pieces(
   // const*>(collective_args.sendbuf);
   // auto* out = static_cast<value_type*>(collective_args.recvbuf);
 
-  pieces_t pieces;
+  pieces_t               pieces;
+  std::vector<iter_pair> chunks;
   pieces.reserve(ctx.size());
+  chunks.reserve(n_exchanges);
 
   auto       d_first = out;
   auto const d_last  = std::next(out, nels);
@@ -181,9 +183,11 @@ vector_times merge_pieces(
             auto span = gsl::span(
                 static_cast<value_type*>(msg.buffer()), msg.count());
 
+#if 0
             FMPI_DBG_STREAM(
                 "receiving segment: " << std::make_pair(
                     msg.peer(), span.data()));
+#endif
 
             // return piece{span, palloc};
             return piece{span};
@@ -207,8 +211,6 @@ vector_times merge_pieces(
         // we temporarily pause t_receive and run t_comp.
         scoped_timer_switch switcher{t_receive, t_merge};
         // merge all chunks
-        std::vector<iter_pair> chunks;
-        chunks.reserve(pieces.size());
 
         std::transform(
             std::begin(pieces),
@@ -244,6 +246,7 @@ vector_times merge_pieces(
 
         FMPI_DBG_STREAM("clearing " << pieces.size() << " pieces");
         pieces.erase(std::begin(pieces), std::prev(std::end(pieces)));
+        chunks.clear();
       }
       FMPI_ASSERT(t_receive.running());
       FMPI_ASSERT(not t_merge.running());
@@ -251,9 +254,7 @@ vector_times merge_pieces(
   }
 
   FMPI_ASSERT(t_merge.running());
-
-  std::vector<iter_pair> chunks;
-  chunks.reserve(pieces.size());
+  FMPI_ASSERT(chunks.empty());
 
   FMPI_DBG(pieces.size());
 

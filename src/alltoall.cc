@@ -67,8 +67,8 @@ collective_future Alltoall::execute() {
 
   FMPI_DBG_STREAM("running algorithm " << opts.name);
 
-  auto         trace = MultiTrace{std::string_view(opts.name)};
-  steady_timer t_schedule{trace.duration(kScheduleTime)};
+  //auto         trace = MultiTrace{std::string_view(opts.name)};
+  //steady_timer t_schedule{trace.duration(kScheduleTime)};
 
   if (ctx.size() < 3) {
     auto const me = ctx.rank();
@@ -188,24 +188,24 @@ collective_future Alltoall::execute() {
   }
 
   {
-    using scoped_timer_switch = rtlx::ScopedTimerSwitch<steady_timer>;
+    //using scoped_timer_switch = rtlx::ScopedTimerSwitch<steady_timer>;
 
-    steady_timer t_copy{trace.duration(detail::t_copy)};
+    //steady_timer t_copy{trace.duration(detail::t_copy)};
     // we temporarily pause t_schedule and run t_copy.
-    scoped_timer_switch switcher{t_schedule, t_copy};
+    //scoped_timer_switch switcher{t_schedule, t_copy};
 
     local_copy();
+
+    future.arrival_queue()->emplace_back(Message{
+        recv_offset(ctx.rank()),
+        recvcount,
+        recvtype,
+        ctx.rank(),
+        sendrecvtag_,
+        ctx.mpiComm()});
   }
 
-  future.arrival_queue()->emplace_back(Message{
-      recv_offset(ctx.rank()),
-      recvcount,
-      recvtype,
-      ctx.rank(),
-      sendrecvtag_,
-      ctx.mpiComm()});
   dispatcher.commit(hdl);
-
   return future;
 }
 

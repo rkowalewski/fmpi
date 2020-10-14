@@ -12,6 +12,7 @@
 #include <rtlx/Timer.hpp>
 
 static constexpr auto Ttotal = std::string_view("Ttotal");
+static constexpr auto Tschedule = std::string_view("Tschedule");
 
 uint32_t num_nodes(mpi::Context const& comm);
 
