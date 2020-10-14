@@ -61,7 +61,8 @@ vector_times merge_async(
   using scoped_timer = rtlx::steady_timer;
   using duration     = scoped_timer::duration;
 
-  if (future.is_deferred() || future.is_ready()) {
+  //if (future.is_deferred() || future.is_ready()) {
+  if (1) {
     vector_times times;
     times.emplace_back(fmpi::kIdle, duration{});
     times.emplace_back(detail::t_merge, duration{});

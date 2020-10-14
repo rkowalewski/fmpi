@@ -41,7 +41,7 @@ class Runner {
     {
       rtlx::steady_timer timer{d_total};
 
-      // 1) Communication
+      // 1) Communication Schedule
       rtlx::steady_timer t_schedule{d_schedule};
       auto               future = communication->run(args);
       t_schedule.finish();
