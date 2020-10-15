@@ -22,7 +22,8 @@ using vector_times =
 namespace detail {
 
 using namespace std::literals::string_view_literals;
-constexpr auto t_receive = "Tcomm.idle"sv;
+constexpr auto t_idle    = "Tcomm.idle"sv;
+constexpr auto t_receive = "Tcomm.receive"sv;
 constexpr auto t_merge   = "Tmerge"sv;
 
 template <class S, class R>
@@ -68,7 +69,7 @@ vector_times merge_async(
   // if (1) {
   if (future.is_deferred() || future.is_ready()) {
     vector_times times;
-    times.emplace_back(detail::t_receive, duration{});
+    times.emplace_back(detail::t_idle, duration{});
     times.emplace_back(detail::t_merge, duration{});
     {
       scoped_timer t_comp{times[0].second};
@@ -135,12 +136,14 @@ vector_times merge_pieces(
   // std::vector<chunk>;
 
   vector_times times;
+  times.emplace_back(detail::t_idle, duration{});
   times.emplace_back(detail::t_receive, duration{});
   times.emplace_back(detail::t_merge, duration{});
-  auto& d_receive = times[0].second;
-  auto& d_merge   = times[1].second;
+  auto& d_receive = times[1].second;
+  auto& d_merge   = times[2].second;
+  auto& d_idle    = times[0].second;
 
-  steady_timer t_merge{d_merge};
+  steady_timer t_idle{d_idle};
 
   auto const& ctx         = collective_args.comm;
   auto const  blocksize   = collective_args.recvcount;
@@ -160,8 +163,7 @@ vector_times merge_pieces(
   auto const d_last = std::next(out, nels);
   {
     steady_timer        t_receive{d_receive};
-    scoped_timer_switch switcher{t_merge, t_receive};
-
+    scoped_timer_switch switcher{t_idle, t_receive};
     while (n_exchanges--) {
       auto msg = queue->value_pop();
       FMPI_ASSERT(msg.recvcount() == blocksize);
@@ -171,9 +173,16 @@ vector_times merge_pieces(
     }
   }
 
-  auto last = parallel_merge(chunks, out, nels);
+  FMPI_ASSERT(t_idle.running());
 
-  FMPI_ASSERT(last == d_last);
+  {
+    steady_timer        t_merge{d_merge};
+    scoped_timer_switch switcher{t_idle, t_merge};
+    auto                last = parallel_merge(chunks, out, nels);
+
+    FMPI_ASSERT(last == d_last);
+  }
+
   return times;
 }
 
