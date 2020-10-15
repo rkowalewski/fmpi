@@ -8,7 +8,7 @@
 #SBATCH -D $directory
 #Notification and type
 #SBATCH --mail-type=END
-#SBATCH --mail-user=roger.kowalewski@ifi.lmu.de
+#SBATCH --mail-user=Roger.Kowalewski@lrz.uni-muenchen.de
 # Wall clock limit:
 #SBATCH --time=$time
 #SBATCH --no-requeue
