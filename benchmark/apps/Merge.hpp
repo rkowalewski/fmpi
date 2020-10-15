@@ -92,6 +92,10 @@ vector_times merge_async(
             return std::make_pair(f, l);
           });
 
+      std::random_device rd;
+      std::mt19937       g(rd());
+      std::shuffle(chunks.begin(), chunks.end(), g);
+
       {
         using scoped_timer_switch = rtlx::ScopedTimerSwitch<scoped_timer>;
         scoped_timer t_idle{times[1].second};
@@ -139,9 +143,9 @@ vector_times merge_pieces(
   times.emplace_back(detail::t_idle, duration{});
   times.emplace_back(detail::t_receive, duration{});
   times.emplace_back(detail::t_merge, duration{});
+  auto& d_idle    = times[0].second;
   auto& d_receive = times[1].second;
   auto& d_merge   = times[2].second;
-  auto& d_idle    = times[0].second;
 
   steady_timer t_idle{d_idle};
 
