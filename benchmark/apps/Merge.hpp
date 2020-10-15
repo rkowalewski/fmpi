@@ -42,6 +42,7 @@ RandomAccessIterator2 parallel_merge(
   assert(!seqs.empty());
   assert(res);
 
+#if 0
   return tlx::parallel_multiway_merge(
       std::begin(seqs),
       std::end(seqs),
@@ -51,6 +52,9 @@ RandomAccessIterator2 parallel_merge(
       tlx::MultiwayMergeAlgorithm::MWMA_ALGORITHM_DEFAULT,
       tlx::MultiwayMergeSplittingAlgorithm::MWMSA_DEFAULT,
       omp_get_max_threads());
+#else
+  return tlx::multiway_merge(std::begin(seqs), std::end(seqs), res, n);
+#endif
 }
 
 template <class S, class R>
