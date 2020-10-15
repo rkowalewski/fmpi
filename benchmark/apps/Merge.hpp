@@ -71,43 +71,44 @@ vector_times merge_async(
     vector_times times;
     times.emplace_back(detail::t_idle, duration{});
     times.emplace_back(detail::t_merge, duration{});
+
+    auto&        d_idle  = times[0].second;
+    auto&        d_merge = times[1].second;
+    scoped_timer t_merge{d_merge};
+
+    auto const                     nr        = collective_args.comm.size();
+    auto const                     blocksize = collective_args.recvcount;
+    std::vector<std::pair<R*, R*>> chunks;
+    chunks.reserve(nr);
+
+    auto range = fmpi::range<uint32_t>(0, nr * blocksize, blocksize);
+
+    std::transform(
+        std::begin(range),
+        std::end(range),
+        std::back_inserter(chunks),
+        [buf = static_cast<R*>(collective_args.recvbuf),
+         blocksize](auto const& offset) {
+          auto f = std::next(buf, offset);
+          auto l = std::next(f, blocksize);
+          return std::make_pair(f, l);
+        });
+
+    std::random_device rd;
+    std::mt19937       g(rd());
+    std::shuffle(chunks.begin(), chunks.end(), g);
+
     {
-      scoped_timer t_comp{times[0].second};
-
-      auto const                     nr        = collective_args.comm.size();
-      auto const                     blocksize = collective_args.recvcount;
-      std::vector<std::pair<R*, R*>> chunks;
-      chunks.reserve(nr);
-
-      auto range = fmpi::range<uint32_t>(0, nr * blocksize, blocksize);
-
-      std::transform(
-          std::begin(range),
-          std::end(range),
-          std::back_inserter(chunks),
-          [buf = static_cast<R*>(collective_args.recvbuf),
-           blocksize](auto const& offset) {
-            auto f = std::next(buf, offset);
-            auto l = std::next(f, blocksize);
-            return std::make_pair(f, l);
-          });
-
-      std::random_device rd;
-      std::mt19937       g(rd());
-      std::shuffle(chunks.begin(), chunks.end(), g);
-
-      {
-        using scoped_timer_switch = rtlx::ScopedTimerSwitch<scoped_timer>;
-        scoped_timer t_idle{times[1].second};
-        // pause compute
-        scoped_timer_switch switcher{t_comp, t_idle};
-        future.wait();
-      }
-
-      // FMPI_DBG(rtlx::to_seconds(d_idle.second));
-
-      parallel_merge(chunks, out, nr * blocksize);
+      using scoped_timer_switch = rtlx::ScopedTimerSwitch<scoped_timer>;
+      scoped_timer t_idle{d_idle};
+      // pause compute
+      scoped_timer_switch switcher{t_merge, t_idle};
+      future.wait();
     }
+
+    // FMPI_DBG(rtlx::to_seconds(d_idle.second));
+
+    parallel_merge(chunks, out, nr * blocksize);
     return times;
   } else {
     return detail::merge_pieces(collective_args, std::move(future), out);
@@ -138,6 +139,8 @@ vector_times merge_pieces(
   // using chunk               = std::variant<piece,
   // simple_vector<value_type>>; using pieces_t            =
   // std::vector<chunk>;
+
+  using namespace std::chrono_literals;
 
   vector_times times;
   times.emplace_back(detail::t_idle, duration{});
