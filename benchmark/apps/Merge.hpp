@@ -61,8 +61,8 @@ vector_times merge_async(
   using scoped_timer = rtlx::steady_timer;
   using duration     = scoped_timer::duration;
 
-  // if (future.is_deferred() || future.is_ready()) {
-  if (1) {
+  // if (1) {
+  if (future.is_deferred() || future.is_ready()) {
     vector_times times;
     times.emplace_back(detail::t_receive, duration{});
     times.emplace_back(detail::t_merge, duration{});
@@ -114,6 +114,160 @@ template <class T>
 using simple_vector =
     tlx::SimpleVector<T, tlx::SimpleVectorMode::NoInitNoDestroy>;
 
+template <class S, class R>
+vector_times merge_pieces(
+    TypedCollectiveArgs<S, R> const& collective_args,
+    fmpi::collective_future          future,
+    R*                               out) {
+  using value_type          = R;
+  using steady_timer        = rtlx::steady_timer;
+  using duration            = steady_timer::duration;
+  using scoped_timer_switch = rtlx::ScopedTimerSwitch<steady_timer>;
+  // using thread_alloc        = fmpi::ThreadAllocator<value_type>;
+  using iter_pair = std::pair<value_type*, value_type*>;
+  // using piece               = Piece<value_type, thread_alloc>;
+  // using chunk               = std::variant<piece,
+  // simple_vector<value_type>>; using pieces_t            =
+  // std::vector<chunk>;
+
+  vector_times times;
+  times.emplace_back(detail::t_receive, duration{});
+  times.emplace_back(detail::t_merge, duration{});
+  auto& d_receive = times[0].second;
+  auto& d_merge   = times[1].second;
+
+  steady_timer t_merge{d_merge};
+
+  auto const& ctx         = collective_args.comm;
+  auto const  blocksize   = collective_args.recvcount;
+  auto const  nels        = ctx.size() * blocksize;
+  std::size_t n_exchanges = ctx.size();
+  auto        queue       = future.arrival_queue();
+  // auto        buf_alloc   = thread_alloc{};
+
+  // auto const* begin = static_cast<value_type
+  // const*>(collective_args.sendbuf);
+  // auto* out = static_cast<value_type*>(collective_args.recvbuf);
+
+  std::vector<iter_pair> chunks;
+  chunks.reserve(n_exchanges);
+
+  // auto       d_first = out;
+  auto const d_last = std::next(out, nels);
+  {
+    steady_timer        t_receive{d_receive};
+    scoped_timer_switch switcher{t_merge, t_receive};
+
+    while (n_exchanges--) {
+      auto msg = queue->value_pop();
+      FMPI_ASSERT(msg.recvcount() == blocksize);
+      auto* first = static_cast<value_type*>(msg.recvbuffer());
+      auto* last  = std::next(first, blocksize);
+      chunks.emplace_back(first, last);
+    }
+  }
+
+  auto last = parallel_merge(chunks, out, nels);
+
+  FMPI_ASSERT(last == d_last);
+  return times;
+}
+
+template <class T, class Allocator>
+class Piece {
+  using range = gsl::span<T>;
+  range      span_{};
+  Allocator* alloc_{};
+
+ public:
+  using value_type     = T;
+  using size_type      = typename range::size_type;
+  using iterator       = T*;
+  using const_iterator = T const*;
+
+  constexpr Piece() = default;
+
+  constexpr explicit Piece(gsl::span<T> span) noexcept
+    : Piece(span, nullptr) {
+  }
+
+  constexpr Piece(gsl::span<T> span, Allocator* alloc) noexcept
+    : span_(span)
+    , alloc_(alloc) {
+    FMPI_DBG(span.size());
+  }
+
+  ~Piece() {
+    if (alloc_) {
+      alloc_->deallocate(span_.data(), span_.size());
+    }
+  }
+
+  Piece(Piece const&) = delete;
+
+  constexpr Piece(Piece&& other) noexcept {
+    *this = std::move(other);
+  }
+
+  Piece& operator=(Piece const&) = delete;
+
+  constexpr Piece& operator=(Piece&& other) noexcept {
+    if (this == &other) {
+      return *this;
+    }
+
+    using std::swap;
+    swap(span_, other.span_);
+    swap(alloc_, other.alloc_);
+
+    // reset other to null span to avoid double frees
+    other.span_  = gsl::span<T>{};
+    other.alloc_ = nullptr;
+
+    return *this;
+  }
+
+  constexpr iterator data() noexcept {
+    return span_.data();
+  }
+
+  [[nodiscard]] constexpr const_iterator data() const noexcept {
+    return span_.data();
+  }
+
+  //! return number of items in range
+  [[nodiscard]] constexpr size_type size() const noexcept {
+    return span_.size();
+  }
+
+  //! return mutable T* to first element
+  constexpr iterator begin() noexcept {
+    return span_.data();
+  }
+  //! return constant T* to first element
+  [[nodiscard]] constexpr const_iterator begin() const noexcept {
+    return span_.data();
+  }
+  //! return constant T* to first element
+  [[nodiscard]] constexpr const_iterator cbegin() const noexcept {
+    return begin();
+  }
+
+  //! return mutable T* beyond last element
+  constexpr iterator end() noexcept {
+    return data() + size();
+  }
+  //! return constant T* beyond last element
+  [[nodiscard]] constexpr const_iterator end() const noexcept {
+    return data() + size();
+  }
+  //! return constant T* beyond last element
+  [[nodiscard]] constexpr const_iterator cend() const noexcept {
+    return end();
+  }
+};
+
+#if 0
 template <class S, class R>
 vector_times merge_pieces(
     TypedCollectiveArgs<S, R> const& collective_args,
@@ -295,100 +449,7 @@ vector_times merge_pieces(
   FMPI_ASSERT(last == d_last);
   return times;
 }
-
-template <class T, class Allocator>
-class Piece {
-  using range = gsl::span<T>;
-  range      span_{};
-  Allocator* alloc_{};
-
- public:
-  using value_type     = T;
-  using size_type      = typename range::size_type;
-  using iterator       = T*;
-  using const_iterator = T const*;
-
-  constexpr Piece() = default;
-
-  constexpr explicit Piece(gsl::span<T> span) noexcept
-    : Piece(span, nullptr) {
-  }
-
-  constexpr Piece(gsl::span<T> span, Allocator* alloc) noexcept
-    : span_(span)
-    , alloc_(alloc) {
-    FMPI_DBG(span.size());
-  }
-
-  ~Piece() {
-    if (alloc_) {
-      alloc_->deallocate(span_.data(), span_.size());
-    }
-  }
-
-  Piece(Piece const&) = delete;
-
-  constexpr Piece(Piece&& other) noexcept {
-    *this = std::move(other);
-  }
-
-  Piece& operator=(Piece const&) = delete;
-
-  constexpr Piece& operator=(Piece&& other) noexcept {
-    if (this == &other) {
-      return *this;
-    }
-
-    using std::swap;
-    swap(span_, other.span_);
-    swap(alloc_, other.alloc_);
-
-    // reset other to null span to avoid double frees
-    other.span_  = gsl::span<T>{};
-    other.alloc_ = nullptr;
-
-    return *this;
-  }
-
-  constexpr iterator data() noexcept {
-    return span_.data();
-  }
-
-  [[nodiscard]] constexpr const_iterator data() const noexcept {
-    return span_.data();
-  }
-
-  //! return number of items in range
-  [[nodiscard]] constexpr size_type size() const noexcept {
-    return span_.size();
-  }
-
-  //! return mutable T* to first element
-  constexpr iterator begin() noexcept {
-    return span_.data();
-  }
-  //! return constant T* to first element
-  [[nodiscard]] constexpr const_iterator begin() const noexcept {
-    return span_.data();
-  }
-  //! return constant T* to first element
-  [[nodiscard]] constexpr const_iterator cbegin() const noexcept {
-    return begin();
-  }
-
-  //! return mutable T* beyond last element
-  constexpr iterator end() noexcept {
-    return data() + size();
-  }
-  //! return constant T* beyond last element
-  [[nodiscard]] constexpr const_iterator end() const noexcept {
-    return data() + size();
-  }
-  //! return constant T* beyond last element
-  [[nodiscard]] constexpr const_iterator cend() const noexcept {
-    return end();
-  }
-};
+#endif
 
 }  // namespace detail
 

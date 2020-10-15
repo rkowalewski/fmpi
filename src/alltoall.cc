@@ -133,8 +133,12 @@ collective_future Alltoall::execute() {
   schedule_state->register_callback(
       message_type::IRECV,
       [sptr = future.arrival_queue()](std::vector<Message> msgs) mutable {
-        std::move(
-            std::begin(msgs), std::end(msgs), std::back_inserter(*sptr));
+        for (auto&& msg : msgs) {
+          sptr->push(msg);
+        }
+
+        // std::move(
+        //    std::begin(msgs), std::end(msgs), std::back_inserter(*sptr));
       });
 #endif
 
@@ -211,7 +215,7 @@ collective_future Alltoall::execute() {
 
     local_copy();
 
-    future.arrival_queue()->emplace_back(make_receive(
+    future.arrival_queue()->push(make_receive(
         recv_offset(ctx.rank()),
         recvcount,
         recvtype,

@@ -3,6 +3,7 @@
 
 #include <atomic>
 #include <fmpi/Message.hpp>
+#include <fmpi/concurrency/BufferedChannel.hpp>
 #include <fmpi/concurrency/SimpleConcurrentDeque.hpp>
 #include <memory>
 #include <optional>
@@ -61,7 +62,7 @@ class collective_future {
   friend collective_future make_mpi_future(
       std::unique_ptr<MPI_Request> /*h*/);
 
-  using simple_message_queue = SimpleConcurrentDeque<Message>;
+  using simple_message_queue = buffered_channel<Message>;
 
   std::shared_ptr<detail::future_shared_state> sptr_;
   // Partial arrivals
