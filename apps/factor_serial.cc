@@ -607,7 +607,7 @@ void print_dot(
     std::vector<std::vector<RankPair>> tournament, const std::string& title) {
   (void)title;
   auto nr = tournament.size();
-  auto nd = ndigits(nr);
+  int nd = ndigits(nr);
   std::cout << "digraph G {\n";
   std::cout << "graph [rankdir=TB ranksep=1 nodesep=1]\n";
   std::cout << "node [style=filled shape=circle]\n";
@@ -670,7 +670,7 @@ void print_dot_directed(
     const std::size_t&                 nodes,
     const std::string&                 title) {
   (void)title;
-  auto nd = ndigits(nodes);
+  int nd = ndigits(nodes);
   std::cout << "digraph G {\n";
   std::cout << "graph [rankdir=TB ranksep=1 nodesep=1]\n";
   std::cout << "node [shape=circle]\n";
