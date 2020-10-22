@@ -49,14 +49,14 @@ constexpr bool operator!=(
 struct CommTask {
   constexpr CommTask() = default;
 
-  constexpr CommTask(ScheduleHandle id, message_type t, Message m)
+  constexpr CommTask(ScheduleHandle id_, message_type t, Message m)
     : message(m)
-    , id(id)
+    , id(id_)
     , type(t) {
   }
 
-  constexpr CommTask(ScheduleHandle id, message_type t)
-    : CommTask(id, t, Message{}) {
+  constexpr CommTask(ScheduleHandle id_, message_type t)
+    : CommTask(id_, t, Message{}) {
   }
 
   [[nodiscard]] constexpr bool valid() const noexcept {
