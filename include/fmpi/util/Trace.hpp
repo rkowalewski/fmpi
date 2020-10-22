@@ -36,7 +36,7 @@ class TraceStore {
   TraceStore(const TraceStore& src) = delete;
   TraceStore& operator=(const TraceStore& rhs) = delete;
 
-  void insert(std::string_view ctx, multi_trace const& source);
+  void insert(std::string_view ctx, multi_trace const& values);
 
   void erase(std::string_view /*ctx*/);
 

@@ -112,6 +112,7 @@ class ScheduleCtx {
   // complete all outstanding requests
   void complete_all();
   void complete_some();
+  void dispatch_task(CommTask task);
 
   void reset_slots();
 
@@ -121,6 +122,10 @@ class ScheduleCtx {
   FixedVector<MPI_Request>                          handles_;
   FixedVector<CommTask>                             pending_;
   std::array<tlx::RingBuffer<int>, detail::n_types> slots_;
+
+  /// Message handler
+  // TODO: make this configurable
+  DefaultMessageHandler handler_{};
 
   /// Signals and Callbacks
   std::array<signal, detail::n_types>   signals_{};
@@ -186,7 +191,7 @@ class CommDispatcher {
   template <class... Args>
   bool schedule(ScheduleHandle const& handle, Args&&... args) {
     FMPI_ASSERT(schedules_.contains(handle));
-    auto task = CommTask{handle, std::forward<Args>(args)...};
+    auto       task   = CommTask{handle, std::forward<Args>(args)...};
     auto const status = channel_.push(task);
     return status == channel_op_status::success;
   }

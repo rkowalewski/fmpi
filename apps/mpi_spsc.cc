@@ -167,7 +167,7 @@ int run() {
 
   schedule_ctx->register_callback(
       fmpi::message_type::IRECV,
-      [&ready_tasks](std::vector<fmpi::Message> msgs) {
+      [&ready_tasks](const std::vector<fmpi::Message>& msgs) {
         for (auto&& msg : msgs) {
           auto span = gsl::span(
               static_cast<value_type*>(msg.recvbuffer()), msg.recvcount());

@@ -17,40 +17,11 @@ enum class message_type : uint8_t
   ISEND,
   INVALID,  // DO NEVER USE
   ISENDRECV,
+  COPY,
   COMMIT,
   BARRIER,
   WAITSOME,
 };
-
-#if 0
-struct Envelope {
- private:
-  mpi::Comm comm_{MPI_COMM_NULL};
-  mpi::Rank peer_{MPI_PROC_NULL};
-  mpi::Tag  tag_{};
-
- public:
-  constexpr Envelope() = default;
-
-  constexpr Envelope(mpi::Rank peer, mpi::Tag tag, mpi::Comm comm) noexcept
-    : comm_(comm)
-    , peer_(peer)
-    , tag_(tag) {
-  }
-
-  [[nodiscard]] constexpr mpi::Rank peer() const noexcept {
-    return peer_;
-  }
-
-  [[nodiscard]] constexpr mpi::Comm comm() const noexcept {
-    return comm_;
-  }
-
-  [[nodiscard]] constexpr mpi::Tag tag() const noexcept {
-    return tag_;
-  }
-};
-#endif
 
 class Message {
  public:
@@ -104,55 +75,47 @@ class Message {
           comm) {
   }
 
-#if 0
-  constexpr Message(const Message&) = default;
-  constexpr Message& operator=(Message const&) = default;
-
-  constexpr Message(Message&&) noexcept = default;
-  constexpr Message& operator=(Message&&) noexcept = default;
-#endif
-
-  constexpr const void* sendbuffer() const noexcept {
+  [[nodiscard]] constexpr const void* sendbuffer() const noexcept {
     return sendbuf_;
   }
 
-  constexpr MPI_Datatype sendtype() const noexcept {
+  [[nodiscard]] constexpr MPI_Datatype sendtype() const noexcept {
     return sendtype_;
   }
 
-  constexpr std::size_t sendcount() const noexcept {
+  [[nodiscard]] constexpr std::size_t sendcount() const noexcept {
     return sendcount_;
   }
 
-  constexpr int sendtag() const noexcept {
+  [[nodiscard]] constexpr int sendtag() const noexcept {
     return sendtag_;
   }
 
-  constexpr void* recvbuffer() const noexcept {
+  [[nodiscard]] constexpr void* recvbuffer() const noexcept {
     return recvbuf_;
   }
 
-  constexpr MPI_Datatype recvtype() const noexcept {
+  [[nodiscard]] constexpr MPI_Datatype recvtype() const noexcept {
     return recvtype_;
   }
 
-  constexpr std::size_t recvcount() const noexcept {
+  [[nodiscard]] constexpr std::size_t recvcount() const noexcept {
     return recvcount_;
   }
 
-  constexpr int recvtag() const noexcept {
+  [[nodiscard]] constexpr int recvtag() const noexcept {
     return recvtag_;
   }
 
-  constexpr mpi::Comm comm() const noexcept {
+  [[nodiscard]] constexpr mpi::Comm comm() const noexcept {
     return comm_;
   }
 
-  constexpr mpi::Rank source() const noexcept {
+  [[nodiscard]] constexpr mpi::Rank source() const noexcept {
     return source_;
   }
 
-  constexpr mpi::Rank dest() const noexcept {
+  [[nodiscard]] constexpr mpi::Rank dest() const noexcept {
     return dst_;
   }
 
@@ -213,6 +176,15 @@ inline Message make_receive(
       recvtag,
       comm);
 }
+
+struct DefaultMessageHandler {
+  int operator()(message_type type, Message& message, MPI_Request& req) const;
+
+ private:
+  static int send(const Message& message, MPI_Request& req);
+  static int recv(Message& message, MPI_Request& req);
+  static int lcopy(Message& message);
+};
 
 }  // namespace fmpi
 

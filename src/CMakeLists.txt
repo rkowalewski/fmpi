@@ -1,5 +1,8 @@
 add_library(fmpi
     alltoall.cc
+    Dispatcher.cc
+    Pinning.cc
+    Message.cc
     common/Porting.cc
     concurrency/CacheLocality.cc
     concurrency/Future.cc
@@ -13,8 +16,6 @@ add_library(fmpi
     # topo/BinaryTree.cc
     topo/Tree.cc
     util/Trace.cc
-    Pinning.cc
-    Dispatcher.cc
     )
 
 set(MI_OVERRIDE OFF)
@@ -50,29 +51,7 @@ else()
     set(FMPI_DEBUG_ASSERT OFF CACHE BOOL "" FORCE)
 endif()
 
-
-if (NOT MSVC)
-    target_compile_options(fmpi PUBLIC -Wall -Wextra)
-endif()
-
-if (PEDANTIC_SUPPORTED)
-    target_compile_options(fmpi PUBLIC -pedantic)
-endif()
-
-if (CAST_QUAL_SUPPORTED)
-    target_compile_options(fmpi PUBLIC -Wcast-qual)
-endif()
-if (INIT_SELF_SUPPORTED)
-    target_compile_options(fmpi PUBLIC -Winit-self)
-endif()
-if (OVERLOADED_VIRTUAL_SUPPORTED)
-    target_compile_options(fmpi PUBLIC -Woverloaded-virtual)
-endif()
+set_project_warnings(${PROJECT_NAME})
 
 # configure config file
 configure_file("Config.hpp.in" "${CMAKE_CURRENT_BINARY_DIR}/config_impl.hpp")
-
-#if (REDUNDANT_DECLS_SUPPORTED)
-#    target_compile_options(fmpi PUBLIC -Wredundant-decls)
-#endif()
-

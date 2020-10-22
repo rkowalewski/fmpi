@@ -188,11 +188,11 @@ class Linear {
                                                               nodes_(nodes) {
   }
 
-  [[nodiscard]] constexpr Rank sendRank(uint32_t phase) const FMPI_NOEXCEPT {
+  [[nodiscard]] static constexpr Rank sendRank(uint32_t phase) FMPI_NOEXCEPT {
     return Rank{static_cast<int>(phase)};
   }
 
-  [[nodiscard]] constexpr Rank recvRank(uint32_t phase) const FMPI_NOEXCEPT {
+  [[nodiscard]] static constexpr Rank recvRank(uint32_t phase) FMPI_NOEXCEPT {
     return Rank{static_cast<int>(phase)};
   }
 

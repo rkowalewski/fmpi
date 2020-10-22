@@ -3,6 +3,7 @@ Checks: '*,
  -fuchsia-*,-google-*,-zircon-*,-abseil-*,
  -modernize-use-trailing-return-type,
  -modernize-use-using,
+ -modernize-concat-nested-namespaces,
  -cert-*
  '
 WarningsAsErrors: ''

@@ -1,8 +1,8 @@
 #ifndef TWOSIDEDALGORITHMS_HPP  // NOLINT
 #define TWOSIDEDALGORITHMS_HPP  // NOLINT
 
-#include <Merge.hpp>
 #include <Params.hpp>
+#include <algorithms/Merge.hpp>
 #include <fmpi/Alltoall.hpp>
 #include <fmpi/container/FixedVector.hpp>
 #include <fmpi/util/Trace.hpp>
@@ -28,7 +28,8 @@ class Runner {
   }
 
   template <class S, class R>
-  benchmark::Times run(benchmark::TypedCollectiveArgs<S, R> args) const {
+  [[nodiscard]] benchmark::Times run(
+      benchmark::TypedCollectiveArgs<S, R> args) const {
     using namespace std::literals::string_view_literals;
     using duration = rtlx::steady_timer::duration;
     using namespace std::chrono_literals;
@@ -126,10 +127,10 @@ void calculate_correct_result(benchmark::TypedCollectiveArgs<S, R> args) {
 
   auto ret = MPI_Alltoall(
       args.sendbuf,
-      args.sendcount,
+      static_cast<int>(args.sendcount),
       args.sendtype,
       args.recvbuf,
-      args.recvcount,
+      static_cast<int>(args.recvcount),
       args.recvtype,
       args.comm.mpiComm());
 

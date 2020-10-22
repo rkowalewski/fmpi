@@ -155,7 +155,7 @@ void BlockAllocator::deallocate(void* p) {
   BlockHeader* free_block      = _free_blocks;
 
   while (free_block != nullptr) {
-    if ((std::uintptr_t)free_block >= block_end) {
+    if (reinterpret_cast<std::uintptr_t>(free_block) >= block_end) {
       break;
     }
 
@@ -172,7 +172,7 @@ void BlockAllocator::deallocate(void* p) {
 
     _used_memory -= block_size;
   } else if (
-      (std::uintptr_t)prev_free_block + _header_size +
+      reinterpret_cast<std::uintptr_t>(prev_free_block) + _header_size +
           prev_free_block->size ==
       block_start) {
     prev_free_block->size += _header_size + block_size;
@@ -189,9 +189,9 @@ void BlockAllocator::deallocate(void* p) {
 
   FMPI_ASSERT(prev_free_block != nullptr);
 
-  if ((std::uintptr_t)prev_free_block + _header_size +
+  if (reinterpret_cast<std::uintptr_t>(prev_free_block) + _header_size +
           prev_free_block->size ==
-      (std::uintptr_t)prev_free_block->next_free_block) {
+      reinterpret_cast<std::uintptr_t>(prev_free_block->next_free_block)) {
     _used_memory -= _header_size;
 
     prev_free_block->size +=

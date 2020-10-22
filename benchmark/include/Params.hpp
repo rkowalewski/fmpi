@@ -35,7 +35,7 @@ struct Times {
       std::vector<std::pair<std::string, std::chrono::nanoseconds>>;
 
   vector_times             traces;
-  std::chrono::nanoseconds total_time;
+  std::chrono::nanoseconds total_time{};
 };
 
 struct Measurement {

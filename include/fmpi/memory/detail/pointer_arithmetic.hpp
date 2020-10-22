@@ -39,19 +39,19 @@ inline bool isAligned(const T* address) {
 }
 
 inline void* add(void* p, size_t x) {
-  return (void*)(reinterpret_cast<std::uintptr_t>(p) + x);
+  return reinterpret_cast<void*>(reinterpret_cast<std::uintptr_t>(p) + x);
 }
 
 inline const void* add(const void* p, size_t x) {
-  return (const void*)(reinterpret_cast<std::uintptr_t>(p) + x);
+  return reinterpret_cast<void*>(reinterpret_cast<std::uintptr_t>(p) + x);
 }
 
 inline void* sub(void* p, size_t x) {
-  return (void*)(reinterpret_cast<std::uintptr_t>(p) - x);
+  return reinterpret_cast<void*>(reinterpret_cast<std::uintptr_t>(p) - x);
 }
 
 inline const void* sub(const void* p, size_t x) {
-  return (const void*)(reinterpret_cast<std::uintptr_t>(p) - x);
+  return reinterpret_cast<void*>(reinterpret_cast<std::uintptr_t>(p) - x);
 }
 
 }  // namespace detail

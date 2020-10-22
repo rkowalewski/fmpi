@@ -187,7 +187,6 @@ Params::Params() noexcept
   , check(false)
 #else
   niters(1)
-  , warmups(0)
   , check(true)
 #endif
 {

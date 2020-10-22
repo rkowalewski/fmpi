@@ -62,7 +62,7 @@ struct HeapAllocator : public ContiguousPoolAllocator<T> {
   template <typename U>
   explicit HeapAllocator(HeapAllocator<U>&& other)
     : ContiguousPoolAllocator<T>(std::move(other))
-    , _size((index_type)resize<U, T>(other._size))
+    , _size(static_cast<index_type>(resize<U, T>(other._size)))
     , _buffer(other._buffer) {
     other._size   = 0;
     other._buffer = nullptr;

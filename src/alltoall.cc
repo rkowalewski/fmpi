@@ -7,7 +7,6 @@
 #include <fmpi/util/Trace.hpp>
 
 namespace fmpi {
-
 namespace detail {
 
 using namespace std::literals::string_view_literals;
@@ -79,7 +78,7 @@ collective_future Alltoall::execute() {
 
     auto ret = MPI_Irecv(
         recv_offset(other),
-        recvcount,
+        static_cast<int>(recvcount),
         recvtype,
         other,
         sendrecvtag_,
@@ -90,7 +89,7 @@ collective_future Alltoall::execute() {
 
     MPI_Send(
         send_offset(other),
-        sendcount,
+        static_cast<int>(sendcount),
         sendtype,
         other,
         sendrecvtag_,
@@ -132,13 +131,11 @@ collective_future Alltoall::execute() {
 #if 1
   schedule_state->register_callback(
       message_type::IRECV,
-      [sptr = future.arrival_queue()](std::vector<Message> msgs) mutable {
+      [sptr =
+           future.arrival_queue()](const std::vector<Message>& msgs) mutable {
         for (auto&& msg : msgs) {
           sptr->push(msg);
         }
-
-        // std::move(
-        //    std::begin(msgs), std::end(msgs), std::back_inserter(*sptr));
       });
 #endif
 
@@ -149,6 +146,21 @@ collective_future Alltoall::execute() {
   auto const rounds =
       std::max(tlx::div_ceil(schedule.phaseCount(), opts.winsz), 1u);
 
+  auto msg = Message{
+      send_offset(ctx.rank()),
+      sendcount,
+      sendtype,
+      ctx.rank(),
+      sendrecvtag_,
+      recv_offset(ctx.rank()),
+      recvcount,
+      recvtype,
+      ctx.rank(),
+      sendrecvtag_,
+      ctx.mpiComm()};
+
+  dispatcher.schedule(hdl, message_type::COPY, msg);
+
   for (auto&& r : range(rounds)) {
     auto const last = std::min(schedule.phaseCount(), (r + 1) * opts.winsz);
 
@@ -156,10 +168,10 @@ collective_future Alltoall::execute() {
       auto const rpeer = schedule.recvRank(rr);
       auto const speer = schedule.sendRank(rr);
 
-      Message      msg;
-      message_type type = message_type::INVALID;
+      auto type = message_type::INVALID;
 
       if (rpeer != ctx.rank() and speer != ctx.rank()) {
+        // sendrecv
         msg = Message{
             send_offset(speer),
             sendcount,
@@ -174,7 +186,7 @@ collective_future Alltoall::execute() {
             ctx.mpiComm()};
         type = message_type::ISENDRECV;
       } else if (rpeer != ctx.rank()) {
-        // auto recv = Message{rpeer, kTagRing, ctx.mpiComm()};
+        // recv
         msg = make_receive(
             recv_offset(rpeer),
             recvcount,
@@ -184,6 +196,7 @@ collective_future Alltoall::execute() {
             ctx.mpiComm());
         type = message_type::IRECV;
       } else if (speer != ctx.rank()) {
+        // send
         msg = make_send(
             send_offset(speer),
             sendcount,
@@ -206,6 +219,8 @@ collective_future Alltoall::execute() {
     }
   }
 
+#if 0
+  // copy
   {
     // using scoped_timer_switch = rtlx::ScopedTimerSwitch<steady_timer>;
 
@@ -223,6 +238,7 @@ collective_future Alltoall::execute() {
         sendrecvtag_,
         ctx.mpiComm()));
   }
+#endif
 
   dispatcher.commit(hdl);
   return future;

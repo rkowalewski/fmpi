@@ -54,7 +54,7 @@ inline void ScheduleCtx::complete_some() {
   int                     n = MPI_UNDEFINED;
 
   auto const ret = MPI_Waitsome(
-      handles_.size(),
+      static_cast<int>(handles_.size()),
       handles_.data(),
       &n,
       idxs_completed.data(),
@@ -97,8 +97,8 @@ inline void ScheduleCtx::complete_all() {
       std::back_inserter(idxs),
       [this](auto const& idx) { return handles_[idx] != MPI_REQUEST_NULL; });
 
-  auto const ret =
-      MPI_Waitall(handles_.size(), handles_.data(), statuses.data());
+  auto const ret = MPI_Waitall(
+      static_cast<int>(handles_.size()), handles_.data(), statuses.data());
   FMPI_ASSERT(ret == MPI_SUCCESS);
 
   std::array<std::vector<Message>, detail::n_types> msgs;
@@ -195,42 +195,33 @@ void CommDispatcher::worker() {
         }
       } else if (task.type == message_type::ISENDRECV) {
         task.type = message_type::IRECV;
-        dispatch_task(task, uptr.get());
+        uptr->dispatch_task(task);
         task.type = message_type::ISEND;
-        dispatch_task(task, uptr.get());
+        uptr->dispatch_task(task);
       } else {
-        dispatch_task(task, uptr.get());
+        uptr->dispatch_task(task);
       }
     }
     progress_all();
   }
 }
 
-static int send_message(const Message& message, MPI_Request& req) {
-  return mpi::isend(
-      message.sendbuffer(),
-      message.sendcount(),
-      message.sendtype(),
-      message.dest(),
-      message.sendtag(),
-      message.comm(),
-      &req);
-}
+void ScheduleCtx::dispatch_task(CommTask task) {
+  if (task.type == message_type::COPY) {
+    MPI_Request dummy = MPI_REQUEST_NULL;
 
-static int recv_message(Message& message, MPI_Request& req) {
-  return mpi::irecv(
-      message.recvbuffer(),
-      message.recvcount(),
-      message.recvtype(),
-      message.source(),
-      message.recvtag(),
-      message.comm(),
-      &req);
-}
+    auto ret = handler_(message_type::COPY, task.message, dummy);
+    FMPI_ASSERT(ret == MPI_SUCCESS);
 
-void CommDispatcher::dispatch_task(CommTask task, ScheduleCtx* const uptr) {
+    auto const ti = rtlx::to_underlying(message_type::IRECV);
+    if (callbacks_[ti]) {
+      callbacks_[ti](std::vector<Message>({task.message}));
+    }
+    return;
+  }
+
   auto const ti   = rtlx::to_underlying(task.type);
-  auto&      rb   = uptr->slots_[ti];
+  auto&      rb   = slots_[ti];
   int        slot = MPI_UNDEFINED;
   MPI_Status status;
 
@@ -240,15 +231,15 @@ void CommDispatcher::dispatch_task(CommTask task, ScheduleCtx* const uptr) {
     std::vector<int>         idxs;
 
     auto const first_slot =
-        std::accumulate(uptr->nslots_.begin(), uptr->nslots_.begin() + ti, 0);
+        std::accumulate(nslots_.begin(), nslots_.begin() + ti, 0);
 
-    auto const last_slot = first_slot + uptr->nslots_[ti];
+    auto const last_slot = first_slot + static_cast<int>(nslots_[ti]);
 
     FMPI_DBG(std::make_pair(first_slot, last_slot));
 
     for (auto&& idx : range<int>(first_slot, last_slot)) {
-      if (uptr->pending_[idx].type == task.type) {
-        reqs.emplace_back(uptr->handles_[idx]);
+      if (pending_[idx].type == task.type) {
+        reqs.emplace_back(handles_[idx]);
         idxs.emplace_back(idx);
       }
     }
@@ -261,46 +252,43 @@ void CommDispatcher::dispatch_task(CommTask task, ScheduleCtx* const uptr) {
 
     FMPI_DBG(reqs.size());
 
-    int        c   = MPI_UNDEFINED;
-    auto const ret = MPI_Waitany(reqs.size(), reqs.data(), &c, &status);
+    int        c = MPI_UNDEFINED;
+    auto const ret =
+        MPI_Waitany(static_cast<int>(reqs.size()), reqs.data(), &c, &status);
 
     FMPI_ASSERT(ret == MPI_SUCCESS);
     FMPI_ASSERT(c != MPI_UNDEFINED);
-    FMPI_ASSERT(uptr->pending_[idxs[c]].valid());
+    FMPI_ASSERT(pending_[idxs[c]].valid());
 
-    slot                 = idxs[c];
-    uptr->handles_[slot] = MPI_REQUEST_NULL;
+    slot           = idxs[c];
+    handles_[slot] = MPI_REQUEST_NULL;
   } else {
     // obtain free slot from ring buffer
     slot = rb.back();
     rb.pop_back();
   }
 
-  FMPI_ASSERT(uptr->handles_[slot] == MPI_REQUEST_NULL);
+  FMPI_ASSERT(handles_[slot] == MPI_REQUEST_NULL);
 
   // Issue new message
-  if (uptr->signals_[ti]) {
-    uptr->signals_[ti](task.message);
+  if (signals_[ti]) {
+    signals_[ti](task.message);
   }
 
   FMPI_ASSERT(
       task.type == message_type::IRECV || task.type == message_type::ISEND);
 
-  // TODO: register default message handler, and import:
-  // consider const correctness !!!!
-  auto ret = (task.type == message_type::IRECV)
-                 ? recv_message(task.message, uptr->handles_[slot])
-                 : send_message(task.message, uptr->handles_[slot]);
+  auto ret = handler_(task.type, task.message, handles_[slot]);
 
   FMPI_ASSERT(ret == MPI_SUCCESS);
 
-  std::swap(task, uptr->pending_[slot]);
+  std::swap(task, pending_[slot]);
 
   // task holds now the previous task...
   // so let's complete callbacks for it
 
-  if (task.valid() and uptr->callbacks_[ti]) {
-    uptr->callbacks_[ti](std::vector<Message>({task.message}));
+  if (task.valid() and callbacks_[ti]) {
+    callbacks_[ti](std::vector<Message>({task.message}));
   }
 }
 
@@ -344,14 +332,19 @@ void CommDispatcher::progress_all(bool blocking) {
   FixedVector<MPI_Status> statuses(reqs.size());
 
   if (blocking) {
-    auto const ret = MPI_Waitall(reqs.size(), reqs.data(), statuses.data());
+    auto const ret = MPI_Waitall(
+        static_cast<int>(reqs.size()), reqs.data(), statuses.data());
     FMPI_ASSERT(ret == MPI_SUCCESS);
     std::iota(std::begin(idxs_completed), std::end(idxs_completed), 0);
   } else {
     int n = MPI_UNDEFINED;
 
     auto const ret = MPI_Testsome(
-        reqs.size(), reqs.data(), &n, idxs_completed.data(), statuses.data());
+        static_cast<int>(reqs.size()),
+        reqs.data(),
+        &n,
+        idxs_completed.data(),
+        statuses.data());
 
     FMPI_ASSERT(ret == MPI_SUCCESS);
 
@@ -388,7 +381,7 @@ void CommDispatcher::progress_all(bool blocking) {
 
     task.reset();
 
-    sp->slots_[ti].push_front(req_idx);
+    sp->slots_[ti].push_front(static_cast<int>(req_idx));
   }
 
   for (auto&& sp_idx : range(ctx_tasks.size())) {

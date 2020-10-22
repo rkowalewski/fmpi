@@ -19,7 +19,7 @@ Context::Context(MPI_Comm comm, bool free_self)
   , m_free_self(free_self) {
   int sz = 0;
 
-  int32_t flag;
+  int32_t flag = 0;
   // Assert that MPI is initialized
   FMPI_CHECK_MPI(MPI_Initialized(&flag));
   FMPI_ASSERT(flag);
@@ -96,13 +96,15 @@ bool initialize(int* argc, char*** argv, ThreadLevel level) {
   initialized = success && required <= provided;
 
   // Maximum tag value
-  int32_t flag, tag_ub;
+  int32_t flag = 0;
+
+  int32_t tag_ub = 0;
   MPI_Comm_get_attr(MPI_COMM_WORLD, MPI_TAG_UB, &tag_ub, &flag);
 
   // For whatever reason, OpenMPI provides different values on different ranks
   // although this does not conform with the MPI-3 standard. See
   // section 8.1.2.
-  if (flag) {
+  if (flag != 0) {
     MPI_Allreduce(&tag_ub, &mpi_tag_ub, 1, MPI_INT, MPI_MIN, MPI_COMM_WORLD);
   }
 

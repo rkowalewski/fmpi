@@ -1,5 +1,5 @@
-#ifndef FMPI_MERGE_HPP
-#define FMPI_MERGE_HPP
+#ifndef ALGORITHMS_MERGE_HPP
+#define ALGORITHMS_MERGE_HPP
 
 #include <Params.hpp>
 #include <fmpi/Debug.hpp>
@@ -22,9 +22,9 @@ using vector_times =
 namespace detail {
 
 using namespace std::literals::string_view_literals;
-constexpr auto t_idle    = "Tcomm.idle"sv;
-constexpr auto t_receive = "Tcomm.receive"sv;
-constexpr auto t_merge   = "Tmerge"sv;
+constexpr auto idle    = "Tcomm.idle"sv;
+constexpr auto receive = "Tcomm.receive"sv;
+constexpr auto merge   = "Tmerge"sv;
 
 template <class S, class R>
 vector_times merge_pieces(
@@ -69,19 +69,24 @@ vector_times merge_async(
   // if (1) {
   if (future.is_deferred() || future.is_ready()) {
     vector_times times;
-    times.emplace_back(detail::t_idle, duration{});
-    times.emplace_back(detail::t_merge, duration{});
+    times.emplace_back(detail::idle, duration{});
+    times.emplace_back(detail::merge, duration{});
 
     auto&        d_idle  = times[0].second;
     auto&        d_merge = times[1].second;
     scoped_timer t_merge{d_merge};
 
-    auto const                     nr        = collective_args.comm.size();
-    auto const                     blocksize = collective_args.recvcount;
+    auto const nr        = collective_args.comm.size();
+    auto const blocksize = static_cast<uint32_t>(collective_args.recvcount);
     std::vector<std::pair<R*, R*>> chunks;
     chunks.reserve(nr);
 
     auto range = fmpi::range<uint32_t>(0, nr * blocksize, blocksize);
+
+    auto const& config = fmpi::Pinning::instance();
+
+    FMPI_ASSERT(
+        config.num_threads == static_cast<uint32_t>(omp_get_max_threads()));
 
     std::transform(
         std::begin(range),
@@ -110,9 +115,8 @@ vector_times merge_async(
 
     parallel_merge(chunks, out, nr * blocksize);
     return times;
-  } else {
-    return detail::merge_pieces(collective_args, std::move(future), out);
   }
+  return detail::merge_pieces(collective_args, std::move(future), out);
 }
 
 namespace detail {
@@ -143,9 +147,9 @@ vector_times merge_pieces(
   using namespace std::chrono_literals;
 
   vector_times times;
-  times.emplace_back(detail::t_idle, duration{});
-  times.emplace_back(detail::t_receive, duration{});
-  times.emplace_back(detail::t_merge, duration{});
+  times.emplace_back(detail::idle, duration{});
+  times.emplace_back(detail::receive, duration{});
+  times.emplace_back(detail::merge, duration{});
   auto& d_idle    = times[0].second;
   auto& d_receive = times[1].second;
   auto& d_merge   = times[2].second;

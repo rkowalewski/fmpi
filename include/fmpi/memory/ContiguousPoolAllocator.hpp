@@ -137,8 +137,9 @@ ContiguousPoolAllocator<T>::ContiguousPoolAllocator(
     throw std::runtime_error("Invalid allocator.");
   }
   // normalize size of buffer
-  index_type newSize =
-      std::min(_control->_size, (index_type)resize<U, T>(_control->_size));
+  index_type newSize = std::min(
+      _control->_size,
+      static_cast<index_type>(resize<U, T>(_control->_size)));
   _control->_size           = newSize;  // resize buffer
   _control->_freeBlockIndex = newSize - 1;
 }
@@ -152,8 +153,9 @@ ContiguousPoolAllocator<T>::ContiguousPoolAllocator(
     throw std::runtime_error("Invalid allocator.");
   }
   // normalize size of buffer
-  index_type newSize =
-      std::min(_control->_size, (index_type)resize<U, T>(_control->_size));
+  index_type newSize = std::min(
+      _control->_size,
+      static_cast<index_type>(resize<U, T>(_control->_size)));
   _control->_size           = newSize;  // resize buffer
   _control->_freeBlockIndex = newSize - 1;
 }
@@ -207,7 +209,7 @@ ContiguousPoolAllocator<T>::max_size() const {
 template <typename T>
 template <typename... Args>
 void ContiguousPoolAllocator<T>::construct(T* p, Args&&... args) {
-  new ((void*)p) T(std::forward<Args>(args)...);  // construct in-place
+  new (static_cast<void*>(p)) T(std::forward<Args>(args)...);  // construct in-place
 }
 
 template <typename T>

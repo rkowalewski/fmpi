@@ -85,12 +85,14 @@ int main(int argc, char* argv[]) {
   for (uint32_t nprocs = params.pmin; nprocs < params.pmax + 1; nprocs *= 2) {
     MPI_Barrier(world.mpiComm());
     /* create communicator for nprocs */
-    MPI_Group group;
-    MPI_Comm  comm;
+    MPI_Group group = nullptr;
+    MPI_Comm  comm  = nullptr;
     MPI_Group_incl(world.mpiGroup(), nprocs, ranks.data(), &group);
     MPI_Comm_create(world.mpiComm(), group, &comm);
 
-    if (world.rank() >= static_cast<int>(nprocs)) continue;
+    if (world.rank() >= static_cast<int>(nprocs)) {
+      continue;
+    }
 
     mpi::Context ctx{comm};
 
@@ -116,6 +118,7 @@ int main(int argc, char* argv[]) {
 
       for (auto&& benchmark : algorithms) {
         for (auto&& w : fmpi::range(0u, params.warmups)) {
+          std::ignore = w;
           // warumup iterations
           init_sbuf(sbuf.get(), sbuf.get() + nels, ctx.size(), ctx.rank());
 
@@ -124,8 +127,7 @@ int main(int argc, char* argv[]) {
                 sbuf.get(), sendcount, correct.get(), sendcount, ctx});
           }
 
-          std::ignore = w;
-          benchmark.run(coll_args);
+          std::ignore = benchmark.run(coll_args);
 
           if (params.check and
               not check_result(coll_args, correct.get(), benchmark.name())) {
@@ -349,10 +351,10 @@ class Alltoall_Runner<void, WinT, NReqs> {
 
     FMPI_CHECK_MPI(MPI_Ialltoall(
         coll_args.sendbuf,
-        coll_args.sendcount,
+        static_cast<int>(coll_args.sendcount),
         coll_args.sendtype,
         coll_args.recvbuf,
-        coll_args.recvcount,
+        static_cast<int>(coll_args.recvcount),
         coll_args.recvtype,
         coll_args.comm.mpiComm(),
         request.get()));

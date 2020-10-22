@@ -51,7 +51,7 @@ endif()
 option(FMPI_ENABLE_TRACE "enable detail time trace" ON)
 option(WITH_HWLOC           "Enable hwloc support" OFF)
 
-include(${CMAKE_SOURCE_DIR}/cmake/CompilerFlags.cmake)
+include(${CMAKE_SOURCE_DIR}/cmake/CompilerWarnings.cmake)
 include(${CMAKE_SOURCE_DIR}/cmake/FindMPI.cmake)
 include(${CMAKE_SOURCE_DIR}/cmake/FindOpenMP.cmake)
 include(${CMAKE_SOURCE_DIR}/cmake/ClangTidy.cmake)
