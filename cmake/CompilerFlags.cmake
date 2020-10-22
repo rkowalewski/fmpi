@@ -1,9 +1,0 @@
-include(CheckCXXCompilerFlag)
-
-check_cxx_compiler_flag(-pedantic PEDANTIC_SUPPORTED)
-check_cxx_compiler_flag(-Wcast-qual CAST_QUAL_SUPPORTED)
-check_cxx_compiler_flag(-Winit-self INIT_SELF_SUPPORTED)
-check_cxx_compiler_flag(-Woverloaded-virtual OVERLOADED_VIRTUAL_SUPPORTED)
-check_cxx_compiler_flag(-Wredundant-decls REDUNDANT_DECLS_SUPPORTED)
-check_cxx_compiler_flag(-Wredundant-decls REDUNDANT_DECLS_SUPPORTED)
-
