@@ -84,13 +84,15 @@ int main(int argc, char* argv[]) {
 
   for (uint32_t nprocs = params.pmin; nprocs < params.pmax + 1; nprocs *= 2) {
     MPI_Barrier(world.mpiComm());
+
     /* create communicator for nprocs */
     MPI_Group group = MPI_GROUP_NULL;
     MPI_Comm  comm  = MPI_COMM_NULL;
     MPI_Group_incl(world.mpiGroup(), nprocs, ranks.data(), &group);
     MPI_Comm_create(world.mpiComm(), group, &comm);
+    MPI_Group_free(&group);
 
-    if (world.rank() >= static_cast<int>(nprocs)) {
+    if (comm == MPI_COMM_NULL) {
       continue;
     }
 

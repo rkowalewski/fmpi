@@ -42,8 +42,8 @@ collective_future collective_promise::get_future() {
 collective_future::collective_future(
     std::shared_ptr<detail::future_shared_state> p)
   : sptr_(std::move(p)) {
-  static constexpr std::size_t channel_cap = 1000;
-  partials_ = std::make_shared<simple_message_queue>(channel_cap);
+  //static constexpr std::size_t channel_cap = 1000;
+  //partials_ = std::make_shared<simple_message_queue>(channel_cap);
 }
 
 std::shared_ptr<collective_future::simple_message_queue> const&
@@ -88,7 +88,7 @@ collective_future make_ready_future(mpi::return_code u) {
 collective_future make_mpi_future(std::unique_ptr<MPI_Request> h) {
   auto state = std::make_shared<detail::future_shared_state>(std::move(h));
   return collective_future{state};
-}  // namespace fmpi
+}
 
 namespace detail {
 

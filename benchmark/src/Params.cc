@@ -162,8 +162,10 @@ void printBenchmarkPreamble(
     if (split != std::string::npos &&
         (var.find("OMPI_") != std::string::npos ||
          var.find("I_MPI") != std::string::npos ||
+         var.find("PSM2_") != std::string::npos ||
          var.find("OMP_") != std::string::npos ||
          var.find("FMPI_") != std::string::npos)) {
+
       auto key = var.substr(0, split);
       auto val = var.substr(split + 1);
       trim(key);
