@@ -39,6 +39,18 @@ fmpi::collective_future irecv(
   return fmpi::make_mpi_future(std::move(request));
 }
 
+fmpi::collective_future isend(
+    void*        buf,
+    int          count,
+    MPI_Datatype datatype,
+    int          dest,
+    int          tag,
+    MPI_Comm     comm) {
+  auto request = std::make_unique<MPI_Request>();
+  MPI_Isend(buf, count, datatype, dest, tag, comm, request.get());
+  return fmpi::make_mpi_future(std::move(request));
+}
+
 Params params{};
 
 int main(int argc, char* argv[]) {
@@ -91,14 +103,14 @@ int main(int argc, char* argv[]) {
           t_start = MPI_Wtime();
         }
 
-        MPI_Send(s_buf, size, MPI_CHAR, 1, 1, world.mpiComm());
-
 #if 0
+        MPI_Send(s_buf, size, MPI_CHAR, 1, 1, world.mpiComm());
         MPI_Recv(r_buf, size, MPI_CHAR, 1, 1, world.mpiComm(), &reqstat);
 #else
-        auto req = std::make_unique<MPI_Request>();
-        MPI_Irecv(r_buf, size, MPI_CHAR, 1, 1, world.mpiComm(), req.get());
-        auto future = fmpi::make_mpi_future(std::move(req));
+        auto fut_send = isend(s_buf, size, MPI_CHAR, 1, 1, world.mpiComm());
+        fut_send.wait();
+        auto fut_recv = irecv(r_buf, size, MPI_CHAR, 1, 1, world.mpiComm());
+        fut_recv.wait();
 #endif
       }
 
@@ -107,8 +119,15 @@ int main(int argc, char* argv[]) {
 
     else if (myid == 1) {
       for (uint32_t i = 0; i < params.iterations + params.warmups; i++) {
+#if 0
         MPI_Recv(r_buf, size, MPI_CHAR, 0, 1, world.mpiComm(), &reqstat);
         MPI_Send(s_buf, size, MPI_CHAR, 0, 1, world.mpiComm());
+#else
+        auto fut_recv = irecv(r_buf, size, MPI_CHAR, 0, 1, world.mpiComm());
+        fut_recv.wait();
+        auto fut_send = isend(s_buf, size, MPI_CHAR, 0, 1, world.mpiComm());
+        fut_send.wait();
+#endif
       }
     }
 

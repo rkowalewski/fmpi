@@ -42,12 +42,17 @@ collective_future collective_promise::get_future() {
 collective_future::collective_future(
     std::shared_ptr<detail::future_shared_state> p)
   : sptr_(std::move(p)) {
-  //static constexpr std::size_t channel_cap = 1000;
-  //partials_ = std::make_shared<simple_message_queue>(channel_cap);
+}
+
+std::shared_ptr<collective_future::simple_message_queue> const&
+collective_future::allocate_queue(std::size_t n) {
+  partials_ = std::make_shared<simple_message_queue>(n);
+  return partials_;
 }
 
 std::shared_ptr<collective_future::simple_message_queue> const&
 collective_future::arrival_queue() {
+  FMPI_ASSERT(partials_);
   return partials_;
 }
 

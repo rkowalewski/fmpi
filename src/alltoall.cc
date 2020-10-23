@@ -131,8 +131,8 @@ collective_future Alltoall::execute() {
 #if 1
   schedule_state->register_callback(
       message_type::IRECV,
-      [sptr =
-           future.arrival_queue()](const std::vector<Message>& msgs) mutable {
+      [sptr = future.allocate_queue(ctx.size())](
+          const std::vector<Message>& msgs) mutable {
         for (auto&& msg : msgs) {
           sptr->push(msg);
         }

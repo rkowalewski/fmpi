@@ -1,6 +1,8 @@
 #ifndef FMPI_CONCURRENCY_FUTURE_HPP
 #define FMPI_CONCURRENCY_FUTURE_HPP
 
+#include <fmpi/concurrency/MPMCQueue.h>
+
 #include <atomic>
 #include <fmpi/Message.hpp>
 #include <fmpi/concurrency/BufferedChannel.hpp>
@@ -62,7 +64,7 @@ class collective_future {
   friend collective_future make_mpi_future(
       std::unique_ptr<MPI_Request> /*h*/);
 
-  using simple_message_queue = buffered_channel<Message>;
+  using simple_message_queue = rigtorp::MPMCQueue<Message>;
 
   std::shared_ptr<detail::future_shared_state> sptr_;
   // Partial arrivals
@@ -80,6 +82,7 @@ class collective_future {
 
   void swap(collective_future& rhs);
 
+  const std::shared_ptr<simple_message_queue>& allocate_queue(std::size_t n);
   const std::shared_ptr<simple_message_queue>& arrival_queue();
 
   [[nodiscard]] bool valid() const noexcept;

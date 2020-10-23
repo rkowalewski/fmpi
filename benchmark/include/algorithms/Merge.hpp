@@ -176,7 +176,8 @@ vector_times merge_pieces(
     steady_timer        t_receive{d_receive};
     scoped_timer_switch switcher{t_idle, t_receive};
     while (n_exchanges--) {
-      auto msg = queue->value_pop();
+      fmpi::Message msg{};
+      queue->pop(msg);
       FMPI_ASSERT(msg.recvcount() == blocksize);
       auto* first = static_cast<value_type*>(msg.recvbuffer());
       auto* last  = std::next(first, blocksize);
