@@ -26,7 +26,7 @@ class SmallRequestPool {
 }  // namespace detail
 #endif
 
-static constexpr std::uint16_t initial_req_cap = 1000;
+// static constexpr std::uint16_t initial_req_cap = 1000;
 // static detail::SmallRequestPool s_request_pool{initial_req_cap};
 
 static ThreadAllocator<detail::future_shared_state> s_future_alloc;
@@ -123,9 +123,12 @@ const MPI_Request& collective_future::native_handle() const noexcept {
 }
 
 namespace detail {
+future_shared_state::future_shared_state(state s)
+  : state_(s) {
+}
 
 void future_shared_state::wait() {
-  if (mpi_handle_ != nullptr and not ready_) {
+  if (is_deferred() and not ready_) {
     auto ret = MPI_Wait(&mpi_handle_, MPI_STATUS_IGNORE);
     value_.emplace(ret);
     ready_ = true;
@@ -172,8 +175,8 @@ collective_future make_ready_future(mpi::return_code u) {
 
 collective_future make_mpi_future() {
   // auto h     = s_request_pool.allocate();
-  auto state =
-      std::allocate_shared<detail::future_shared_state>(s_future_alloc);
+  auto state = std::allocate_shared<detail::future_shared_state>(
+      s_future_alloc, detail::future_shared_state::state::deferred);
   return collective_future{std::move(state)};
 }
 }  // namespace fmpi

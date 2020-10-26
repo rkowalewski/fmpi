@@ -10,6 +10,7 @@
 #include <fmpi/memory/ContiguousPoolAllocator.hpp>
 #include <memory>
 #include <optional>
+#include <rtlx/Enum.hpp>
 
 namespace fmpi {
 
@@ -35,21 +36,32 @@ class RequestDelete {
 #endif
 
 class future_shared_state {
+ public:
+  enum class state
+  {
+    deferred = 0x1,
+    async    = 0x2,
+  };
+
+ private:
   /// Status Information
   std::mutex                      mtx_;
   std::condition_variable         cv_;
   std::atomic_bool                ready_{false};
   std::optional<mpi::return_code> value_;
-  MPI_Request                     mpi_handle_{};
+
+  state       state_ = state::async;
+  MPI_Request mpi_handle_{};
 
  public:
   future_shared_state() = default;
+  explicit future_shared_state(state s);
   void               wait();
   void               set_value(mpi::return_code result);
   [[nodiscard]] bool is_ready() const noexcept;
   mpi::return_code   get_value_assume_ready() noexcept;
   [[nodiscard]] bool is_deferred() const noexcept {
-    return mpi_handle_ != nullptr;
+    return state_ == state::deferred;
   }
 
   MPI_Request& native_handle() noexcept {
