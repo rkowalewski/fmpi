@@ -1,7 +1,15 @@
 #include <fmpi/concurrency/Future.hpp>
 #include <fmpi/detail/Assert.hpp>
+#include <fmpi/memory/HeapAllocator.hpp>
 
 namespace fmpi {
+
+namespace internal {
+
+// static constexpr std::uint16_t                    initial_cap = 1000;
+// static HeapAllocator<detail::future_shared_state>
+// future_alloc{initial_cap};
+}  // namespace internal
 
 collective_promise::collective_promise() {
   sptr_ = std::make_shared<detail::future_shared_state>();
@@ -84,17 +92,6 @@ mpi::return_code collective_future::get() {
   return sptr->get_value_assume_ready();
 }
 
-collective_future make_ready_future(mpi::return_code u) {
-  auto state = std::make_shared<detail::future_shared_state>();
-  state->set_value(u);
-  return collective_future{state};
-}
-
-collective_future make_mpi_future(mpi::Context::request_handle h) {
-  auto state = std::make_shared<detail::future_shared_state>(std::move(h));
-  return collective_future{state};
-}
-
 namespace detail {
 
 future_shared_state::future_shared_state(
@@ -141,4 +138,15 @@ mpi::return_code future_shared_state::get_value_assume_ready() noexcept {
   return *value_;
 }
 }  // namespace detail
+
+collective_future make_ready_future(mpi::return_code u) {
+  auto state = std::make_shared<detail::future_shared_state>();
+  state->set_value(u);
+  return collective_future{std::move(state)};
+}
+
+collective_future make_mpi_future(mpi::Context::request_handle h) {
+  auto state = std::make_shared<detail::future_shared_state>(std::move(h));
+  return collective_future{std::move(state)};
+}
 }  // namespace fmpi
