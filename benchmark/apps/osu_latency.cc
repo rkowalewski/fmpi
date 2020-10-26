@@ -93,6 +93,19 @@ int main(int argc, char* argv[]) {
   auto rsend = fmpi::make_mpi_future();
   auto rrecv = fmpi::make_mpi_future();
 
+  auto promise        = fmpi::collective_promise{};
+  auto future         = promise.get_future();
+  auto schedule_state = std::make_unique<fmpi::ScheduleCtx>(
+      std::array<std::size_t, 2>{
+          1,
+          1,
+      },
+      std::move(promise));
+
+  // submit into dispatcher
+  auto&      dispatcher = fmpi::static_dispatcher_pool();
+  auto const hdl        = dispatcher.submit(std::move(schedule_state));
+
   /* Latency test */
   for (auto size = params.smin; size <= params.smax;
        size      = (size ? size * 2 : 1)) {
@@ -106,32 +119,18 @@ int main(int argc, char* argv[]) {
 
     MPI_Barrier(world.mpiComm());
 
-    auto& dispatcher = fmpi::static_dispatcher_pool();
-
     if (myid == 0) {
       for (uint32_t i = 0; i < params.iterations + params.warmups; i++) {
         if (i == params.warmups) {
           t_start = MPI_Wtime();
         }
 
-        auto promise        = fmpi::collective_promise{};
-        auto future         = promise.get_future();
-        auto schedule_state = std::make_unique<fmpi::ScheduleCtx>(
-            std::array<std::size_t, 2>{
-                1,
-                1,
-            },
-            std::move(promise));
-
-        // submit into dispatcher
-        auto const hdl = dispatcher.submit(std::move(schedule_state));
-
 #if 0
         MPI_Send(s_buf, size, MPI_CHAR, 1, 1, world.mpiComm());
         MPI_Recv(r_buf, size, MPI_CHAR, 1, 1, world.mpiComm(), &reqstat);
 #else
-        //FMPI_ASSERT(rsend.native_handle() == MPI_REQUEST_NULL);
-        //FMPI_ASSERT(rrecv.native_handle() == MPI_REQUEST_NULL);
+        // FMPI_ASSERT(rsend.native_handle() == MPI_REQUEST_NULL);
+        // FMPI_ASSERT(rrecv.native_handle() == MPI_REQUEST_NULL);
         // isend(s_buf, size, MPI_CHAR, 1, 1, world, rsend.native_handle());
         // irecv(r_buf, size, MPI_CHAR, 1, 1, world, rrecv.native_handle());
 
@@ -141,9 +140,9 @@ int main(int argc, char* argv[]) {
         auto recv = fmpi::make_receive(
             r_buf, size, MPI_CHAR, mpi::Rank{1}, 1, world.mpiComm());
         dispatcher.schedule(hdl, fmpi::message_type::ISEND, send);
-        dispatcher.schedule(hdl, fmpi::message_type::BARRIER);
         dispatcher.schedule(hdl, fmpi::message_type::IRECV, recv);
-        dispatcher.commit(hdl);
+        dispatcher.schedule(hdl, fmpi::message_type::BARRIER);
+        // dispatcher.commit(hdl);
         //  rsend.wait();
         //  rrecv.wait();
         // MPI_Wait(fut_send.get(), &reqstat);
@@ -172,6 +171,7 @@ int main(int argc, char* argv[]) {
       }
     }
 
+
     if (myid == 0) {
       double latency = (t_end - t_start) * 1e6 / (2.0 * params.iterations);
 
@@ -186,6 +186,8 @@ int main(int argc, char* argv[]) {
       fflush(stdout);
     }
   }
+
+    dispatcher.commit(hdl);
 }
 
 namespace detail {
