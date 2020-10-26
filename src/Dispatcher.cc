@@ -32,7 +32,7 @@ ScheduleCtx::ScheduleCtx(
   , promise_(std::move(pr)) {
   // generate the slots
   for (auto&& i : range(detail::n_types)) {
-    FMPI_DBG(nslots_[i]);
+    //FMPI_DBG(nslots_[i]);
     slots_[i] = tlx::RingBuffer<int>{nslots_[i]};
   }
 

@@ -48,7 +48,7 @@ class future_shared_state {
   std::mutex                      mtx_;
   std::condition_variable         cv_;
   std::atomic_bool                ready_{false};
-  std::optional<mpi::return_code> value_;
+  std::optional<mpi::return_code> value_{};
 
   state       state_ = state::async;
   MPI_Request mpi_handle_{MPI_REQUEST_NULL};

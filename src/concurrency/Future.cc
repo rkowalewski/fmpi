@@ -5,6 +5,7 @@
 #include <fmpi/memory/HeapAllocator.hpp>
 #include <fmpi/memory/ThreadAllocator.hpp>
 
+
 namespace fmpi {
 
 #if 0
@@ -178,10 +179,8 @@ collective_future make_ready_future(mpi::return_code u) {
 }
 
 collective_future make_mpi_future() {
-  auto thread_safe_alloc =
-      fmpi::ThreadAllocator<detail::future_shared_state>{};
-  auto sp = std::allocate_shared<detail::future_shared_state>(
-      thread_safe_alloc, detail::future_shared_state::state::deferred);
+  auto sp = std::make_shared<detail::future_shared_state>(
+      detail::future_shared_state::state::deferred);
 
   return collective_future{std::move(sp)};
 }
