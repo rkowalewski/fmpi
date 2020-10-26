@@ -1,15 +1,33 @@
 #include <fmpi/concurrency/Future.hpp>
 #include <fmpi/detail/Assert.hpp>
 #include <fmpi/memory/HeapAllocator.hpp>
+#include <fmpi/memory/ThreadAllocator.hpp>
 
 namespace fmpi {
 
-namespace internal {
+namespace detail {
 
-// static constexpr std::uint16_t                    initial_cap = 1000;
-// static HeapAllocator<detail::future_shared_state>
-// future_alloc{initial_cap};
-}  // namespace internal
+class SmallRequestPool {
+ public:
+  SmallRequestPool(std::size_t n)
+    : alloc_(static_cast<uint16_t>(n)) {
+  }
+
+  std::unique_ptr<MPI_Request, RequestDelete> allocate() {
+    return std::unique_ptr<MPI_Request, RequestDelete>(
+        alloc_.allocate(1), RequestDelete{alloc_});
+  }
+
+ private:
+  fmpi::HeapAllocator<MPI_Request> alloc_;
+};
+
+}  // namespace detail
+
+static constexpr std::uint16_t  initial_req_cap = 1000;
+static detail::SmallRequestPool s_request_pool{initial_req_cap};
+
+static ThreadAllocator<detail::future_shared_state> s_future_alloc;
 
 collective_promise::collective_promise() {
   sptr_ = std::make_shared<detail::future_shared_state>();
@@ -92,10 +110,14 @@ mpi::return_code collective_future::get() {
   return sptr->get_value_assume_ready();
 }
 
+MPI_Request* collective_future::native_handle() noexcept {
+  FMPI_ASSERT(valid());
+  return sptr_->native_handle();
+}
+
 namespace detail {
 
-future_shared_state::future_shared_state(
-    mpi::Context::request_handle h) noexcept
+future_shared_state::future_shared_state(mpi_request_handle h) noexcept
   : mpi_handle_(std::move(h)) {
 }
 
@@ -145,8 +167,10 @@ collective_future make_ready_future(mpi::return_code u) {
   return collective_future{std::move(state)};
 }
 
-collective_future make_mpi_future(mpi::Context::request_handle h) {
-  auto state = std::make_shared<detail::future_shared_state>(std::move(h));
+collective_future make_mpi_future() {
+  auto h     = s_request_pool.allocate();
+  auto state = std::allocate_shared<detail::future_shared_state>(
+      s_future_alloc, std::move(h));
   return collective_future{std::move(state)};
 }
 }  // namespace fmpi

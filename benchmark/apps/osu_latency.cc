@@ -34,10 +34,17 @@ auto irecv(
     int                 source,
     int                 tag,
     mpi::Context const& comm) {
-  auto request = comm.newRequest();
-  MPI_Irecv(buf, count, datatype, source, tag, comm.mpiComm(), request.get());
+  auto future = fmpi::make_mpi_future();
+  MPI_Irecv(
+      buf,
+      count,
+      datatype,
+      source,
+      tag,
+      comm.mpiComm(),
+      future.native_handle());
   // return fmpi::make_mpi_future(std::move(request));
-  return request;
+  return future;
 }
 
 auto isend(
@@ -47,10 +54,17 @@ auto isend(
     int                 dest,
     int                 tag,
     mpi::Context const& comm) {
-  auto request = comm.newRequest();
-  MPI_Isend(buf, count, datatype, dest, tag, comm.mpiComm(), request.get());
+  auto future = fmpi::make_mpi_future();
+  MPI_Isend(
+      buf,
+      count,
+      datatype,
+      dest,
+      tag,
+      comm.mpiComm(),
+      future.native_handle());
   // return fmpi::make_mpi_future(std::move(request));
-  return request;
+  return future;
 }
 
 Params params{};
@@ -112,10 +126,10 @@ int main(int argc, char* argv[]) {
 #else
         auto fut_send = isend(s_buf, size, MPI_CHAR, 1, 1, world);
         auto fut_recv = irecv(r_buf, size, MPI_CHAR, 1, 1, world);
-        // fut_send.wait();
-        // fut_recv.wait();
-        MPI_Wait(fut_send.get(), &reqstat);
-        MPI_Wait(fut_recv.get(), &reqstat);
+        fut_send.wait();
+        fut_recv.wait();
+        // MPI_Wait(fut_send.get(), &reqstat);
+        // MPI_Wait(fut_recv.get(), &reqstat);
 #endif
       }
 
@@ -130,10 +144,10 @@ int main(int argc, char* argv[]) {
 #else
         auto fut_recv = irecv(r_buf, size, MPI_CHAR, 0, 1, world);
         auto fut_send = isend(s_buf, size, MPI_CHAR, 0, 1, world);
-        //fut_recv.wait();
-        //fut_send.wait();
-        MPI_Wait(fut_recv.get(), &reqstat);
-        MPI_Wait(fut_send.get(), &reqstat);
+        fut_recv.wait();
+        fut_send.wait();
+        // MPI_Wait(fut_recv.get(), &reqstat);
+        // MPI_Wait(fut_send.get(), &reqstat);
 #endif
       }
     }

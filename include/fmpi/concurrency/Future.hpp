@@ -7,7 +7,7 @@
 #include <fmpi/Message.hpp>
 #include <fmpi/concurrency/BufferedChannel.hpp>
 #include <fmpi/concurrency/SimpleConcurrentDeque.hpp>
-#include <fmpi/mpi/Environment.hpp>
+#include <fmpi/memory/ContiguousPoolAllocator.hpp>
 #include <memory>
 #include <optional>
 
@@ -15,23 +15,44 @@ namespace fmpi {
 
 namespace detail {
 
+class RequestDelete {
+ public:
+  RequestDelete() = default;
+  RequestDelete(fmpi::ContiguousPoolAllocator<MPI_Request> const& alloc)
+    : alloc_(alloc) {
+  }
+
+  void operator()(MPI_Request* req) {
+    alloc_.deallocate(req, 1);
+  }
+
+ private:
+  fmpi::ContiguousPoolAllocator<MPI_Request> alloc_{};
+};
+
+using mpi_request_handle = std::unique_ptr<MPI_Request, RequestDelete>;
+
 class future_shared_state {
   /// Status Information
   std::mutex                      mtx_;
   std::condition_variable         cv_;
   std::atomic_bool                ready_{false};
   std::optional<mpi::return_code> value_;
-  mpi::Context::request_handle    mpi_handle_{};
+  mpi_request_handle              mpi_handle_{};
 
  public:
   future_shared_state() = default;
-  explicit future_shared_state(mpi::Context::request_handle /*h*/) noexcept;
+  explicit future_shared_state(mpi_request_handle /*h*/) noexcept;
   void               wait();
   void               set_value(mpi::return_code result);
   [[nodiscard]] bool is_ready() const noexcept;
   mpi::return_code   get_value_assume_ready() noexcept;
   [[nodiscard]] bool is_deferred() const noexcept {
     return mpi_handle_ != nullptr;
+  }
+
+  MPI_Request* native_handle() noexcept {
+    return mpi_handle_.get();
   }
 };
 
@@ -62,8 +83,7 @@ class collective_promise {
 class collective_future {
   friend class collective_promise;
   friend collective_future make_ready_future(mpi::return_code u);
-  friend collective_future make_mpi_future(
-      mpi::Context::request_handle /*h*/);
+  friend collective_future make_mpi_future();
 
   using simple_message_queue = rigtorp::MPMCQueue<Message>;
 
@@ -91,10 +111,11 @@ class collective_future {
   [[nodiscard]] bool is_deferred() const noexcept;
   void               wait();
   mpi::return_code   get();
+  MPI_Request*       native_handle() noexcept;
 };
 
 collective_future make_ready_future(mpi::return_code u);
-collective_future make_mpi_future(mpi::Context::request_handle /*h*/);
+collective_future make_mpi_future();
 
 }  // namespace fmpi
 #endif

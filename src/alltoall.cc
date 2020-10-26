@@ -74,7 +74,7 @@ collective_future Alltoall::execute() {
     auto const other =
         static_cast<mpi::Rank>((ctx.size()) == 1 ? me : 1 - me);
 
-    auto request = ctx.newRequest();
+    auto future = make_mpi_future();
 
     auto ret = MPI_Irecv(
         recv_offset(other),
@@ -83,7 +83,7 @@ collective_future Alltoall::execute() {
         other,
         sendrecvtag_,
         ctx.mpiComm(),
-        request.get());
+        future.native_handle());
 
     FMPI_ASSERT(ret == MPI_SUCCESS);
 
@@ -97,7 +97,7 @@ collective_future Alltoall::execute() {
 
     local_copy();
 
-    return make_mpi_future(std::move(request));
+    return future;
   }
 
   // intermediate buffer for two pipelines
