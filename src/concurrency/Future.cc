@@ -1,3 +1,4 @@
+#include <fmpi/Debug.hpp>
 #include <fmpi/concurrency/Future.hpp>
 #include <fmpi/detail/Assert.hpp>
 #include <fmpi/memory/HeapAllocator.hpp>
@@ -26,10 +27,12 @@ class SmallRequestPool {
 }  // namespace detail
 #endif
 
-// static constexpr std::uint16_t initial_req_cap = 1000;
 // static detail::SmallRequestPool s_request_pool{initial_req_cap};
 
-static ThreadAllocator<detail::future_shared_state> s_future_alloc;
+// static ThreadAllocator<detail::future_shared_state> s_future_alloc;
+static constexpr std::uint16_t initial_req_cap = 1000;
+static HeapAllocator<std::shared_ptr<detail::future_shared_state>>
+    s_future_alloc{initial_req_cap};
 
 collective_promise::collective_promise() {
   sptr_ = std::make_shared<detail::future_shared_state>();
@@ -175,8 +178,10 @@ collective_future make_ready_future(mpi::return_code u) {
 
 collective_future make_mpi_future() {
   // auto h     = s_request_pool.allocate();
-  auto state = std::allocate_shared<detail::future_shared_state>(
-      s_future_alloc, detail::future_shared_state::state::deferred);
-  return collective_future{std::move(state)};
+  // ps_future_alloc
+  auto sp = std::make_shared<detail::future_shared_state>(
+      detail::future_shared_state::state::deferred);
+
+  return collective_future{std::move(sp)};
 }
 }  // namespace fmpi
