@@ -108,8 +108,8 @@ int main(int argc, char* argv[]) {
         MPI_Recv(r_buf, size, MPI_CHAR, 1, 1, world.mpiComm(), &reqstat);
 #else
         auto fut_send = isend(s_buf, size, MPI_CHAR, 1, 1, world.mpiComm());
-        fut_send.wait();
         auto fut_recv = irecv(r_buf, size, MPI_CHAR, 1, 1, world.mpiComm());
+        fut_send.wait();
         fut_recv.wait();
 #endif
       }
@@ -124,8 +124,8 @@ int main(int argc, char* argv[]) {
         MPI_Send(s_buf, size, MPI_CHAR, 0, 1, world.mpiComm());
 #else
         auto fut_recv = irecv(r_buf, size, MPI_CHAR, 0, 1, world.mpiComm());
-        fut_recv.wait();
         auto fut_send = isend(s_buf, size, MPI_CHAR, 0, 1, world.mpiComm());
+        fut_recv.wait();
         fut_send.wait();
 #endif
       }
