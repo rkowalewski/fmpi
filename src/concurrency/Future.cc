@@ -1,3 +1,4 @@
+#include <boost/pool/pool_alloc.hpp>
 #include <fmpi/Debug.hpp>
 #include <fmpi/concurrency/Future.hpp>
 #include <fmpi/detail/Assert.hpp>
@@ -134,7 +135,7 @@ void future_shared_state::wait() {
   if (is_deferred() and not ready_) {
     auto ret = MPI_Wait(&mpi_handle_, MPI_STATUS_IGNORE);
     value_.emplace(ret);
-    //ready_ = true;
+    // ready_ = true;
   } else {
     std::unique_lock<std::mutex> lk(mtx_);
     while (not ready_) {
@@ -177,10 +178,10 @@ collective_future make_ready_future(mpi::return_code u) {
 }
 
 collective_future make_mpi_future() {
-  // auto h     = s_request_pool.allocate();
-  // ps_future_alloc
-  auto sp = std::make_shared<detail::future_shared_state>(
-      detail::future_shared_state::state::deferred);
+  auto thread_safe_alloc =
+      fmpi::ThreadAllocator<detail::future_shared_state>{};
+  auto sp = std::allocate_shared<detail::future_shared_state>(
+      thread_safe_alloc, detail::future_shared_state::state::deferred);
 
   return collective_future{std::move(sp)};
 }
