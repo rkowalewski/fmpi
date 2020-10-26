@@ -4,9 +4,45 @@
 #include <mpi.h>
 
 #include <atomic>
+#include <fmpi/memory/HeapAllocator.hpp>
 #include <fmpi/mpi/Rank.hpp>
 
 namespace mpi {
+
+namespace detail {
+class SmallRequestPool {
+  class HeapAllocatorDelete {
+   public:
+    HeapAllocatorDelete() = default;
+    HeapAllocatorDelete(
+        fmpi::ContiguousPoolAllocator<MPI_Request> const& alloc)
+      : alloc_(alloc) {
+    }
+
+    void operator()(MPI_Request* req) {
+      alloc_.deallocate(req, 1);
+    }
+
+   private:
+    fmpi::ContiguousPoolAllocator<MPI_Request> alloc_{};
+  };
+
+ public:
+  using pointer = std::unique_ptr<MPI_Request, HeapAllocatorDelete>;
+
+  SmallRequestPool(std::size_t n)
+    : alloc_(static_cast<uint16_t>(n)) {
+  }
+
+  pointer allocate() {
+    return std::unique_ptr<MPI_Request, HeapAllocatorDelete>(
+        alloc_.allocate(1), HeapAllocatorDelete{alloc_});
+  }
+
+ private:
+  fmpi::HeapAllocator<MPI_Request> alloc_;
+};
+}  // namespace detail
 
 class Context;
 Context splitSharedComm(Context const& baseComm);
@@ -17,8 +53,13 @@ class Context {
   Context(MPI_Comm comm, bool free_self);
   void free();
 
+  static constexpr const uint16_t req_pool_cap = 100;
+
+  using request_pool = detail::SmallRequestPool;
+
  public:
-  using size_type = std::uint32_t;
+  using size_type      = std::uint32_t;
+  using request_handle = request_pool::pointer;
 
   explicit Context(MPI_Comm comm);
 
@@ -52,6 +93,10 @@ class Context {
 
   int32_t collectiveTag() const;
 
+  request_handle newRequest() const {
+    return m_request_pool.allocate();
+  }
+
   static Context const& world();
 
  private:
@@ -60,6 +105,7 @@ class Context {
   size_type                   m_size{};
   Rank                        m_rank{};
   mutable std::atomic_int32_t m_collective_tag{};
+  mutable request_pool        m_request_pool{req_pool_cap};
   bool                        m_free_self{false};
 };
 

@@ -90,7 +90,7 @@ collective_future make_ready_future(mpi::return_code u) {
   return collective_future{state};
 }
 
-collective_future make_mpi_future(std::unique_ptr<MPI_Request> h) {
+collective_future make_mpi_future(mpi::Context::request_handle h) {
   auto state = std::make_shared<detail::future_shared_state>(std::move(h));
   return collective_future{state};
 }
@@ -98,7 +98,7 @@ collective_future make_mpi_future(std::unique_ptr<MPI_Request> h) {
 namespace detail {
 
 future_shared_state::future_shared_state(
-    std::unique_ptr<MPI_Request> h) noexcept
+    mpi::Context::request_handle h) noexcept
   : mpi_handle_(std::move(h)) {
 }
 

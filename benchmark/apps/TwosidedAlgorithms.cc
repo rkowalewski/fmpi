@@ -349,7 +349,7 @@ class Alltoall_Runner<void, WinT, NReqs> {
 
   [[nodiscard]] fmpi::collective_future run(
       benchmark::CollectiveArgs coll_args) const {
-    auto request = std::make_unique<MPI_Request>();
+    auto request = coll_args.comm.newRequest();
 
     FMPI_CHECK_MPI(MPI_Ialltoall(
         coll_args.sendbuf,

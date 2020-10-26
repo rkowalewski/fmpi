@@ -7,6 +7,7 @@
 #include <fmpi/Message.hpp>
 #include <fmpi/concurrency/BufferedChannel.hpp>
 #include <fmpi/concurrency/SimpleConcurrentDeque.hpp>
+#include <fmpi/mpi/Environment.hpp>
 #include <memory>
 #include <optional>
 
@@ -20,11 +21,11 @@ class future_shared_state {
   std::condition_variable         cv_;
   std::atomic_bool                ready_{false};
   std::optional<mpi::return_code> value_;
-  std::unique_ptr<MPI_Request>    mpi_handle_{nullptr};
+  mpi::Context::request_handle    mpi_handle_{};
 
  public:
   future_shared_state() = default;
-  explicit future_shared_state(std::unique_ptr<MPI_Request> /*h*/) noexcept;
+  explicit future_shared_state(mpi::Context::request_handle /*h*/) noexcept;
   void               wait();
   void               set_value(mpi::return_code result);
   [[nodiscard]] bool is_ready() const noexcept;
@@ -62,7 +63,7 @@ class collective_future {
   friend class collective_promise;
   friend collective_future make_ready_future(mpi::return_code u);
   friend collective_future make_mpi_future(
-      std::unique_ptr<MPI_Request> /*h*/);
+      mpi::Context::request_handle /*h*/);
 
   using simple_message_queue = rigtorp::MPMCQueue<Message>;
 
@@ -93,7 +94,7 @@ class collective_future {
 };
 
 collective_future make_ready_future(mpi::return_code u);
-collective_future make_mpi_future(std::unique_ptr<MPI_Request> /*h*/);
+collective_future make_mpi_future(mpi::Context::request_handle /*h*/);
 
 }  // namespace fmpi
 #endif

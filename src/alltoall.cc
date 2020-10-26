@@ -74,7 +74,7 @@ collective_future Alltoall::execute() {
     auto const other =
         static_cast<mpi::Rank>((ctx.size()) == 1 ? me : 1 - me);
 
-    auto request = std::make_unique<MPI_Request>();
+    auto request = ctx.newRequest();
 
     auto ret = MPI_Irecv(
         recv_offset(other),
