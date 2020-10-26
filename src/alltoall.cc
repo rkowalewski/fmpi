@@ -83,7 +83,7 @@ collective_future Alltoall::execute() {
         other,
         sendrecvtag_,
         ctx.mpiComm(),
-        future.native_handle());
+        &future.native_handle());
 
     FMPI_ASSERT(ret == MPI_SUCCESS);
 

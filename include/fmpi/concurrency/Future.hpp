@@ -15,6 +15,7 @@ namespace fmpi {
 
 namespace detail {
 
+#if 0
 class RequestDelete {
  public:
   RequestDelete() = default;
@@ -30,7 +31,8 @@ class RequestDelete {
   fmpi::ContiguousPoolAllocator<MPI_Request> alloc_{};
 };
 
-using mpi_request_handle = std::unique_ptr<MPI_Request, RequestDelete>;
+//using mpi_request_handle = std::unique_ptr<MPI_Request, RequestDelete>;
+#endif
 
 class future_shared_state {
   /// Status Information
@@ -38,11 +40,10 @@ class future_shared_state {
   std::condition_variable         cv_;
   std::atomic_bool                ready_{false};
   std::optional<mpi::return_code> value_;
-  mpi_request_handle              mpi_handle_{};
+  MPI_Request                     mpi_handle_{};
 
  public:
   future_shared_state() = default;
-  explicit future_shared_state(mpi_request_handle /*h*/) noexcept;
   void               wait();
   void               set_value(mpi::return_code result);
   [[nodiscard]] bool is_ready() const noexcept;
@@ -51,8 +52,12 @@ class future_shared_state {
     return mpi_handle_ != nullptr;
   }
 
-  MPI_Request* native_handle() noexcept {
-    return mpi_handle_.get();
+  MPI_Request& native_handle() noexcept {
+    return mpi_handle_;
+  }
+
+  MPI_Request const& native_handle() const noexcept {
+    return mpi_handle_;
   }
 };
 
@@ -111,7 +116,8 @@ class collective_future {
   [[nodiscard]] bool is_deferred() const noexcept;
   void               wait();
   mpi::return_code   get();
-  MPI_Request*       native_handle() noexcept;
+  MPI_Request&       native_handle() noexcept;
+  const MPI_Request& native_handle() const noexcept;
 };
 
 collective_future make_ready_future(mpi::return_code u);

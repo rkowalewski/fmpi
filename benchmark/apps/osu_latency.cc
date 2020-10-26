@@ -42,7 +42,7 @@ auto irecv(
       source,
       tag,
       comm.mpiComm(),
-      future.native_handle());
+      &future.native_handle());
   // return fmpi::make_mpi_future(std::move(request));
   return future;
 }
@@ -62,7 +62,7 @@ auto isend(
       dest,
       tag,
       comm.mpiComm(),
-      future.native_handle());
+      &future.native_handle());
   // return fmpi::make_mpi_future(std::move(request));
   return future;
 }
