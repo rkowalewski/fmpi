@@ -134,7 +134,7 @@ void future_shared_state::wait() {
   if (is_deferred() and not ready_) {
     auto ret = MPI_Wait(&mpi_handle_, MPI_STATUS_IGNORE);
     value_.emplace(ret);
-    ready_ = true;
+    //ready_ = true;
   } else {
     std::unique_lock<std::mutex> lk(mtx_);
     while (not ready_) {

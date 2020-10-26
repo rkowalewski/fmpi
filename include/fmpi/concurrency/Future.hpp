@@ -51,7 +51,7 @@ class future_shared_state {
   std::optional<mpi::return_code> value_;
 
   state       state_ = state::async;
-  MPI_Request mpi_handle_{};
+  MPI_Request mpi_handle_{MPI_REQUEST_NULL};
 
  public:
   future_shared_state() = default;

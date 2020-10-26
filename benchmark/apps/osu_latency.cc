@@ -33,18 +33,12 @@ auto irecv(
     MPI_Datatype        datatype,
     int                 source,
     int                 tag,
-    mpi::Context const& comm) {
-  auto future = fmpi::make_mpi_future();
-  MPI_Irecv(
-      buf,
-      count,
-      datatype,
-      source,
-      tag,
-      comm.mpiComm(),
-      &future.native_handle());
+    mpi::Context const& comm,
+    MPI_Request&        request) {
+  return MPI_Irecv(
+      buf, count, datatype, source, tag, comm.mpiComm(), &request);
   // return fmpi::make_mpi_future(std::move(request));
-  return future;
+  // return future;
 }
 
 auto isend(
@@ -53,18 +47,12 @@ auto isend(
     MPI_Datatype        datatype,
     int                 dest,
     int                 tag,
-    mpi::Context const& comm) {
-  auto future = fmpi::make_mpi_future();
-  MPI_Isend(
-      buf,
-      count,
-      datatype,
-      dest,
-      tag,
-      comm.mpiComm(),
-      &future.native_handle());
+    mpi::Context const& comm,
+    MPI_Request&        request) {
+  // auto future = fmpi::make_mpi_future();
+  return MPI_Isend(buf, count, datatype, dest, tag, comm.mpiComm(), &request);
   // return fmpi::make_mpi_future(std::move(request));
-  return future;
+  // return future;
 }
 
 Params params{};
@@ -101,6 +89,9 @@ int main(int argc, char* argv[]) {
     fprintf(stdout, "%-*s%*s\n", 10, "# Size", FIELD_WIDTH, "Latency (us)");
   }
 
+  auto rsend = fmpi::make_mpi_future();
+  auto rrecv = fmpi::make_mpi_future();
+
   /* Latency test */
   for (auto size = params.smin; size <= params.smax;
        size      = (size ? size * 2 : 1)) {
@@ -124,10 +115,12 @@ int main(int argc, char* argv[]) {
         MPI_Send(s_buf, size, MPI_CHAR, 1, 1, world.mpiComm());
         MPI_Recv(r_buf, size, MPI_CHAR, 1, 1, world.mpiComm(), &reqstat);
 #else
-        auto fut_send = isend(s_buf, size, MPI_CHAR, 1, 1, world);
-        auto fut_recv = irecv(r_buf, size, MPI_CHAR, 1, 1, world);
-        fut_send.wait();
-        fut_recv.wait();
+        FMPI_ASSERT(rsend.native_handle() == MPI_REQUEST_NULL);
+        FMPI_ASSERT(rrecv.native_handle() == MPI_REQUEST_NULL);
+        isend(s_buf, size, MPI_CHAR, 1, 1, world, rsend.native_handle());
+        irecv(r_buf, size, MPI_CHAR, 1, 1, world, rrecv.native_handle());
+        rsend.wait();
+        rrecv.wait();
         // MPI_Wait(fut_send.get(), &reqstat);
         // MPI_Wait(fut_recv.get(), &reqstat);
 #endif
@@ -142,10 +135,12 @@ int main(int argc, char* argv[]) {
         MPI_Recv(r_buf, size, MPI_CHAR, 0, 1, world.mpiComm(), &reqstat);
         MPI_Send(s_buf, size, MPI_CHAR, 0, 1, world.mpiComm());
 #else
-        auto fut_recv = irecv(r_buf, size, MPI_CHAR, 0, 1, world);
-        auto fut_send = isend(s_buf, size, MPI_CHAR, 0, 1, world);
-        fut_recv.wait();
-        fut_send.wait();
+        FMPI_ASSERT(rsend.native_handle() == MPI_REQUEST_NULL);
+        FMPI_ASSERT(rrecv.native_handle() == MPI_REQUEST_NULL);
+        irecv(r_buf, size, MPI_CHAR, 0, 1, world, rrecv.native_handle());
+        isend(s_buf, size, MPI_CHAR, 0, 1, world, rsend.native_handle());
+        rrecv.wait();
+        rsend.wait();
         // MPI_Wait(fut_recv.get(), &reqstat);
         // MPI_Wait(fut_send.get(), &reqstat);
 #endif
