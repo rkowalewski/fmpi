@@ -34,11 +34,11 @@ class ThreadAllocator {
   ThreadAllocator() noexcept = default;
 
   template <typename U>
-  ThreadAllocator(const ThreadAllocator<U>&) noexcept {
+  explicit ThreadAllocator(const ThreadAllocator<U>& /*unused*/) noexcept {
   }
 
   template <typename U>
-  ThreadAllocator(const ThreadAllocator<U>&&) noexcept {
+  explicit ThreadAllocator(const ThreadAllocator<U>&& /*unused*/) noexcept {
   }
 
   value_type* allocate(std::size_t n) {

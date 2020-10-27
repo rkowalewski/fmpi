@@ -1,3 +1,7 @@
+#ifndef FMPI_CONCURRENCY_MPMCQUEUE_H
+
+#define FMPI_CONCURRENCY_MPMCQUEUE_H
+
 /*
 Copyright (c) 2020 Erik Rigtorp <erik@rigtorp.se>
 
@@ -18,7 +22,7 @@ AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
 LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
- */
+*/
 
 #pragma once
 
@@ -84,7 +88,7 @@ template <typename T> struct AlignedAllocator {
 
 template <typename T> struct Slot {
   ~Slot() noexcept {
-    if (turn & 1) {
+    if ((turn & 1) != 0u) {
       destroy();
     }
   }
@@ -105,7 +109,7 @@ template <typename T> struct Slot {
 
   // Align to avoid false sharing between adjacent slots
   alignas(hardwareInterferenceSize) std::atomic<size_t> turn = {0};
-  typename std::aligned_storage<sizeof(T), alignof(T)>::type storage;
+  typename std::aligned_storage<sizeof(T), alignof(T)>::type storage{};
 };
 
 template <typename T, typename Allocator = AlignedAllocator<Slot<T>>>
@@ -168,8 +172,9 @@ public:
                   "T must be nothrow constructible with Args&&...");
     auto const head = head_.fetch_add(1);
     auto &slot = slots_[idx(head)];
-    while (turn(head) * 2 != slot.turn.load(std::memory_order_acquire))
+    while (turn(head) * 2 != slot.turn.load(std::memory_order_acquire)) {
       ;
+    }
     slot.construct(std::forward<Args>(args)...);
     slot.turn.store(turn(head) * 2 + 1, std::memory_order_release);
   }
@@ -225,8 +230,9 @@ public:
   void pop(T &v) noexcept {
     auto const tail = tail_.fetch_add(1);
     auto &slot = slots_[idx(tail)];
-    while (turn(tail) * 2 + 1 != slot.turn.load(std::memory_order_acquire))
+    while (turn(tail) * 2 + 1 != slot.turn.load(std::memory_order_acquire)) {
       ;
+    }
     v = slot.move();
     slot.destroy();
     slot.turn.store(turn(tail) * 2 + 2, std::memory_order_release);
@@ -254,11 +260,14 @@ public:
   }
 
 private:
-  constexpr size_t idx(size_t i) const noexcept { return i % capacity_; }
+ [[nodiscard]] constexpr size_t idx(size_t i) const noexcept {
+   return i % capacity_;
+ }
 
-  constexpr size_t turn(size_t i) const noexcept { return i / capacity_; }
+ [[nodiscard]] constexpr size_t turn(size_t i) const noexcept {
+   return i / capacity_;
+ }
 
-private:
   const size_t capacity_;
   Slot<T> *slots_;
 #if defined(__has_cpp_attribute) && __has_cpp_attribute(no_unique_address)
@@ -278,3 +287,5 @@ template <typename T,
 using MPMCQueue = mpmc::Queue<T, Allocator>;
 
 } // namespace rigtorp
+
+#endif

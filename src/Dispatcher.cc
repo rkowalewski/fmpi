@@ -114,11 +114,11 @@ inline void ScheduleCtx::test_all() {
 
   std::array<std::vector<Message>, detail::n_types> msgs;
 
-  int flag;
+  int flag = 0;
   for (auto&& idx : idxs) {
     auto const ret = MPI_Test(&handles_[idx], &flag, &statuses[idx]);
     FMPI_ASSERT(ret == MPI_SUCCESS);
-    if (flag) {
+    if (flag != 0) {
       handles_[idx]   = MPI_REQUEST_NULL;
       auto&      task = pending_[idx];
       auto const tid  = rtlx::to_underlying(task.type);
@@ -368,7 +368,7 @@ void ScheduleCtx::dispatch_task(CommTask task) {
   int flag = 0;
   MPI_Test(&handles_[slot], &flag, MPI_STATUS_IGNORE);
 
-  if (flag) {
+  if (flag != 0) {
     handles_[slot] = MPI_REQUEST_NULL;
     if (callbacks_[ti]) {
       callbacks_[ti](std::vector<Message>({pending_[slot].message}));

@@ -11,7 +11,8 @@ int DefaultMessageHandler::operator()(
 
   if (type == message_type::ISEND) {
     return send(message, req);
-  } else if (type == message_type::IRECV) {
+  }
+  if (type == message_type::IRECV) {
     return recv(message, req);
   }
 

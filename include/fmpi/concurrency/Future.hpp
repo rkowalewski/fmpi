@@ -131,7 +131,7 @@ class collective_future {
   void               wait();
   mpi::return_code   get();
   MPI_Request&       native_handle() noexcept;
-  const MPI_Request& native_handle() const noexcept;
+  [[nodiscard]] const MPI_Request& native_handle() const noexcept;
 };
 
 collective_future make_ready_future(mpi::return_code u);
