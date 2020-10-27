@@ -113,6 +113,7 @@ int main(int argc, char* argv[]) {
       for (uint32_t i = 0; i < options.iterations + options.warmups; i++) {
         t_start = MPI_Wtime();
 
+#if 0
         auto promise        = fmpi::collective_promise{};
         auto future         = promise.get_future();
         auto schedule_state = std::make_unique<fmpi::ScheduleCtx>(
@@ -125,10 +126,8 @@ int main(int argc, char* argv[]) {
         // submit into dispatcher
         auto const hdl = dispatcher.submit(std::move(schedule_state));
 
-#if 0
         MPI_Send(s_buf, size, MPI_CHAR, 1, 1, world.mpiComm());
         MPI_Recv(r_buf, size, MPI_CHAR, 1, 1, world.mpiComm(), &reqstat);
-#else
         // FMPI_ASSERT(rsend.native_handle() == MPI_REQUEST_NULL);
         // FMPI_ASSERT(rrecv.native_handle() == MPI_REQUEST_NULL);
         // isend(s_buf, size, MPI_CHAR, 1, 1, world, rsend.native_handle());
@@ -146,6 +145,19 @@ int main(int argc, char* argv[]) {
 
         future.wait();
 
+#else
+
+        FMPI_ASSERT(rsend.native_handle() == MPI_REQUEST_NULL);
+        FMPI_ASSERT(rrecv.native_handle() == MPI_REQUEST_NULL);
+        isend(s_buf, size, MPI_CHAR, 1, 1, world, rsend.native_handle());
+        irecv(r_buf, size, MPI_CHAR, 1, 1, world, rrecv.native_handle());
+
+        t_init = MPI_Wtime();
+
+        rsend.wait();
+        rrecv.wait();
+#endif
+
         t_end = MPI_Wtime();
 
         if (i >= options.warmups) {
@@ -153,11 +165,6 @@ int main(int argc, char* argv[]) {
           t_init_total += t_init - t_start;
           t_wait_total += t_end - t_init;
         }
-        //  rsend.wait();
-        //  rrecv.wait();
-        // MPI_Wait(fut_send.get(), &reqstat);
-        // MPI_Wait(fut_recv.get(), &reqstat);
-#endif
       }
 
     }
@@ -188,12 +195,15 @@ int main(int argc, char* argv[]) {
 
       fprintf(
           stdout,
-          "%-*ld%*.*f%*.*f%*.*f\n",
+          "%-*ld%*.*f%*.*f%*.*f%*.*f\n",
           10,
           size,
           FIELD_WIDTH,
           FLOAT_PRECISION,
           latency,
+          FIELD_WIDTH,
+          FLOAT_PRECISION,
+          total,
           FIELD_WIDTH,
           FLOAT_PRECISION,
           init,
