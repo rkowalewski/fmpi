@@ -157,7 +157,7 @@ void CommDispatcher::worker() {
   for (;;) {
     // fetch new task, however, wait at most 1us
     CommTask task;
-    auto     status = channel_.pop(task, 1us);
+    auto     status = channel_.pop(task, 1ns);
 
     // FMPI_DBG(sched_getcpu());
 
