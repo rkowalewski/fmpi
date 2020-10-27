@@ -56,7 +56,7 @@ auto isend(
   // return future;
 }
 
-Params params{};
+Params options{};
 
 int main(int argc, char* argv[]) {
   // Our value type
@@ -83,7 +83,8 @@ int main(int argc, char* argv[]) {
     return EXIT_FAILURE;
   }
 
-  double     t_start, t_end;
+  double     t_start, t_end, t_init;
+  double     t_init_total = 0, t_wait_total = 0, timer = 0;
   MPI_Status reqstat;
   // MPI_Request req;
   if (myid == 0) {
@@ -93,37 +94,36 @@ int main(int argc, char* argv[]) {
   auto rsend = fmpi::make_mpi_future();
   auto rrecv = fmpi::make_mpi_future();
 
-  auto promise        = fmpi::collective_promise{};
-  auto future         = promise.get_future();
-  auto schedule_state = std::make_unique<fmpi::ScheduleCtx>(
-      std::array<std::size_t, 2>{
-          1,
-          1,
-      },
-      std::move(promise));
-
-  // submit into dispatcher
-  auto&      dispatcher = fmpi::static_dispatcher_pool();
-  auto const hdl        = dispatcher.submit(std::move(schedule_state));
-
   /* Latency test */
-  for (auto size = params.smin; size <= params.smax;
+  for (auto size = options.smin; size <= options.smax;
        size      = (size ? size * 2 : 1)) {
     set_buffer_pt2pt(s_buf, myid, 'a', size);
     set_buffer_pt2pt(r_buf, myid, 'b', size);
 
     if (size > LARGE_MESSAGE_SIZE) {
-      params.iterations = params.iterations_large;
-      params.warmups    = params.warmups_large;
+      options.iterations = options.iterations_large;
+      options.warmups    = options.warmups_large;
     }
 
     MPI_Barrier(world.mpiComm());
 
+    auto& dispatcher = fmpi::static_dispatcher_pool();
+
     if (myid == 0) {
-      for (uint32_t i = 0; i < params.iterations + params.warmups; i++) {
-        if (i == params.warmups) {
-          t_start = MPI_Wtime();
-        }
+      for (uint32_t i = 0; i < options.iterations + options.warmups; i++) {
+        t_start = MPI_Wtime();
+
+        auto promise        = fmpi::collective_promise{};
+        auto future         = promise.get_future();
+        auto schedule_state = std::make_unique<fmpi::ScheduleCtx>(
+            std::array<std::size_t, 2>{
+                1,
+                1,
+            },
+            std::move(promise));
+
+        // submit into dispatcher
+        auto const hdl = dispatcher.submit(std::move(schedule_state));
 
 #if 0
         MPI_Send(s_buf, size, MPI_CHAR, 1, 1, world.mpiComm());
@@ -136,13 +136,23 @@ int main(int argc, char* argv[]) {
 
         auto send = fmpi::make_send(
             s_buf, size, MPI_CHAR, mpi::Rank{1}, 1, world.mpiComm());
-
         auto recv = fmpi::make_receive(
             r_buf, size, MPI_CHAR, mpi::Rank{1}, 1, world.mpiComm());
         dispatcher.schedule(hdl, fmpi::message_type::ISEND, send);
         dispatcher.schedule(hdl, fmpi::message_type::IRECV, recv);
-        dispatcher.schedule(hdl, fmpi::message_type::BARRIER);
-        // dispatcher.commit(hdl);
+        dispatcher.commit(hdl);
+
+        t_init = MPI_Wtime();
+
+        future.wait();
+
+        t_end = MPI_Wtime();
+
+        if (i >= options.warmups) {
+          timer += t_end - t_start;
+          t_init_total += t_init - t_start;
+          t_wait_total += t_end - t_init;
+        }
         //  rsend.wait();
         //  rrecv.wait();
         // MPI_Wait(fut_send.get(), &reqstat);
@@ -150,11 +160,10 @@ int main(int argc, char* argv[]) {
 #endif
       }
 
-      t_end = MPI_Wtime();
     }
 
     else if (myid == 1) {
-      for (uint32_t i = 0; i < params.iterations + params.warmups; i++) {
+      for (uint32_t i = 0; i < options.iterations + options.warmups; i++) {
 #if 0
         MPI_Recv(r_buf, size, MPI_CHAR, 0, 1, world.mpiComm(), &reqstat);
         MPI_Send(s_buf, size, MPI_CHAR, 0, 1, world.mpiComm());
@@ -171,23 +180,29 @@ int main(int argc, char* argv[]) {
       }
     }
 
-
     if (myid == 0) {
-      double latency = (t_end - t_start) * 1e6 / (2.0 * params.iterations);
+      double total   = timer * 1e6 / options.iterations;
+      double latency = total / 2;
+      double init    = t_init_total * 1e6 / options.iterations;
+      double wait    = (t_wait_total)*1e6 / options.iterations;
 
       fprintf(
           stdout,
-          "%-*d%*.*f\n",
+          "%-*ld%*.*f%*.*f%*.*f\n",
           10,
           size,
           FIELD_WIDTH,
           FLOAT_PRECISION,
-          latency);
+          latency,
+          FIELD_WIDTH,
+          FLOAT_PRECISION,
+          init,
+          FIELD_WIDTH,
+          FLOAT_PRECISION,
+          wait);
       fflush(stdout);
     }
   }
-
-    dispatcher.commit(hdl);
 }
 
 namespace detail {
@@ -221,18 +236,18 @@ bool read_input(int argc, char* argv[]) {
   cp.set_author("Roger Kowalewski <roger.kowaleski@nm.ifi.lmu.de>");
 
   cp.add_bytes(
-      's', "smin", params.smin, "Minimum message size sent to each peer.");
+      's', "smin", options.smin, "Minimum message size sent to each peer.");
   cp.add_bytes(
-      'S', "smax", params.smax, "Maximum message size sent to each peer.");
+      'S', "smax", options.smax, "Maximum message size sent to each peer.");
 
   cp.add_uint(
-      'i', "iterations_small", params.iterations, "Trials per round.");
+      'i', "iterations_small", options.iterations, "Trials per round.");
   cp.add_uint(
-      'I', "iterations_large", params.iterations_large, "Trials per round.");
+      'I', "iterations_large", options.iterations_large, "Trials per round.");
 
-  cp.add_uint('w', "warmups_small", params.warmups, "Warmups per round.");
+  cp.add_uint('w', "warmups_small", options.warmups, "Warmups per round.");
   cp.add_uint(
-      'W', "warmups_large", params.warmups_large, "Warmups per round.");
+      'W', "warmups_large", options.warmups_large, "Warmups per round.");
 
   if (mpi::Context::world().rank() == 0) {
     return cp.process(argc, argv, std::cout);
@@ -244,12 +259,12 @@ bool read_input(int argc, char* argv[]) {
 
 int allocate_memory_pt2pt(char** sbuf, char** rbuf, int rank) {
   auto const align_size = sysconf(_SC_PAGESIZE);
-  if (posix_memalign((void**)sbuf, align_size, params.smax)) {
+  if (posix_memalign((void**)sbuf, align_size, options.smax)) {
     fprintf(stderr, "Error allocating host memory\n");
     return 1;
   }
 
-  if (posix_memalign((void**)rbuf, align_size, params.smax)) {
+  if (posix_memalign((void**)rbuf, align_size, options.smax)) {
     fprintf(stderr, "Error allocating host memory\n");
     return 1;
   }

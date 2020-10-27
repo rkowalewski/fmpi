@@ -403,32 +403,32 @@ CommDispatcher::ctx_map::ctx_map()
 
 void CommDispatcher::ctx_map::assign(
     ScheduleHandle const& hdl, std::unique_ptr<ScheduleCtx> p) {
-  std::lock_guard<std::mutex> lg{mtx_};
+  //std::lock_guard<std::mutex> lg{mtx_};
   FMPI_ASSERT(do_find(hdl) == std::end(items_));
   items_.emplace_back(hdl, std::move(p));
 }
 
 void CommDispatcher::ctx_map::erase(iterator it) {
-  std::lock_guard<std::mutex> lg{mtx_};
+  //std::lock_guard<std::mutex> lg{mtx_};
   FMPI_ASSERT(do_find(it->first) != std::end(items_));
   items_.erase(it);
 }
 
 bool CommDispatcher::ctx_map::contains(ScheduleHandle const& hdl) const {
-  std::lock_guard<std::mutex> lg{mtx_};
+  //std::lock_guard<std::mutex> lg{mtx_};
   return do_find(hdl) != std::end(items_);
 }
 
 std::pair<CommDispatcher::ctx_map::const_iterator, bool>
 CommDispatcher::ctx_map::find(ScheduleHandle const& hdl) const {
-  std::lock_guard<std::mutex> lg{mtx_};
+  //std::lock_guard<std::mutex> lg{mtx_};
   auto const                  it = do_find(hdl);
   return std::make_pair(it, it != items_.cend());
 }
 
 std::pair<CommDispatcher::ctx_map::iterator, bool>
 CommDispatcher::ctx_map::find(ScheduleHandle const& hdl) {
-  std::lock_guard<std::mutex> lg{mtx_};
+  //std::lock_guard<std::mutex> lg{mtx_};
   auto const                  it = do_find(hdl);
   return std::make_pair(it, it != items_.end());
 }
@@ -450,7 +450,7 @@ CommDispatcher::ctx_map::iterator CommDispatcher::ctx_map::do_find(
 std::
     pair<CommDispatcher::ctx_map::iterator, CommDispatcher::ctx_map::iterator>
     CommDispatcher::ctx_map::known_schedules() {
-  std::lock_guard<std::mutex> lg{mtx_};
+  //std::lock_guard<std::mutex> lg{mtx_};
   return std::make_pair(std::begin(items_), std::end(items_));
 }
 
