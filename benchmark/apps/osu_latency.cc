@@ -291,8 +291,22 @@ void print_topology(mpi::Context const& ctx, std::size_t nhosts) {
   auto const ppn  = static_cast<int32_t>(ctx.size() / nhosts);
   auto const last = mpi::Rank{ppn - 1};
 
-  auto left  = (me > 0 && me <= last) ? me - 1 : mpi::Rank::null();
-  auto right = (me < last) ? me + 1 : mpi::Rank::null();
+  mpi::Rank left{};
+  mpi::Rank right{};
+
+  if (ppn == 1) {
+    left  = (me == 0) ? mpi::Rank::null() : me - 1;
+    right = (me == ctx.size() - 1) ? mpi::Rank::null() : me + 1;
+  } else {
+     left  = (me > 0 && me <= last) ? me - 1 : mpi::Rank::null();
+     right = (me < last) ? me + 1 : mpi::Rank::null();
+  }
+
+  {
+    std::ostringstream os;
+    os << "left: " << left << ", right: " << right << "\n";
+    std::cout << os.str();
+  }
 
   if (not(left or right)) {
     return;
@@ -321,11 +335,13 @@ void print_topology(mpi::Context const& ctx, std::size_t nhosts) {
 
   MPI_Send(&dummy, 1, MPI_CHAR, right, 0xAB, ctx.mpiComm());
 
-  if (me == 0) {
-    MPI_Recv(
-        &dummy, 1, MPI_CHAR, last, 0xAB, ctx.mpiComm(), MPI_STATUS_IGNORE);
-  } else if (me == last) {
-    MPI_Send(&dummy, 1, MPI_CHAR, 0, 0xAB, ctx.mpiComm());
+  if (ppn > 1) {
+    if (me == 0) {
+      MPI_Recv(
+          &dummy, 1, MPI_CHAR, last, 0xAB, ctx.mpiComm(), MPI_STATUS_IGNORE);
+    } else if (me == last) {
+      MPI_Send(&dummy, 1, MPI_CHAR, 0, 0xAB, ctx.mpiComm());
+    }
   }
 }
 
