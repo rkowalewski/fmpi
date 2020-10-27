@@ -114,7 +114,7 @@ int main(int argc, char* argv[]) {
       for (uint32_t i = 0; i < options.iterations + options.warmups; i++) {
         t_start = MPI_Wtime();
 
-#if 0
+#if 1
         auto promise        = fmpi::collective_promise{};
         auto future         = promise.get_future();
         auto schedule_state = std::make_unique<fmpi::ScheduleCtx>(
@@ -126,13 +126,6 @@ int main(int argc, char* argv[]) {
 
         // submit into dispatcher
         auto const hdl = dispatcher.submit(std::move(schedule_state));
-
-        MPI_Send(s_buf, size, MPI_CHAR, 1, 1, world.mpiComm());
-        MPI_Recv(r_buf, size, MPI_CHAR, 1, 1, world.mpiComm(), &reqstat);
-        // FMPI_ASSERT(rsend.native_handle() == MPI_REQUEST_NULL);
-        // FMPI_ASSERT(rrecv.native_handle() == MPI_REQUEST_NULL);
-        // isend(s_buf, size, MPI_CHAR, 1, 1, world, rsend.native_handle());
-        // irecv(r_buf, size, MPI_CHAR, 1, 1, world, rrecv.native_handle());
 
         auto send = fmpi::make_send(
             s_buf, size, MPI_CHAR, mpi::Rank{1}, 1, world.mpiComm());
