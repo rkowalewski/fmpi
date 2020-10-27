@@ -45,9 +45,9 @@ class future_shared_state {
 
  private:
   /// Status Information
-  std::mutex                      mtx_;
-  std::condition_variable         cv_;
-  std::atomic_bool                ready_{false};
+  mutable std::mutex      mtx_;
+  std::condition_variable cv_;
+  // std::atomic_bool                ready_{false};
   std::optional<mpi::return_code> value_{};
 
   state       state_ = state::async;
@@ -58,7 +58,7 @@ class future_shared_state {
   explicit future_shared_state(state s);
   void               wait();
   void               set_value(mpi::return_code result);
-  [[nodiscard]] bool is_ready() const noexcept;
+  [[nodiscard]] bool is_ready() const;
   mpi::return_code   get_value_assume_ready() noexcept;
   [[nodiscard]] bool is_deferred() const noexcept {
     return state_ == state::deferred;
@@ -71,6 +71,9 @@ class future_shared_state {
   MPI_Request const& native_handle() const noexcept {
     return mpi_handle_;
   }
+
+ private:
+  bool unsafe_is_ready() const noexcept;
 };
 
 }  // namespace detail

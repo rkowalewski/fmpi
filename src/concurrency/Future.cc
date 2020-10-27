@@ -5,7 +5,6 @@
 #include <fmpi/memory/HeapAllocator.hpp>
 #include <fmpi/memory/ThreadAllocator.hpp>
 
-
 namespace fmpi {
 
 #if 0
@@ -133,37 +132,37 @@ future_shared_state::future_shared_state(state s)
 }
 
 void future_shared_state::wait() {
-  if (is_deferred() and not ready_) {
+  if (is_deferred()) {
     auto ret = MPI_Wait(&mpi_handle_, MPI_STATUS_IGNORE);
     value_.emplace(ret);
-    // ready_ = true;
   } else {
     std::unique_lock<std::mutex> lk(mtx_);
-    while (not ready_) {
-      cv_.wait(lk);
-    }
+    cv_.wait(lk, [this]() { return unsafe_is_ready(); });
   }
 }
 
 void future_shared_state::set_value(mpi::return_code result) {
-  FMPI_ASSERT(!ready_);
-  FMPI_ASSERT(!value_);
-  value_.emplace(result);
-
   {
     std::lock_guard lk(mtx_);
-    ready_ = true;
-    // m_then.swap(continuation);
-    cv_.notify_all();
+    value_.emplace(result);
   }
+
+  cv_.notify_all();
+
+  // m_then.swap(continuation);
 
   // if (continuation) {
   //  continuation();
   //}
 }
 
-bool future_shared_state::is_ready() const noexcept {
-  return ready_.load(std::memory_order_relaxed);
+bool future_shared_state::is_ready() const {
+  std::lock_guard<std::mutex> lg{mtx_};
+  return unsafe_is_ready();
+}
+
+bool future_shared_state::unsafe_is_ready() const noexcept {
+  return value_.has_value();
 }
 
 mpi::return_code future_shared_state::get_value_assume_ready() noexcept {
