@@ -129,7 +129,8 @@ int main(int argc, char* argv[]) {
                 1,
                 1,
             },
-            std::move(promise));
+            std::move(promise),
+            2u);
 
         // submit into dispatcher
         auto const hdl = dispatcher.submit(std::move(schedule_state));
@@ -298,8 +299,8 @@ void print_topology(mpi::Context const& ctx, std::size_t nhosts) {
     left  = (me == 0) ? mpi::Rank::null() : me - 1;
     right = (me == ctx.size() - 1) ? mpi::Rank::null() : me + 1;
   } else {
-     left  = (me > 0 && me <= last) ? me - 1 : mpi::Rank::null();
-     right = (me < last) ? me + 1 : mpi::Rank::null();
+    left  = (me > 0 && me <= last) ? me - 1 : mpi::Rank::null();
+    right = (me < last) ? me + 1 : mpi::Rank::null();
   }
 
   {

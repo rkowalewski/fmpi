@@ -45,9 +45,8 @@ class future_shared_state {
 
  private:
   /// Status Information
-  mutable std::mutex      mtx_;
-  std::condition_variable cv_;
-  // std::atomic_bool                ready_{false};
+  mutable std::mutex              mtx_;
+  std::condition_variable         cv_;
   std::optional<mpi::return_code> value_{};
 
   state       state_ = state::async;

@@ -24,11 +24,14 @@ CommDispatcher& static_dispatcher_pool() {
 }
 
 ScheduleCtx::ScheduleCtx(
-    std::array<std::size_t, detail::n_types> nslots, collective_promise pr)
+    std::array<std::size_t, detail::n_types> nslots,
+    collective_promise                       pr,
+    std::size_t                              max_tasks)
   : nslots_(nslots)
   , winsz_(std::accumulate(nslots.begin(), nslots.end(), 0u))
   , handles_(winsz_, MPI_REQUEST_NULL)
   , pending_(winsz_)
+  , max_tasks_(max_tasks)
   , promise_(std::move(pr)) {
   // generate the slots
   for (auto&& i : range(detail::n_types)) {
@@ -37,6 +40,12 @@ ScheduleCtx::ScheduleCtx(
   }
 
   reset_slots();
+}
+
+ScheduleCtx::ScheduleCtx(
+    std::array<std::size_t, detail::n_types> nslots, collective_promise pr)
+  : ScheduleCtx(
+        nslots, std::move(pr), std::numeric_limits<std::size_t>::max()) {
 }
 
 inline void ScheduleCtx::reset_slots() {
@@ -81,6 +90,61 @@ inline void ScheduleCtx::complete_some() {
       callbacks_[tid](msgs[tid]);
     }
   }
+
+  n_processed_ += idxs_completed.size();
+
+  if (n_processed_ == max_tasks_) {
+    notify_ready();
+  }
+}
+
+inline void ScheduleCtx::test_all() {
+  FixedVector<MPI_Status> statuses(handles_.size());
+
+  std::vector<int> idxs;
+  idxs.reserve(handles_.size());
+
+  auto r = range(handles_.size());
+
+  std::copy_if(
+      std::begin(r),
+      std::end(r),
+      std::back_inserter(idxs),
+      [this](auto const& idx) { return handles_[idx] != MPI_REQUEST_NULL; });
+
+  std::array<std::vector<Message>, detail::n_types> msgs;
+
+  int flag;
+  for (auto&& idx : idxs) {
+    auto const ret = MPI_Test(&handles_[idx], &flag, &statuses[idx]);
+    FMPI_ASSERT(ret == MPI_SUCCESS);
+    if (flag) {
+      handles_[idx]   = MPI_REQUEST_NULL;
+      auto&      task = pending_[idx];
+      auto const tid  = rtlx::to_underlying(task.type);
+      FMPI_ASSERT(task.valid());
+      task.reset();
+      slots_[tid].push_front(idx);
+      msgs[tid].emplace_back(task.message);
+      n_processed_++;
+    }
+  }
+
+  for (auto&& tid : range(detail::n_types)) {
+    if ((not msgs[tid].empty()) and callbacks_[tid]) {
+      callbacks_[tid](msgs[tid]);
+    }
+  }
+
+  if (n_processed_ == max_tasks_) {
+    notify_ready();
+  }
+}
+
+inline void ScheduleCtx::notify_ready() {
+  if (std::exchange(state_, status::ready) == status::pending) {
+    promise_.set_value(MPI_SUCCESS);
+  }
 }
 
 inline void ScheduleCtx::complete_all() {
@@ -116,6 +180,12 @@ inline void ScheduleCtx::complete_all() {
     if ((not msgs[tid].empty()) and callbacks_[tid]) {
       callbacks_[tid](msgs[tid]);
     }
+  }
+
+  n_processed_ += idxs.size();
+
+  if (n_processed_ == max_tasks_) {
+    notify_ready();
   }
 
   reset_slots();
@@ -180,7 +250,7 @@ void CommDispatcher::worker() {
       if (task.type == message_type::COMMIT ||
           task.type == message_type::BARRIER ||
           task.type == message_type::WAITSOME) {
-        FMPI_ASSERT(uptr->state_ == ScheduleCtx::status::pending);
+        // FMPI_ASSERT(uptr->state_ == ScheduleCtx::status::pending);
 
         if (task.type == message_type::WAITSOME) {
           uptr->complete_some();
@@ -189,7 +259,7 @@ void CommDispatcher::worker() {
         }
 
         if (task.type == message_type::COMMIT) {
-          uptr->promise_.set_value(MPI_SUCCESS);
+          uptr->notify_ready();
 
           schedules_.erase(it);
         }
@@ -198,11 +268,15 @@ void CommDispatcher::worker() {
         uptr->dispatch_task(task);
         task.type = message_type::ISEND;
         uptr->dispatch_task(task);
+        uptr->test_all();
       } else {
         uptr->dispatch_task(task);
+        uptr->test_all();
       }
     }
-    progress_all();
+    if (schedules_.size() > 1) {
+      progress_all();
+    }
   }
 }
 
@@ -295,11 +369,18 @@ void ScheduleCtx::dispatch_task(CommTask task) {
   MPI_Test(&handles_[slot], &flag, MPI_STATUS_IGNORE);
 
   if (flag) {
+    handles_[slot] = MPI_REQUEST_NULL;
     if (callbacks_[ti]) {
       callbacks_[ti](std::vector<Message>({pending_[slot].message}));
     }
 
     rb.push_front(slot);
+    pending_[slot].reset();
+
+    n_processed_++;
+    if (n_processed_ == max_tasks_) {
+      notify_ready();
+    }
   }
 }
 
@@ -414,33 +495,33 @@ CommDispatcher::ctx_map::ctx_map()
 
 void CommDispatcher::ctx_map::assign(
     ScheduleHandle const& hdl, std::unique_ptr<ScheduleCtx> p) {
-  // std::lock_guard<std::mutex> lg{mtx_};
+  std::lock_guard<std::mutex> lg{mtx_};
   FMPI_ASSERT(do_find(hdl) == std::end(items_));
   items_.emplace_back(hdl, std::move(p));
 }
 
 void CommDispatcher::ctx_map::erase(iterator it) {
-  // std::lock_guard<std::mutex> lg{mtx_};
+  std::lock_guard<std::mutex> lg{mtx_};
   FMPI_ASSERT(do_find(it->first) != std::end(items_));
   items_.erase(it);
 }
 
 bool CommDispatcher::ctx_map::contains(ScheduleHandle const& hdl) const {
-  // std::lock_guard<std::mutex> lg{mtx_};
+  std::lock_guard<std::mutex> lg{mtx_};
   return do_find(hdl) != std::end(items_);
 }
 
 std::pair<CommDispatcher::ctx_map::const_iterator, bool>
 CommDispatcher::ctx_map::find(ScheduleHandle const& hdl) const {
-  // std::lock_guard<std::mutex> lg{mtx_};
-  auto const it = do_find(hdl);
+  std::lock_guard<std::mutex> lg{mtx_};
+  auto const                  it = do_find(hdl);
   return std::make_pair(it, it != items_.cend());
 }
 
 std::pair<CommDispatcher::ctx_map::iterator, bool>
 CommDispatcher::ctx_map::find(ScheduleHandle const& hdl) {
-  // std::lock_guard<std::mutex> lg{mtx_};
-  auto const it = do_find(hdl);
+  std::lock_guard<std::mutex> lg{mtx_};
+  auto const                  it = do_find(hdl);
   return std::make_pair(it, it != items_.end());
 }
 
@@ -456,6 +537,11 @@ CommDispatcher::ctx_map::iterator CommDispatcher::ctx_map::do_find(
   return std::find_if(items_.begin(), items_.end(), [hdl](auto const& v) {
     return v.first == hdl;
   });
+}
+
+std::size_t CommDispatcher::ctx_map::size() const noexcept {
+  std::lock_guard<std::mutex> lg{mtx_};
+  return items_.size();
 }
 
 std::

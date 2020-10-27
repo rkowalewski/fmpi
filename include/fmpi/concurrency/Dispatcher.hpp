@@ -105,6 +105,11 @@ class ScheduleCtx {
   ScheduleCtx(
       std::array<std::size_t, detail::n_types> nslots, collective_promise pr);
 
+  ScheduleCtx(
+      std::array<std::size_t, detail::n_types> nslots,
+      collective_promise                       pr,
+      std::size_t                              max_tasks);
+
   void register_signal(message_type type, signal&& callable);
   void register_callback(message_type type, callback&& callable);
 
@@ -112,7 +117,9 @@ class ScheduleCtx {
   // complete all outstanding requests
   void complete_all();
   void complete_some();
+  void test_all();
   void dispatch_task(CommTask task);
+  void notify_ready();
 
   void reset_slots();
 
@@ -122,6 +129,8 @@ class ScheduleCtx {
   FixedVector<MPI_Request>                          handles_;
   FixedVector<CommTask>                             pending_;
   std::array<tlx::RingBuffer<int>, detail::n_types> slots_;
+  std::size_t                                       max_tasks_;
+  std::size_t                                       n_processed_ = 0;
 
   /// Message handler
   // TODO: make this configurable
@@ -160,7 +169,8 @@ class CommDispatcher {
     ctx_map();
     void assign(
         ScheduleHandle const& hdl, std::unique_ptr<ScheduleCtx> /*p*/);
-    void erase(iterator it);
+    void        erase(iterator it);
+    std::size_t size() const noexcept;
 
     bool                            contains(ScheduleHandle const& hdl) const;
     std::pair<iterator, bool>       find(ScheduleHandle const& hdl);
