@@ -1,11 +1,13 @@
 #include <unistd.h>
 
 #include <cstring>
+#include <fmpi/Pinning.hpp>
 #include <fmpi/concurrency/Dispatcher.hpp>
 #include <fmpi/concurrency/Future.hpp>
 #include <fmpi/mpi/Environment.hpp>
 #include <iostream>
 #include <rtlx/ScopedLambda.hpp>
+#include <sstream>
 #include <tlx/cmdline_parser.hpp>
 
 static constexpr std::size_t LARGE_MESSAGE_SIZE = 8192;
@@ -56,6 +58,9 @@ auto isend(
   // return future;
 }
 
+void     print_topology(mpi::Context const& ctx, std::size_t nhosts);
+uint32_t num_nodes(mpi::Context const& comm);
+
 Params options{};
 
 int main(int argc, char* argv[]) {
@@ -77,6 +82,8 @@ int main(int argc, char* argv[]) {
   if (!read_input(argc, argv)) {
     return 0;
   }
+
+  print_topology(world, num_nodes(world));
 
   auto const myid = world.rank();
   if (allocate_memory_pt2pt(&s_buf, &r_buf, myid)) {
@@ -277,4 +284,63 @@ int allocate_memory_pt2pt(char** sbuf, char** rbuf, int rank) {
 
 void set_buffer_pt2pt(void* buffer, int /*rank*/, int data, size_t size) {
   std::memset(buffer, data, size);
+}
+
+void print_topology(mpi::Context const& ctx, std::size_t nhosts) {
+  auto const me   = ctx.rank();
+  auto const ppn  = static_cast<int32_t>(ctx.size() / nhosts);
+  auto const last = mpi::Rank{ppn - 1};
+
+  auto left  = (me > 0 && me <= last) ? me - 1 : mpi::Rank::null();
+  auto right = (me < last) ? me + 1 : mpi::Rank::null();
+
+  if (not(left or right)) {
+    return;
+  }
+
+  char dummy = 0;
+
+  std::ostringstream os;
+
+  if (me == 0) {
+    os << "Node Topology:\n";
+  }
+
+  MPI_Recv(&dummy, 1, MPI_CHAR, left, 0xAB, ctx.mpiComm(), MPI_STATUS_IGNORE);
+
+  if (me < ppn) {
+    os << "  MPI Rank " << me << "\n";
+    fmpi::print_pinning(os);
+  }
+
+  if (me == last) {
+    os << "\n";
+  }
+
+  std::cout << os.str() << std::endl;
+
+  MPI_Send(&dummy, 1, MPI_CHAR, right, 0xAB, ctx.mpiComm());
+
+  if (me == 0) {
+    MPI_Recv(
+        &dummy, 1, MPI_CHAR, last, 0xAB, ctx.mpiComm(), MPI_STATUS_IGNORE);
+  } else if (me == last) {
+    MPI_Send(&dummy, 1, MPI_CHAR, 0, 0xAB, ctx.mpiComm());
+  }
+}
+
+uint32_t num_nodes(mpi::Context const& comm) {
+  auto const shared_comm = mpi::splitSharedComm(comm);
+  int const  is_rank0    = static_cast<int>(shared_comm.rank() == 0);
+  int        nhosts      = 0;
+
+  MPI_Allreduce(
+      &is_rank0,
+      &nhosts,
+      1,
+      mpi::type_mapper<int>::type(),
+      MPI_SUM,
+      comm.mpiComm());
+
+  return nhosts;
 }
