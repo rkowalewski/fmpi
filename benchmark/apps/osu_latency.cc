@@ -84,7 +84,6 @@ int main(int argc, char* argv[]) {
   }
 
   double     t_start, t_end, t_init;
-  double     t_init_total = 0, t_wait_total = 0, timer = 0;
   MPI_Status reqstat;
   // MPI_Request req;
   if (myid == 0) {
@@ -108,6 +107,8 @@ int main(int argc, char* argv[]) {
     MPI_Barrier(world.mpiComm());
 
     auto& dispatcher = fmpi::static_dispatcher_pool();
+
+    double t_init_total = 0, t_wait_total = 0, timer = 0;
 
     if (myid == 0) {
       for (uint32_t i = 0; i < options.iterations + options.warmups; i++) {
