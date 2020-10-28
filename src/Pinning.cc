@@ -69,7 +69,7 @@ fmpi::Pinning::Pinning() {
     // comp_core       = main_core;
   }
 
-  dispatcher_core = (main_core + ncpus) % ncores;
+  //dispatcher_core = (main_core + ncpus) % ncores;
 }
 
 std::ostream& fmpi::operator<<(std::ostream& os, const Pinning& pinning) {

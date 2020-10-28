@@ -116,6 +116,7 @@ inline void ScheduleCtx::test_all() {
 
   int flag = 0;
   for (auto&& idx : idxs) {
+    // FMPI_DBG(idx);
     auto const ret = MPI_Test(&handles_[idx], &flag, &statuses[idx]);
     FMPI_ASSERT(ret == MPI_SUCCESS);
     if (flag != 0) {
@@ -250,8 +251,6 @@ void CommDispatcher::worker() {
       if (task.type == message_type::COMMIT ||
           task.type == message_type::BARRIER ||
           task.type == message_type::WAITSOME) {
-        // FMPI_ASSERT(uptr->state_ == ScheduleCtx::status::pending);
-
         if (task.type == message_type::WAITSOME) {
           uptr->complete_some();
         } else {
@@ -259,6 +258,7 @@ void CommDispatcher::worker() {
         }
 
         if (task.type == message_type::COMMIT) {
+          FMPI_DBG_STREAM("Commit " << task.id.id());
           uptr->notify_ready();
 
           schedules_.erase(it);
@@ -270,6 +270,11 @@ void CommDispatcher::worker() {
         uptr->dispatch_task(task);
         uptr->test_all();
       } else {
+        //FMPI_DBG(task.id.id());
+        //FMPI_DBG(int(rtlx::to_underlying(task.type)));
+        //FMPI_DBG(uptr->nslots_);
+        //FMPI_DBG(std::make_pair(uptr->max_tasks_, uptr->n_processed_));
+        FMPI_ASSERT(uptr->state_ == ScheduleCtx::status::pending);
         uptr->dispatch_task(task);
         uptr->test_all();
       }
@@ -324,7 +329,7 @@ void ScheduleCtx::dispatch_task(CommTask task) {
     // (reqs.size() > 0) -> (count == 0)
     FMPI_ASSERT(reqs.empty() || count == 0);
 
-    FMPI_DBG(reqs.size());
+    FMPI_DBG(std::make_pair(reqs.size(), int(ti)));
 
     int        c = MPI_UNDEFINED;
     auto const ret =

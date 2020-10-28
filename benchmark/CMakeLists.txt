@@ -19,6 +19,10 @@ add_custom_target(GitVersion
 message(STATUS "Run: ${MPIEXEC} ${MPIEXEC_NUMPROC_FLAG} ${MPIEXEC_MAX_NUMPROCS} ${MPIEXEC_PREFLAGS} EXECUTABLE ${MPIEXEC_POSTFLAGS} ARGS")
 
 
-add_executable(osu_latency apps/osu_latency.cc)
+add_executable(osu_latency osu/osu_latency.cc osu/osu.cc)
 set_target_properties(osu_latency PROPERTIES DEBUG_POSTFIX ".${CMAKE_DEBUG_POSTFIX}")
 target_link_libraries(osu_latency fmpi)
+
+add_executable(osu_mbw_mr osu/osu_mbw_mr.cc osu/osu.cc)
+set_target_properties(osu_mbw_mr PROPERTIES DEBUG_POSTFIX ".${CMAKE_DEBUG_POSTFIX}")
+target_link_libraries(osu_mbw_mr fmpi)
