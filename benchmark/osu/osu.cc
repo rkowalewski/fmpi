@@ -60,7 +60,11 @@ bool read_input(int argc, char* argv[]) {
   // Windows");
 
   if (mpi::Context::world().rank() == 0) {
-    return cp.process(argc, argv, std::cout);
+    auto good = cp.process(argc, argv, std::cout);
+    if (good) {
+      cp.print_result();
+    }
+    return good;
   } else {
     onullstream os;
     return cp.process(argc, argv, os);
