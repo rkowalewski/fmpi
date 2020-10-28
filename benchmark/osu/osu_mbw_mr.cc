@@ -18,6 +18,16 @@ double calc_bw(
     char*               r_buf,
     mpi::Context const& comm);
 
+void perform_work(
+    int                 rank,
+    int                 size,
+    int                 num_pairs,
+    int                 window_size,
+    char*               s_buf,
+    char*               r_buf,
+    mpi::Context const& comm,
+    int                 n);
+
 #define BW_LOOP_SMALL 100
 #define BW_SKIP_SMALL 10
 #define BW_LOOP_LARGE 20
@@ -175,6 +185,30 @@ int main(int argc, char* argv[]) {
   return EXIT_SUCCESS;
 }
 
+void send_messages(
+    int                   rank,
+    int                   size,
+    int                   num_pairs,
+    int                   window_size,
+    char*                 s_buf,
+    char*                 r_buf,
+    mpi::Context const&   comm,
+    int                   target,
+    fmpi::ScheduleHandle  hdl,
+    fmpi::CommDispatcher& dispatcher);
+
+void recv_messages(
+    int                   rank,
+    int                   size,
+    int                   num_pairs,
+    int                   window_size,
+    char*                 s_buf,
+    char*                 r_buf,
+    mpi::Context const&   ctx,
+    int                   target,
+    fmpi::ScheduleHandle  hdl,
+    fmpi::CommDispatcher& dispatcher);
+
 double calc_bw(
     int                 rank,
     int                 size,
@@ -191,8 +225,6 @@ double calc_bw(
 
   MPI_CHECK(MPI_Barrier(ctx.mpiComm()));
 
-  auto& dispatcher = fmpi::static_dispatcher_pool();
-
   std::array<std::size_t, 2> slots{0, 0};
 
   if (rank < num_pairs) {
@@ -203,43 +235,29 @@ double calc_bw(
     slots[1] = 1;
   }
 
-
+  auto& dispatcher = fmpi::static_dispatcher_pool();
   if (rank < num_pairs) {
     target = rank + num_pairs;
 
-    for (i = 0; i < options.warmups; i++) {
+    {
       auto promise = fmpi::collective_promise{};
       auto future  = promise.get_future();
       auto schedule_state =
           std::make_unique<fmpi::ScheduleCtx>(slots, std::move(promise));
-
-      // submit into dispatcher
       auto const hdl = dispatcher.submit(std::move(schedule_state));
-
-
-      for (j = 0; j < window_size; j++) {
-        // MPI_CHECK(MPI_Isend(
-        //     s_buf,
-        //     size,
-        //     MPI_CHAR,
-        //     target,
-        //     100,
-        //     ctx.mpiComm(),
-        //     mbw_request + j));
-        auto send = fmpi::make_send(
-            s_buf, size, MPI_CHAR, mpi::Rank{target}, 100, ctx.mpiComm());
-
-        dispatcher.schedule(hdl, fmpi::message_type::ISEND, send);
+      for (i = 0; i < options.warmups; i++) {
+        send_messages(
+            rank,
+            size,
+            num_pairs,
+            window_size,
+            s_buf,
+            r_buf,
+            ctx,
+            target,
+            hdl,
+            dispatcher);
       }
-      // MPI_CHECK(MPI_Waitall(window_size, mbw_request, mbw_reqstat));
-      dispatcher.schedule(hdl, fmpi::message_type::BARRIER);
-
-      // MPI_CHECK(MPI_Recv(
-      //    r_buf, 4, MPI_CHAR, target, 101, ctx.mpiComm(), &mbw_reqstat[0]));
-      auto recv = fmpi::make_receive(
-          r_buf, 4, MPI_CHAR, mpi::Rank{target}, 101, ctx.mpiComm());
-      dispatcher.schedule(hdl, fmpi::message_type::IRECV, recv);
-      dispatcher.schedule(hdl, fmpi::message_type::BARRIER);
       dispatcher.commit(hdl);
     }
 
@@ -259,39 +277,79 @@ double calc_bw(
 
     t_start = MPI_Wtime();
     for (i = 0; i < options.iterations; i++) {
-      for (j = 0; j < window_size; j++) {
-        // MPI_CHECK(MPI_Isend(
-        //     s_buf,
-        //     size,
-        //     MPI_CHAR,
-        //     target,
-        //     100,
-        //     ctx.mpiComm(),
-        //     mbw_request + j));
-        auto send = fmpi::make_send(
-            s_buf, size, MPI_CHAR, mpi::Rank{target}, 100, ctx.mpiComm());
-
-        dispatcher.schedule(hdl, fmpi::message_type::ISEND, send);
-      }
-      // MPI_CHECK(MPI_Waitall(window_size, mbw_request, mbw_reqstat));
-      dispatcher.schedule(hdl, fmpi::message_type::BARRIER);
-
-      // MPI_CHECK(MPI_Recv(
-      //    r_buf, 4, MPI_CHAR, target, 101, ctx.mpiComm(), &mbw_reqstat[0]));
-      auto recv = fmpi::make_receive(
-          r_buf, 4, MPI_CHAR, mpi::Rank{target}, 101, ctx.mpiComm());
-      dispatcher.schedule(hdl, fmpi::message_type::IRECV, recv);
-      dispatcher.schedule(hdl, fmpi::message_type::BARRIER);
+      send_messages(
+          rank,
+          size,
+          num_pairs,
+          window_size,
+          s_buf,
+          r_buf,
+          ctx,
+          target,
+          hdl,
+          dispatcher);
     }
 
     dispatcher.commit(hdl);
     future.wait();
-
     t_end = MPI_Wtime();
     t     = t_end - t_start;
   } else if (rank < num_pairs * 2) {
     target = rank - num_pairs;
+#if 1
+    {
+      auto promise = fmpi::collective_promise{};
+      auto future  = promise.get_future();
+      auto schedule_state =
+          std::make_unique<fmpi::ScheduleCtx>(slots, std::move(promise));
+      auto const hdl = dispatcher.submit(std::move(schedule_state));
+      for (i = 0; i < options.warmups; i++) {
+        recv_messages(
+            rank,
+            size,
+            num_pairs,
+            window_size,
+            s_buf,
+            r_buf,
+            ctx,
+            target,
+            hdl,
+            dispatcher);
+      }
+      dispatcher.commit(hdl);
+    }
 
+    MPI_CHECK(MPI_Barrier(ctx.mpiComm()));
+
+    FMPI_DBG("after warump");
+
+    auto const max_msgs = (window_size + 1) * options.iterations;
+
+    auto promise        = fmpi::collective_promise{};
+    auto future         = promise.get_future();
+    auto schedule_state = std::make_unique<fmpi::ScheduleCtx>(
+        slots, std::move(promise), max_msgs);
+
+    // submit into dispatcher
+    auto const hdl = dispatcher.submit(std::move(schedule_state));
+
+    for (i = 0; i < options.iterations; i++) {
+      recv_messages(
+          rank,
+          size,
+          num_pairs,
+          window_size,
+          s_buf,
+          r_buf,
+          ctx,
+          target,
+          hdl,
+          dispatcher);
+    }
+
+    dispatcher.commit(hdl);
+
+#else
     for (i = 0; i < options.iterations + options.warmups; i++) {
       if (i == options.warmups) {
         MPI_CHECK(MPI_Barrier(ctx.mpiComm()));
@@ -311,6 +369,7 @@ double calc_bw(
       MPI_CHECK(MPI_Waitall(window_size, mbw_request, mbw_reqstat));
       MPI_CHECK(MPI_Send(s_buf, 4, MPI_CHAR, target, 101, ctx.mpiComm()));
     }
+#endif
   }
 
   else {
@@ -333,4 +392,88 @@ double calc_bw(
   }
 
   return 0;
+}
+
+void send_messages(
+    int                   rank,
+    int                   size,
+    int                   num_pairs,
+    int                   window_size,
+    char*                 s_buf,
+    char*                 r_buf,
+    mpi::Context const&   comm,
+    int                   target,
+    fmpi::ScheduleHandle  hdl,
+    fmpi::CommDispatcher& dispatcher) {
+  FMPI_DBG(hdl.id());
+  FMPI_DBG(window_size);
+  for (int j = 0; j < window_size; j++) {
+    // MPI_CHECK(MPI_Isend(
+    //     s_buf,
+    //     size,
+    //     MPI_CHAR,
+    //     target,
+    //     100,
+    //     ctx.mpiComm(),
+    //     mbw_request + j));
+    auto send = fmpi::make_send(
+        s_buf, size, MPI_CHAR, mpi::Rank{target}, 100, comm.mpiComm());
+
+    dispatcher.schedule(hdl, fmpi::message_type::ISEND, send);
+  }
+  // MPI_CHECK(MPI_Waitall(window_size, mbw_request, mbw_reqstat));
+  dispatcher.schedule(hdl, fmpi::message_type::BARRIER);
+
+  // MPI_CHECK(MPI_Recv(
+  //    r_buf, 4, MPI_CHAR, target, 101, ctx.mpiComm(), &mbw_reqstat[0]));
+  auto recv = fmpi::make_receive(
+      r_buf, 4, MPI_CHAR, mpi::Rank{target}, 101, comm.mpiComm());
+  dispatcher.schedule(hdl, fmpi::message_type::IRECV, recv);
+}
+
+void recv_messages(
+    int                   rank,
+    int                   size,
+    int                   num_pairs,
+    int                   window_size,
+    char*                 s_buf,
+    char*                 r_buf,
+    mpi::Context const&   ctx,
+    int                   target,
+    fmpi::ScheduleHandle  hdl,
+    fmpi::CommDispatcher& dispatcher) {
+#if 0
+    if (i == options.warmups) {
+      MPI_CHECK(MPI_Barrier(ctx.mpiComm()));
+    }
+
+    for (j = 0; j < window_size; j++) {
+      MPI_CHECK(MPI_Irecv(
+          r_buf,
+          size,
+          MPI_CHAR,
+          target,
+          100,
+          ctx.mpiComm(),
+          mbw_request + j));
+    }
+
+    MPI_CHECK(MPI_Waitall(window_size, mbw_request, mbw_reqstat));
+    MPI_CHECK(MPI_Send(s_buf, 4, MPI_CHAR, target, 101, ctx.mpiComm()));
+#endif
+
+  for (int j = 0; j < window_size; j++) {
+    auto recv = fmpi::make_receive(
+        r_buf, size, MPI_CHAR, mpi::Rank{target}, 100, ctx.mpiComm());
+
+    dispatcher.schedule(hdl, fmpi::message_type::IRECV, recv);
+  }
+  // MPI_CHECK(MPI_Waitall(window_size, mbw_request, mbw_reqstat));
+  dispatcher.schedule(hdl, fmpi::message_type::BARRIER);
+
+  // MPI_CHECK(MPI_Recv(
+  //    r_buf, 4, MPI_CHAR, target, 101, ctx.mpiComm(), &mbw_reqstat[0]));
+  auto send = fmpi::make_send(
+      s_buf, 4, MPI_CHAR, mpi::Rank{target}, 101, ctx.mpiComm());
+  dispatcher.schedule(hdl, fmpi::message_type::ISEND, send);
 }
