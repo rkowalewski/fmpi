@@ -268,21 +268,27 @@ void CommDispatcher::worker() {
 
         if (task.type == message_type::COMMIT) {
           FMPI_DBG_STREAM("Commit " << task.id.id());
-          uptr->notify_ready();
 
           schedules_.erase(it);
+          uptr->notify_ready();
         }
       } else if (task.type == message_type::COMMIT_ALL) {
         FMPI_DBG_STREAM("Commit all " << task.id.id());
-        auto [first, last] = progress_all(true);
+        auto const [first, last] = progress_all(true);
 
-        FMPI_DBG(first->first.id());
-        for (; first != last; ++first) {
-          auto& up = first->second;
+        FixedVector<std::unique_ptr<ScheduleCtx>> uptrs(
+            std::distance(first, last));
+
+        std::size_t idx = 0;
+        for (auto it = first; it != last; ++it, ++idx) {
+          uptrs[idx] = std::move(it->second);
+        }
+
+        schedules_.erase(first, last);
+
+        for (auto&& up : uptrs) {
           up->notify_ready();
         }
-        schedules_.erase(first, last);
-        std::cout << "erase all\n";
       } else if (task.type == message_type::ISENDRECV) {
         task.type = message_type::IRECV;
         uptr->dispatch_task(task);
@@ -447,8 +453,8 @@ std::
   // create a copy of all known schedules
   auto known_schedules = schedules_.known_schedules();
   {
-    auto [first, last]     = known_schedules;
-    auto const n_schedules = std::distance(first, last);
+    auto const [first, last] = known_schedules;
+    auto const n_schedules   = std::distance(first, last);
     sps.reserve(n_schedules);
 
     for (auto it = first; it != last; ++it) {
@@ -513,10 +519,6 @@ std::
     auto const ti = rtlx::to_underlying(task.type);
 
     ctx_tasks[sp_idx][ti].emplace_back(task.message);
-
-    // for (auto&& cb : sp->callbacks_[ti]) {
-    //  cb(task.message);
-    //}
 
     task.reset();
 

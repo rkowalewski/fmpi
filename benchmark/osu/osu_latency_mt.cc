@@ -168,8 +168,6 @@ void* send_thread(void* arg) {
     set_buffer_pt2pt(s_buf, myid, 'a', size);
     set_buffer_pt2pt(r_buf, myid, 'b', size);
 
-    int flag_print = 0;
-
     {
       auto slots = std::array<std::size_t, 2>{};
       slots.fill(tlx::div_ceil(options.warmups, num_threads_sender));
@@ -202,27 +200,24 @@ void* send_thread(void* arg) {
         auto const r_succ =
             dispatcher.schedule(hdl, fmpi::message_type::IRECV, recv);
 
-        auto const b_succ = true;
-        // dispatcher.schedule(hdl, fmpi::message_type::BARRIER);
-
-        FMPI_ASSERT(s_succ and r_succ and b_succ);
+        FMPI_ASSERT(s_succ and r_succ);
       }
+      // guarantee that all threads have scheduled their requests
       pthread_barrier_wait(&sender_barrier);
+
       if (thread_id->id == 0) {
+        // this acts as a kind of synchronization from threads to the
+        // dispatcher
         dispatcher.schedule(hdl, fmpi::message_type::COMMIT_ALL);
       }
-      FMPI_ASSERT(future.valid());
-      FMPI_DBG("before future wait");
-      future.wait();
-      FMPI_DBG("after future wait");
-    }  // we automatically wait for the future
+    }  // all threads wait until the future is ready
 
     FMPI_DBG_STREAM("thread " << thread_id->id << ": after warmups");
 
-    // synchronize all senders
-    // pthread_barrier_wait(&sender_barrier);
-#if 0
     {
+      auto slots = std::array<std::size_t, 2>{};
+      slots.fill(tlx::div_ceil(options.iterations, num_threads_sender));
+
       auto promise = fmpi::collective_promise{};
       auto future  = promise.get_future();
       auto schedule_state =
@@ -230,13 +225,11 @@ void* send_thread(void* arg) {
 
       // submit into dispatcher
       auto const hdl = dispatcher.submit(std::move(schedule_state));
+      FMPI_DBG(hdl.id());
 
-      t_start    = MPI_Wtime();
-      flag_print = 1;
+      t_start = MPI_Wtime();
 
-      FMPI_DBG(std::make_tuple(thread_id->id, i));
-      for (; i < options.warmups + options.iterations;
-           i += num_threads_sender) {
+      for (i = val; i < options.iterations; i += num_threads_sender) {
         auto const s_tag = (options.sender_threads > 1) ? i : 1;
         auto const r_tag = (options.sender_threads > 1) ? i : 2;
 
@@ -255,15 +248,19 @@ void* send_thread(void* arg) {
         auto const r_succ =
             dispatcher.schedule(hdl, fmpi::message_type::IRECV, recv);
 
-        auto const b_succ =
-            dispatcher.schedule(hdl, fmpi::message_type::BARRIER);
-
-        FMPI_ASSERT(s_succ and r_succ and b_succ);
+        FMPI_ASSERT(s_succ and r_succ);
       }
-      dispatcher.commit(hdl);
-    }  // we automatically wait for the future
+      // guarantee that all threads are done
+      pthread_barrier_wait(&sender_barrier);
 
-#endif
+      if (thread_id->id == 0) {
+        dispatcher.schedule(hdl, fmpi::message_type::COMMIT_ALL);
+        // this acts as a kind of synchronization from threads to the
+        // dispatcher
+      }
+    }  // all threads wait until the future is ready
+
+    FMPI_DBG_STREAM("thread " << thread_id->id << ": after iterations");
 
 #if 0
     for (i = val; i < options.iterations + options.warmups;
@@ -283,16 +280,13 @@ void* send_thread(void* arg) {
             r_buf, size, MPI_CHAR, 1, 2, world.mpiComm(), &reqstat[val]));
       }
     }
-#else
-    flag_print = thread_id->id == 0;
-    t_start    = MPI_Wtime();
-
 #endif
 
-    pthread_barrier_wait(&sender_barrier);
+    t_end          = MPI_Wtime();
+    int flag_print = thread_id->id == 0;
+
     if (flag_print == 1) {
-      t_end = MPI_Wtime();
-      t     = t_end - t_start;
+      t = t_end - t_start;
 
       latency = (t)*1.0e6 / (2.0 * options.iterations / num_threads_sender);
       fprintf(
@@ -413,35 +407,29 @@ void* recv_thread(void* arg) {
       if (thread_id->id == 0) {
         dispatcher.schedule(hdl, fmpi::message_type::COMMIT_ALL);
       }
-
-      FMPI_ASSERT(future.valid());
-      FMPI_DBG("before future wait");
-      future.wait();
     }  // we automatically wait for the future
-
-    // synchronize all senders
-    // pthread_barrier_wait(&recv_barrier);
 
     FMPI_DBG_STREAM("thread " << thread_id->id << ": after warmups");
 
-#if 0
     {
       auto promise = fmpi::collective_promise{};
       auto future  = promise.get_future();
+      auto slots   = std::array<std::size_t, 2>{};
+      slots.fill(tlx::div_ceil(options.iterations, options.num_threads));
+
+      FMPI_DBG(slots);
       auto schedule_state =
           std::make_unique<fmpi::ScheduleCtx>(slots, std::move(promise));
 
       // submit into dispatcher
       auto const hdl = dispatcher.submit(std::move(schedule_state));
-
       FMPI_DBG(hdl.id());
 
-      for (; i < options.warmups + options.iterations;
-           i += options.num_threads) {
+      for (i = val; i < options.iterations; i += options.num_threads) {
         auto const s_tag = (options.sender_threads > 1) ? i : 2;
         auto const r_tag = (options.sender_threads > 1) ? i : 1;
 
-        FMPI_DBG(std::make_pair(s_tag, r_tag));
+        FMPI_DBG(std::make_tuple(thread_id->id, hdl.id(), s_tag, r_tag));
         // MPI_CHECK(MPI_Send(s_buf, size, MPI_CHAR, 1, i, world.mpiComm()));
         // MPI_CHECK(MPI_Recv(
         //    r_buf, size, MPI_CHAR, 1, i, world.mpiComm(), &reqstat[val]));
@@ -456,14 +444,18 @@ void* recv_thread(void* arg) {
         auto const s_succ =
             dispatcher.schedule(hdl, fmpi::message_type::ISEND, send);
 
-        auto const b_succ =
-            dispatcher.schedule(hdl, fmpi::message_type::BARRIER);
+        auto const b_succ = true;
+        //   dispatcher.schedule(hdl, fmpi::message_type::BARRIER);
 
         FMPI_ASSERT(s_succ and r_succ and b_succ);
       }
-      dispatcher.commit(hdl);
+
+      pthread_barrier_wait(&recv_barrier);
+
+      if (thread_id->id == 0) {
+        dispatcher.schedule(hdl, fmpi::message_type::COMMIT_ALL);
+      }
     }  // we automatically wait for the future
-#endif
 
 #if 0
 
