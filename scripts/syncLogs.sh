@@ -1,6 +1,5 @@
 #!/bin/sh
 
-
 root="$(git rev-parse --show-toplevel)"
 
 smuc_src='skx.supermuc:~/workspaces/alltoall'

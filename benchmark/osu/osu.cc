@@ -56,6 +56,10 @@ bool read_input(int argc, char* argv[]) {
   cp.add_uint(
       'W', "warmups_large", options.warmups_large, "Warmups per round.");
 
+  cp.add_int('t', "sender_threads", options.sender_threads, "Sender threads");
+  cp.add_int(
+      'T', "receiver_threads", options.num_threads, "Receiver threads");
+
   // cp.add_flag('V', "vary-window", options.window_varied, "Variable
   // Windows");
 
@@ -192,6 +196,11 @@ void print_topology(mpi::Context const& ctx, std::size_t nhosts) {
 }
 
 void free_memory_pt2pt_mul(void* sbuf, void* rbuf, int rank, int pairs) {
+  free(sbuf);
+  free(rbuf);
+}
+
+void free_memory(void* sbuf, void* rbuf, int rank) {
   free(sbuf);
   free(rbuf);
 }

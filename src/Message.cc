@@ -1,5 +1,7 @@
 #include <cstring>
+#include <fmpi/Debug.hpp>
 #include <fmpi/Message.hpp>
+#include <sstream>
 
 namespace fmpi {
 
@@ -21,6 +23,10 @@ int DefaultMessageHandler::operator()(
 }
 
 int DefaultMessageHandler::send(const Message& message, MPI_Request& req) {
+  std::ostringstream os;
+  os << "Send : { dest : " << message.dest()
+     << ", tag: " << message.sendtag() << "}";
+  FMPI_DBG(os.str());
   return MPI_Isend(
       message.sendbuffer(),
       static_cast<int>(message.sendcount()),
@@ -31,6 +37,12 @@ int DefaultMessageHandler::send(const Message& message, MPI_Request& req) {
       &req);
 }
 int DefaultMessageHandler::recv(Message& message, MPI_Request& req) {
+#ifdef FMPI_DEBUG_ASSERT
+  std::ostringstream os;
+  os << "Receive : { source : " << message.source()
+     << ", tag: " << message.recvtag() << "}";
+  FMPI_DBG(os.str());
+#endif
   return MPI_Irecv(
       message.recvbuffer(),
       static_cast<int>(message.recvcount()),

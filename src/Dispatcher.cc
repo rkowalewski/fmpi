@@ -162,6 +162,14 @@ inline void ScheduleCtx::complete_all() {
       std::back_inserter(idxs),
       [this](auto const& idx) { return handles_[idx] != MPI_REQUEST_NULL; });
 
+  if (idxs.empty()) {
+    for (auto&& i : range(detail::n_types)) {
+      // sanity check
+      FMPI_ASSERT(slots_[i].size() == nslots_[i]);
+    }
+    return;
+  }
+
   auto const ret = MPI_Waitall(
       static_cast<int>(handles_.size()), handles_.data(), statuses.data());
   FMPI_ASSERT(ret == MPI_SUCCESS);
@@ -270,10 +278,10 @@ void CommDispatcher::worker() {
         uptr->dispatch_task(task);
         uptr->test_all();
       } else {
-        //FMPI_DBG(task.id.id());
-        //FMPI_DBG(int(rtlx::to_underlying(task.type)));
-        //FMPI_DBG(uptr->nslots_);
-        //FMPI_DBG(std::make_pair(uptr->max_tasks_, uptr->n_processed_));
+        // FMPI_DBG(task.id.id());
+        // FMPI_DBG(int(rtlx::to_underlying(task.type)));
+        // FMPI_DBG(uptr->nslots_);
+        // FMPI_DBG(std::make_pair(uptr->max_tasks_, uptr->n_processed_));
         FMPI_ASSERT(uptr->state_ == ScheduleCtx::status::pending);
         uptr->dispatch_task(task);
         uptr->test_all();
@@ -283,6 +291,62 @@ void CommDispatcher::worker() {
       progress_all();
     }
   }
+}
+
+int ScheduleCtx::complete_any(message_type type) {
+  // complete one of pending requests and replace it with new slot
+
+  MPI_Status status{};
+
+  auto const ti = rtlx::to_underlying(type);
+
+  auto const first_slot =
+      std::accumulate(nslots_.begin(), nslots_.begin() + ti, 0);
+
+  if (nslots_[ti] == 1) {
+    FMPI_ASSERT(handles_[first_slot] != MPI_REQUEST_NULL);
+    FMPI_ASSERT(pending_[first_slot].valid());
+    FMPI_ASSERT(pending_[first_slot].type == type);
+
+    auto const ret = MPI_Wait(&handles_[first_slot], &status);
+    FMPI_ASSERT(ret == MPI_SUCCESS);
+    handles_[first_slot] = MPI_REQUEST_NULL;
+    return first_slot;
+  }
+
+  std::vector<MPI_Request> reqs;
+  std::vector<int>         idxs;
+
+  auto const last_slot = first_slot + static_cast<int>(nslots_[ti]);
+  FMPI_DBG(std::make_pair(first_slot, last_slot));
+
+  for (auto&& idx : range<int>(first_slot, last_slot)) {
+    FMPI_ASSERT(pending_[idx].valid());
+    FMPI_ASSERT(pending_[idx].type == type);
+    FMPI_ASSERT(handles_[idx] != MPI_REQUEST_NULL);
+    reqs.emplace_back(handles_[idx]);
+    idxs.emplace_back(idx);
+  }
+
+  auto const count =
+      std::count(std::begin(reqs), std::end(reqs), MPI_REQUEST_NULL);
+
+  // (reqs.size() > 0) -> (count == 0)
+  FMPI_ASSERT(reqs.empty() || count == 0);
+
+  FMPI_DBG(std::make_pair(reqs.size(), int(ti)));
+
+  int        c = MPI_UNDEFINED;
+  auto const ret =
+      MPI_Waitany(static_cast<int>(reqs.size()), reqs.data(), &c, &status);
+
+  FMPI_ASSERT(ret == MPI_SUCCESS);
+  FMPI_ASSERT(c != MPI_UNDEFINED);
+  FMPI_ASSERT(pending_[idxs[c]].valid());
+
+  auto slot      = idxs[c];
+  handles_[slot] = MPI_REQUEST_NULL;
+  return slot;
 }
 
 void ScheduleCtx::dispatch_task(CommTask task) {
@@ -302,45 +366,9 @@ void ScheduleCtx::dispatch_task(CommTask task) {
   auto const ti   = rtlx::to_underlying(task.type);
   auto&      rb   = slots_[ti];
   int        slot = MPI_UNDEFINED;
-  MPI_Status status;
 
   if (rb.empty()) {
-    // complete one of pending requests and replace it with new slot
-    std::vector<MPI_Request> reqs;
-    std::vector<int>         idxs;
-
-    auto const first_slot =
-        std::accumulate(nslots_.begin(), nslots_.begin() + ti, 0);
-
-    auto const last_slot = first_slot + static_cast<int>(nslots_[ti]);
-
-    FMPI_DBG(std::make_pair(first_slot, last_slot));
-
-    for (auto&& idx : range<int>(first_slot, last_slot)) {
-      if (pending_[idx].type == task.type) {
-        reqs.emplace_back(handles_[idx]);
-        idxs.emplace_back(idx);
-      }
-    }
-
-    auto const count =
-        std::count(std::begin(reqs), std::end(reqs), MPI_REQUEST_NULL);
-
-    // (reqs.size() > 0) -> (count == 0)
-    FMPI_ASSERT(reqs.empty() || count == 0);
-
-    FMPI_DBG(std::make_pair(reqs.size(), int(ti)));
-
-    int        c = MPI_UNDEFINED;
-    auto const ret =
-        MPI_Waitany(static_cast<int>(reqs.size()), reqs.data(), &c, &status);
-
-    FMPI_ASSERT(ret == MPI_SUCCESS);
-    FMPI_ASSERT(c != MPI_UNDEFINED);
-    FMPI_ASSERT(pending_[idxs[c]].valid());
-
-    slot           = idxs[c];
-    handles_[slot] = MPI_REQUEST_NULL;
+    slot = complete_any(task.type);
   } else {
     // obtain free slot from ring buffer
     slot = rb.back();

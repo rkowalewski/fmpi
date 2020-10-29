@@ -118,6 +118,7 @@ class ScheduleCtx {
   void complete_all();
   void complete_some();
   void test_all();
+  int  complete_any(message_type type);
   void dispatch_task(CommTask task);
   void notify_ready();
 

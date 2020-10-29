@@ -41,13 +41,16 @@ struct Params {
   int          window_size       = WINDOW_SIZE_LARGE;
   int          window_size_large = WINDOW_SIZE_LARGE;
   int          pairs;
+  int          sender_threads = -1;
+  int          num_threads    = 2;
 };
 
 extern struct Params options;
 
 bool read_input(int argc, char* argv[]);
 
-int allocate_memory_pt2pt(char** sbuf, char** rbuf, int rank);
+int  allocate_memory_pt2pt(char** sbuf, char** rbuf, int rank);
+void free_memory(void* sbuf, void* rbuf, int rank);
 
 int  allocate_memory_pt2pt_mul(char** sbuf, char** rbuf, int rank, int pairs);
 void free_memory_pt2pt_mul(void* sbuf, void* rbuf, int rank, int pairs);
