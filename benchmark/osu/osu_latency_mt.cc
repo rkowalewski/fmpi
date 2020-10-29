@@ -5,10 +5,12 @@
 #include <fmpi/concurrency/Future.hpp>
 #include <iostream>
 #include <rtlx/ScopedLambda.hpp>
+#include <tlx/math/div_ceil.hpp>
 
 #include "osu.hpp"
 
 pthread_barrier_t sender_barrier;
+pthread_barrier_t recv_barrier;
 
 static int num_threads_sender = 1;
 
@@ -28,10 +30,6 @@ typedef struct thread_tag {
   int id{};
 } thread_tag_t;
 
-constexpr size_t recv_slots = 1;
-constexpr size_t send_slots = 1;
-static auto      slots = std::array<std::size_t, 2>{recv_slots, send_slots};
-
 MPI_Status reqstat[MAX_REQ_NUM];
 
 void* send_thread(void* arg);
@@ -47,6 +45,10 @@ int main(int argc, char* argv[]) {
   auto finalizer = rtlx::scope_exit([]() { mpi::finalize(); });
 
   const auto& world = mpi::Context::world();
+
+  int wait = 0;
+  while (wait)
+    ;
 
   auto const myid = world.rank();
 
@@ -72,6 +74,7 @@ int main(int argc, char* argv[]) {
   print_topology(world, num_nodes(world));
 
   pthread_barrier_init(&sender_barrier, NULL, num_threads_sender);
+  pthread_barrier_init(&recv_barrier, NULL, options.num_threads);
 
   MPI_Barrier(world.mpiComm());
 
@@ -87,6 +90,8 @@ int main(int argc, char* argv[]) {
 
     for (i = 0; i < num_threads_sender; i++) {
       tags[i].id = i;
+      // tags[i].hdl    = hdl;
+      // tags[i].future = &future;
       pthread_create(&sr_threads[i], NULL, send_thread, &tags[i]);
     }
     for (i = 0; i < num_threads_sender; i++) {
@@ -95,6 +100,8 @@ int main(int argc, char* argv[]) {
   } else {
     for (i = 0; i < options.num_threads; i++) {
       tags[i].id = i;
+      // tags[i].hdl    = hdl;
+      // tags[i].future = &future;
       pthread_create(&sr_threads[i], NULL, recv_thread, &tags[i]);
     }
 
@@ -109,7 +116,6 @@ int main(int argc, char* argv[]) {
 void* send_thread(void* arg) {
   unsigned long align_size = sysconf(_SC_PAGESIZE);
   int           i = 0, val = 0, iter = 0;
-  int           myid = 0;
   char *        s_buf, *r_buf;
   double        t = 0, latency = 0;
   thread_tag_t* thread_id = (thread_tag_t*)arg;
@@ -119,7 +125,7 @@ void* send_thread(void* arg) {
 
   const auto& world = mpi::Context::world();
 
-  MPI_CHECK(MPI_Comm_rank(world.mpiComm(), &myid));
+  int const myid = world.rank();
 
   if (allocate_memory_pt2pt(&s_buf, &r_buf, myid)) {
     /* Error allocating memory */
@@ -165,6 +171,9 @@ void* send_thread(void* arg) {
     int flag_print = 0;
 
     {
+      auto slots = std::array<std::size_t, 2>{};
+      slots.fill(tlx::div_ceil(options.warmups, num_threads_sender));
+
       auto promise = fmpi::collective_promise{};
       auto future  = promise.get_future();
       auto schedule_state =
@@ -172,12 +181,13 @@ void* send_thread(void* arg) {
 
       // submit into dispatcher
       auto const hdl = dispatcher.submit(std::move(schedule_state));
+      FMPI_DBG(hdl.id());
 
       for (i = val; i < options.warmups; i += num_threads_sender) {
         auto const s_tag = (options.sender_threads > 1) ? i : 1;
         auto const r_tag = (options.sender_threads > 1) ? i : 2;
 
-        FMPI_DBG(std::make_tuple(hdl.id(), s_tag, r_tag));
+        FMPI_DBG(std::make_tuple(thread_id->id, hdl.id(), s_tag, r_tag));
         // MPI_CHECK(MPI_Send(s_buf, size, MPI_CHAR, 1, i, world.mpiComm()));
         // MPI_CHECK(MPI_Recv(
         //    r_buf, size, MPI_CHAR, 1, i, world.mpiComm(), &reqstat[val]));
@@ -192,16 +202,26 @@ void* send_thread(void* arg) {
         auto const r_succ =
             dispatcher.schedule(hdl, fmpi::message_type::IRECV, recv);
 
-        auto const b_succ =
-            dispatcher.schedule(hdl, fmpi::message_type::BARRIER);
+        auto const b_succ = true;
+        // dispatcher.schedule(hdl, fmpi::message_type::BARRIER);
 
         FMPI_ASSERT(s_succ and r_succ and b_succ);
       }
-      dispatcher.commit(hdl);
+      pthread_barrier_wait(&sender_barrier);
+      if (thread_id->id == 0) {
+        dispatcher.schedule(hdl, fmpi::message_type::COMMIT_ALL);
+      }
+      FMPI_ASSERT(future.valid());
+      FMPI_DBG("before future wait");
+      future.wait();
+      FMPI_DBG("after future wait");
     }  // we automatically wait for the future
 
-    FMPI_DBG("after warmups");
+    FMPI_DBG_STREAM("thread " << thread_id->id << ": after warmups");
 
+    // synchronize all senders
+    // pthread_barrier_wait(&sender_barrier);
+#if 0
     {
       auto promise = fmpi::collective_promise{};
       auto future  = promise.get_future();
@@ -214,11 +234,13 @@ void* send_thread(void* arg) {
       t_start    = MPI_Wtime();
       flag_print = 1;
 
-      for (i = val; i < options.iterations; i += num_threads_sender) {
+      FMPI_DBG(std::make_tuple(thread_id->id, i));
+      for (; i < options.warmups + options.iterations;
+           i += num_threads_sender) {
         auto const s_tag = (options.sender_threads > 1) ? i : 1;
         auto const r_tag = (options.sender_threads > 1) ? i : 2;
 
-        FMPI_DBG(std::make_tuple(hdl.id(), s_tag, r_tag));
+        FMPI_DBG(std::make_tuple(thread_id->id, hdl.id(), s_tag, r_tag));
         // MPI_CHECK(MPI_Send(s_buf, size, MPI_CHAR, 1, i, world.mpiComm()));
         // MPI_CHECK(MPI_Recv(
         //    r_buf, size, MPI_CHAR, 1, i, world.mpiComm(), &reqstat[val]));
@@ -240,6 +262,8 @@ void* send_thread(void* arg) {
       }
       dispatcher.commit(hdl);
     }  // we automatically wait for the future
+
+#endif
 
 #if 0
     for (i = val; i < options.iterations + options.warmups;
@@ -260,6 +284,8 @@ void* send_thread(void* arg) {
       }
     }
 #else
+    flag_print = thread_id->id == 0;
+    t_start    = MPI_Wtime();
 
 #endif
 
@@ -313,6 +339,8 @@ void* recv_thread(void* arg) {
     return ret;
   }
 
+  auto& dispatcher = fmpi::static_dispatcher_pool();
+
   for (std::size_t size = options.smin, iter = 0; size <= options.smax;
        size = (size ? size * 2 : 1)) {
     pthread_mutex_lock(&finished_size_mutex);
@@ -342,23 +370,24 @@ void* recv_thread(void* arg) {
     set_buffer_pt2pt(s_buf, myid, 'a', size);
     set_buffer_pt2pt(r_buf, myid, 'b', size);
 
-    auto& dispatcher = fmpi::static_dispatcher_pool();
     {
       auto promise = fmpi::collective_promise{};
       auto future  = promise.get_future();
+      auto slots   = std::array<std::size_t, 2>{};
+      slots.fill(tlx::div_ceil(options.warmups, options.num_threads));
+
+      FMPI_DBG(slots);
       auto schedule_state =
           std::make_unique<fmpi::ScheduleCtx>(slots, std::move(promise));
 
       // submit into dispatcher
       auto const hdl = dispatcher.submit(std::move(schedule_state));
-
       FMPI_DBG(hdl.id());
-
       for (i = val; i < options.warmups; i += options.num_threads) {
         auto const s_tag = (options.sender_threads > 1) ? i : 2;
         auto const r_tag = (options.sender_threads > 1) ? i : 1;
 
-        FMPI_DBG(std::make_pair(s_tag, r_tag));
+        FMPI_DBG(std::make_tuple(thread_id->id, hdl.id(), s_tag, r_tag));
         // MPI_CHECK(MPI_Send(s_buf, size, MPI_CHAR, 1, i, world.mpiComm()));
         // MPI_CHECK(MPI_Recv(
         //    r_buf, size, MPI_CHAR, 1, i, world.mpiComm(), &reqstat[val]));
@@ -373,14 +402,29 @@ void* recv_thread(void* arg) {
         auto const s_succ =
             dispatcher.schedule(hdl, fmpi::message_type::ISEND, send);
 
-        auto const b_succ =
-            dispatcher.schedule(hdl, fmpi::message_type::BARRIER);
+        auto const b_succ = true;
+        //   dispatcher.schedule(hdl, fmpi::message_type::BARRIER);
 
         FMPI_ASSERT(s_succ and r_succ and b_succ);
       }
-      dispatcher.commit(hdl);
+
+      pthread_barrier_wait(&recv_barrier);
+
+      if (thread_id->id == 0) {
+        dispatcher.schedule(hdl, fmpi::message_type::COMMIT_ALL);
+      }
+
+      FMPI_ASSERT(future.valid());
+      FMPI_DBG("before future wait");
+      future.wait();
     }  // we automatically wait for the future
 
+    // synchronize all senders
+    // pthread_barrier_wait(&recv_barrier);
+
+    FMPI_DBG_STREAM("thread " << thread_id->id << ": after warmups");
+
+#if 0
     {
       auto promise = fmpi::collective_promise{};
       auto future  = promise.get_future();
@@ -392,7 +436,8 @@ void* recv_thread(void* arg) {
 
       FMPI_DBG(hdl.id());
 
-      for (i = val; i < options.iterations; i += options.num_threads) {
+      for (; i < options.warmups + options.iterations;
+           i += options.num_threads) {
         auto const s_tag = (options.sender_threads > 1) ? i : 2;
         auto const r_tag = (options.sender_threads > 1) ? i : 1;
 
@@ -418,6 +463,7 @@ void* recv_thread(void* arg) {
       }
       dispatcher.commit(hdl);
     }  // we automatically wait for the future
+#endif
 
 #if 0
 

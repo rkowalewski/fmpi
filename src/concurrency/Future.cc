@@ -89,6 +89,7 @@ collective_future::arrival_queue() {
 }
 
 collective_future::~collective_future() {
+  FMPI_DBG(valid());
   if (valid()) {
     wait();
   }
@@ -96,6 +97,7 @@ collective_future::~collective_future() {
 void collective_future::wait() {
   FMPI_ASSERT(valid());
   sptr_->wait();
+  FMPI_DBG("notify");
 }
 
 bool collective_future::valid() const noexcept {

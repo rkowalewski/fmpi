@@ -143,6 +143,7 @@ inline void ScheduleCtx::test_all() {
 }
 
 inline void ScheduleCtx::notify_ready() {
+  FMPI_DBG("notify_ready");
   if (std::exchange(state_, status::ready) == status::pending) {
     promise_.set_value(MPI_SUCCESS);
   }
@@ -241,8 +242,7 @@ void CommDispatcher::worker() {
     // FMPI_DBG(sched_getcpu());
 
     if (status == channel_op_status::closed) {
-      constexpr bool blocking = true;
-      progress_all(blocking);
+      progress_all(true);
       break;
     }
     if (status == channel_op_status::success) {
@@ -259,6 +259,7 @@ void CommDispatcher::worker() {
       if (task.type == message_type::COMMIT ||
           task.type == message_type::BARRIER ||
           task.type == message_type::WAITSOME) {
+        // barriers
         if (task.type == message_type::WAITSOME) {
           uptr->complete_some();
         } else {
@@ -271,6 +272,17 @@ void CommDispatcher::worker() {
 
           schedules_.erase(it);
         }
+      } else if (task.type == message_type::COMMIT_ALL) {
+        FMPI_DBG_STREAM("Commit all " << task.id.id());
+        auto [first, last] = progress_all(true);
+
+        FMPI_DBG(first->first.id());
+        for (; first != last; ++first) {
+          auto& up = first->second;
+          up->notify_ready();
+        }
+        schedules_.erase(first, last);
+        std::cout << "erase all\n";
       } else if (task.type == message_type::ISENDRECV) {
         task.type = message_type::IRECV;
         uptr->dispatch_task(task);
@@ -284,11 +296,11 @@ void CommDispatcher::worker() {
         // FMPI_DBG(std::make_pair(uptr->max_tasks_, uptr->n_processed_));
         FMPI_ASSERT(uptr->state_ == ScheduleCtx::status::pending);
         uptr->dispatch_task(task);
-        uptr->test_all();
+        // uptr->test_all();
       }
     }
     if (schedules_.size() > 1) {
-      progress_all();
+      // progress_all();
     }
   }
 }
@@ -299,6 +311,8 @@ int ScheduleCtx::complete_any(message_type type) {
   MPI_Status status{};
 
   auto const ti = rtlx::to_underlying(type);
+
+  FMPI_ASSERT(ti < detail::n_types);
 
   auto const first_slot =
       std::accumulate(nslots_.begin(), nslots_.begin() + ti, 0);
@@ -421,17 +435,21 @@ void CommDispatcher::commit(ScheduleHandle const& hdl) {
   schedule(hdl, message_type::COMMIT);
 }
 
-void CommDispatcher::progress_all(bool blocking) {
+std::
+    pair<CommDispatcher::ctx_map::iterator, CommDispatcher::ctx_map::iterator>
+    CommDispatcher::progress_all(bool blocking) {
   // all requests
   std::vector<MPI_Request>  reqs;
   std::vector<ScheduleCtx*> sps;
   // map indices in reqs to tuples of (sps, req_idx)
   std::vector<std::pair<std::size_t, std::size_t>> ctx_handles;
 
+  // create a copy of all known schedules
+  auto known_schedules = schedules_.known_schedules();
   {
-    // create a copy of all known schedules
-    auto [first, last] = schedules_.known_schedules();
-    sps.reserve(std::distance(first, last));
+    auto [first, last]     = known_schedules;
+    auto const n_schedules = std::distance(first, last);
+    sps.reserve(n_schedules);
 
     for (auto it = first; it != last; ++it) {
       auto* uptr = it->second.get();
@@ -448,7 +466,7 @@ void CommDispatcher::progress_all(bool blocking) {
   }
 
   if (reqs.empty()) {
-    return;
+    return known_schedules;
   }
 
   FMPI_ASSERT(reqs.size() == ctx_handles.size());
@@ -474,10 +492,6 @@ void CommDispatcher::progress_all(bool blocking) {
     FMPI_ASSERT(ret == MPI_SUCCESS);
 
     idxs_completed.resize((n == MPI_UNDEFINED) ? 0 : n);
-  }
-
-  if (idxs_completed.empty()) {
-    return;
   }
 
   FixedVector<std::array<std::vector<Message>, detail::n_types>> ctx_tasks(
@@ -519,6 +533,7 @@ void CommDispatcher::progress_all(bool blocking) {
       }
     }
   }
+  return known_schedules;
 }
 
 CommDispatcher::ctx_map::ctx_map()
@@ -537,6 +552,11 @@ void CommDispatcher::ctx_map::erase(iterator it) {
   std::lock_guard<std::mutex> lg{mtx_};
   FMPI_ASSERT(do_find(it->first) != std::end(items_));
   items_.erase(it);
+}
+
+void CommDispatcher::ctx_map::erase(iterator first, iterator last) {
+  std::lock_guard<std::mutex> lg{mtx_};
+  items_.erase(first, last);
 }
 
 bool CommDispatcher::ctx_map::contains(ScheduleHandle const& hdl) const {
@@ -580,7 +600,7 @@ std::size_t CommDispatcher::ctx_map::size() const noexcept {
 std::
     pair<CommDispatcher::ctx_map::iterator, CommDispatcher::ctx_map::iterator>
     CommDispatcher::ctx_map::known_schedules() {
-  // std::lock_guard<std::mutex> lg{mtx_};
+  std::lock_guard<std::mutex> lg{mtx_};
   return std::make_pair(std::begin(items_), std::end(items_));
 }
 

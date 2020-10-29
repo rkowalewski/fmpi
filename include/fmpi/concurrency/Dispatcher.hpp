@@ -171,6 +171,7 @@ class CommDispatcher {
     void assign(
         ScheduleHandle const& hdl, std::unique_ptr<ScheduleCtx> /*p*/);
     void        erase(iterator it);
+    void        erase(iterator first, iterator last);
     std::size_t size() const noexcept;
 
     bool                            contains(ScheduleHandle const& hdl) const;
@@ -210,7 +211,8 @@ class CommDispatcher {
   void commit(ScheduleHandle const& hdl);
 
  private:
-  void        progress_all(bool blocking = false);
+  std::pair<ctx_map::iterator, ctx_map::iterator> progress_all(
+      bool blocking = false);
   static void dispatch_task(CommTask task, ScheduleCtx* uptr);
   void        worker();
 

@@ -18,9 +18,10 @@ enum class message_type : uint8_t
   INVALID,  // DO NEVER USE
   ISENDRECV,
   COPY,
-  COMMIT,
-  BARRIER,
   WAITSOME,
+  BARRIER,
+  COMMIT,
+  COMMIT_ALL,
 };
 
 class Message {
