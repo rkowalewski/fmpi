@@ -269,8 +269,9 @@ void CommDispatcher::worker() {
         if (task.type == message_type::COMMIT) {
           FMPI_DBG_STREAM("Commit " << task.id.id());
 
+          auto up = std::move(uptr);
           schedules_.erase(it);
-          uptr->notify_ready();
+          up->notify_ready();
         }
       } else if (task.type == message_type::COMMIT_ALL) {
         FMPI_DBG_STREAM("Commit all " << task.id.id());
@@ -306,7 +307,7 @@ void CommDispatcher::worker() {
       }
     }
     if (schedules_.size() > 1) {
-      // progress_all();
+      //progress_all();
     }
   }
 }
@@ -418,6 +419,7 @@ void ScheduleCtx::dispatch_task(CommTask task) {
     callbacks_[ti](std::vector<Message>({task.message}));
   }
 
+#if 0
   int flag = 0;
   MPI_Test(&handles_[slot], &flag, MPI_STATUS_IGNORE);
 
@@ -435,6 +437,7 @@ void ScheduleCtx::dispatch_task(CommTask task) {
       notify_ready();
     }
   }
+#endif
 }
 
 void CommDispatcher::commit(ScheduleHandle const& hdl) {

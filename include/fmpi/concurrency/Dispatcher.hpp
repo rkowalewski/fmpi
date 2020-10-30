@@ -197,6 +197,8 @@ class CommDispatcher {
 
   CommDispatcher(CommDispatcher const&) = delete;
   CommDispatcher& operator=(CommDispatcher const&) = delete;
+  CommDispatcher(CommDispatcher&&) = delete;
+  CommDispatcher& operator=(CommDispatcher&&) = delete;
 
   ScheduleHandle submit(std::unique_ptr<ScheduleCtx> ctx);
 

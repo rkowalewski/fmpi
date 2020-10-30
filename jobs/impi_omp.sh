@@ -49,4 +49,6 @@ export FMPI_DOMAIN_SIZE="$domain_size"
 
 print_stderr "${OMP_PLACES}"
 
+print_stderr "$my_command" "$@"
+
 "$my_command" "$@"
