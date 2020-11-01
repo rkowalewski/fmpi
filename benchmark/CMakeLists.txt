@@ -30,3 +30,7 @@ target_link_libraries(osu_mbw_mr fmpi)
 add_executable(osu_latency_mt osu/osu_latency_mt.cc osu/osu.cc)
 set_target_properties(osu_latency_mt PROPERTIES DEBUG_POSTFIX ".${CMAKE_DEBUG_POSTFIX}")
 target_link_libraries(osu_latency_mt fmpi)
+
+add_executable(osu_ialltoall osu/osu_ialltoall.cc osu/osu.cc)
+set_target_properties(osu_ialltoall PROPERTIES DEBUG_POSTFIX ".${CMAKE_DEBUG_POSTFIX}")
+target_link_libraries(osu_ialltoall fmpi)

@@ -40,6 +40,10 @@ Context::Context(MPI_Comm comm)
   : Context(comm, true) {
 }
 
+void Context::abort(int error) const {
+  MPI_Abort(m_comm, error);
+}
+
 int32_t Context::collectiveTag() const {
   return m_collective_tag--;
   // auto ret = m_collective_tag--;

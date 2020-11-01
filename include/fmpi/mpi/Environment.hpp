@@ -21,7 +21,7 @@ class Context {
   static constexpr const uint16_t req_pool_cap = 100;
 
  public:
-  using size_type      = std::uint32_t;
+  using size_type = std::uint32_t;
 
   explicit Context(MPI_Comm comm);
 
@@ -56,6 +56,8 @@ class Context {
   int32_t collectiveTag() const;
 
   static Context const& world();
+
+  void abort(int error) const;
 
  private:
   MPI_Comm                    m_comm{MPI_COMM_NULL};

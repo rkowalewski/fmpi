@@ -1,5 +1,6 @@
 #include <unistd.h>
 
+#include <algorithm>
 #include <cstring>
 #include <fmpi/Pinning.hpp>
 #include <fmpi/mpi/TypeMapper.hpp>
@@ -10,6 +11,16 @@
 #include "osu.hpp"
 
 struct Params options;
+
+/* A is the A in DAXPY for the Compute Kernel */
+#define A 2.0
+#define DEBUG 0
+/*
+ * We are using a 2-D matrix to perform dummy
+ * computation in non-blocking collective benchmarks
+ */
+#define DIM 25
+static float **a, *x, *y;
 
 namespace detail {
 template <class cT, class traits = std::char_traits<cT> >
@@ -203,4 +214,357 @@ void free_memory_pt2pt_mul(void* sbuf, void* rbuf, int rank, int pairs) {
 void free_memory(void* sbuf, void* rbuf, int rank) {
   free(sbuf);
   free(rbuf);
+}
+
+void allocate_host_arrays() {
+  int i = 0, j = 0;
+  a = (float**)malloc(DIM * sizeof(float*));
+
+  for (i = 0; i < DIM; i++) {
+    a[i] = (float*)malloc(DIM * sizeof(float));
+  }
+
+  x = (float*)malloc(DIM * sizeof(float));
+  y = (float*)malloc(DIM * sizeof(float));
+
+  for (i = 0; i < DIM; i++) {
+    x[i] = y[i] = 1.0f;
+    for (j = 0; j < DIM; j++) {
+      a[i][j] = 2.0f;
+    }
+  }
+}
+
+int allocate_memory_coll(void** buffer, size_t size) {
+  allocate_host_arrays();
+
+  size_t alignment = sysconf(_SC_PAGESIZE);
+
+  return posix_memalign(buffer, alignment, size);
+}
+
+void free_host_arrays() {
+  int i = 0;
+
+  if (x) {
+    free(x);
+  }
+  if (y) {
+    free(y);
+  }
+
+  if (a) {
+    for (i = 0; i < DIM; i++) {
+      free(a[i]);
+    }
+    free(a);
+  }
+
+  x = NULL;
+  y = NULL;
+  a = NULL;
+}
+
+void free_buffer(void* buffer) {
+  free(buffer);
+
+  free_host_arrays();
+}
+
+void print_preamble_nbc(int rank, std::string_view name) {
+  if (rank) {
+    return;
+  }
+
+  fprintf(stdout, "\n");
+
+  printf("%s\n", name.data());
+
+  fprintf(
+      stdout, "# Overall = Coll. Init + Compute + MPI_Test + MPI_Wait\n\n");
+
+  fprintf(stdout, "%-*s", 10, "# Size");
+  fprintf(stdout, "%*s", FIELD_WIDTH, "Overall(us)");
+
+  fprintf(stdout, "%*s", FIELD_WIDTH, "Compute(us)");
+  fprintf(stdout, "%*s", FIELD_WIDTH, "Coll. Init(us)");
+  fprintf(stdout, "%*s", FIELD_WIDTH, "MPI_Test(us)");
+  fprintf(stdout, "%*s", FIELD_WIDTH, "MPI_Wait(us)");
+  fprintf(stdout, "%*s", FIELD_WIDTH, "Pure Comm.(us)");
+  fprintf(stdout, "%*s\n", FIELD_WIDTH, "Overlap(%)");
+
+  fflush(stdout);
+}
+
+void init_arrays(double target_time) {
+#if defined(FMPI_DEBUG_ASSERT) && (FMPI_DEBUG_ASSERT == 1)
+  fprintf(
+      stderr,
+      "called init_arrays with target_time = %f \n",
+      (target_time * 1e6));
+#endif
+
+#ifdef _ENABLE_CUDA_KERNEL_
+  if (options.target == GPU || options.target == BOTH) {
+    /* Setting size of arrays for Dummy Compute */
+    int N = options.device_array_size;
+
+    /* Device Arrays for Dummy Compute */
+    allocate_device_arrays(N);
+
+    double t1 = 0.0, t2 = 0.0;
+
+    while (1) {
+      t1 = MPI_Wtime();
+
+      if (options.target == GPU || options.target == BOTH) {
+        CUDA_CHECK(cudaStreamCreate(&stream));
+        call_kernel(A, d_x, d_y, N, &stream);
+
+        CUDA_CHECK(cudaDeviceSynchronize());
+        CUDA_CHECK(cudaStreamDestroy(stream));
+      }
+
+      t2 = MPI_Wtime();
+      if ((t2 - t1) < target_time) {
+        N += 32;
+
+        /* Now allocate arrays of size N */
+        allocate_device_arrays(N);
+      } else {
+        break;
+      }
+    }
+
+    /* we reach here with desired N so save it and pass it to options */
+    options.device_array_size = N;
+    if (DEBUG) {
+      fprintf(stderr, "correct N = %d\n", N);
+    }
+  }
+#endif
+}
+
+void compute_on_host() {
+  int i = 0, j = 0;
+  for (i = 0; i < DIM; i++)
+    for (j = 0; j < DIM; j++) x[i] = x[i] + a[i][j] * a[j][i] + y[j];
+}
+
+static inline void do_compute_cpu(double target_seconds) {
+  double t1 = 0.0, t2 = 0.0;
+  double time_elapsed = 0.0;
+  while (time_elapsed < target_seconds) {
+    t1 = MPI_Wtime();
+    compute_on_host();
+    t2 = MPI_Wtime();
+    time_elapsed += (t2 - t1);
+  }
+  if (DEBUG) {
+    fprintf(stderr, "time elapsed = %f\n", (time_elapsed * 1e6));
+  }
+}
+
+double do_compute_and_probe(double seconds) {
+  double     t1 = 0.0, t2 = 0.0;
+  double     test_time                  = 0.0;
+  int        num_tests                  = 0;
+  double     target_seconds_for_compute = 0.0;
+  int        flag                       = 0;
+  MPI_Status status;
+
+  target_seconds_for_compute = seconds;
+
+#ifdef _ENABLE_CUDA_KERNEL_
+  if (options.target == GPU) {
+    if (options.num_probes) {
+      /* Do the dummy compute on GPU only */
+      do_compute_gpu(target_seconds_for_compute);
+      num_tests = 0;
+      while (num_tests < options.num_probes) {
+        t1 = MPI_Wtime();
+        MPI_CHECK(MPI_Test(request, &flag, &status));
+        t2 = MPI_Wtime();
+        test_time += (t2 - t1);
+        num_tests++;
+      }
+    } else {
+      do_compute_gpu(target_seconds_for_compute);
+    }
+  } else if (options.target == BOTH) {
+    if (options.num_probes) {
+      /* Do the dummy compute on GPU and CPU*/
+      do_compute_gpu(target_seconds_for_compute);
+      num_tests = 0;
+      while (num_tests < options.num_probes) {
+        t1 = MPI_Wtime();
+        MPI_CHECK(MPI_Test(request, &flag, &status));
+        t2 = MPI_Wtime();
+        test_time += (t2 - t1);
+        num_tests++;
+        do_compute_cpu(target_seconds_for_compute);
+      }
+    } else {
+      do_compute_gpu(target_seconds_for_compute);
+      do_compute_cpu(target_seconds_for_compute);
+    }
+  } else
+#endif
+    do_compute_cpu(target_seconds_for_compute);
+
+#ifdef _ENABLE_CUDA_KERNEL_
+  if (options.target == GPU || options.target == BOTH) {
+    CUDA_CHECK(cudaDeviceSynchronize());
+    CUDA_CHECK(cudaStreamDestroy(stream));
+  }
+#endif
+
+  return test_time;
+}
+
+void print_stats_nbc(
+    int    rank,
+    int    size,
+    double overall_time,
+    double cpu_time,
+    double comm_time,
+    double wait_time,
+    double init_time,
+    double test_time) {
+  if (rank) {
+    return;
+  }
+
+  double overlap;
+
+  /* Note : cpu_time received in this function includes time for
+   *      dummy compute as well as test calls so we will subtract
+   *      the test_time for overlap calculation as test is an
+   *      overhead
+   */
+
+  overlap = std::max<double>(
+      0, 100 - (((overall_time - (cpu_time - test_time)) / comm_time) * 100));
+
+  fprintf(stdout, "%-*d", 10, size);
+  fprintf(stdout, "%*.*f", FIELD_WIDTH, FLOAT_PRECISION, overall_time);
+
+  fprintf(
+      stdout,
+      "%*.*f%*.*f%*.*f%*.*f%*.*f%*.*f\n",
+      FIELD_WIDTH,
+      FLOAT_PRECISION,
+      (cpu_time - test_time),
+      FIELD_WIDTH,
+      FLOAT_PRECISION,
+      init_time,
+      FIELD_WIDTH,
+      FLOAT_PRECISION,
+      test_time,
+      FIELD_WIDTH,
+      FLOAT_PRECISION,
+      wait_time,
+      FIELD_WIDTH,
+      FLOAT_PRECISION,
+      comm_time,
+      FIELD_WIDTH,
+      FLOAT_PRECISION,
+      overlap);
+
+  fflush(stdout);
+}
+void calculate_and_print_stats(
+    int                 rank,
+    int                 size,
+    int                 numprocs,
+    double              timer,
+    double              latency,
+    double              test_time,
+    double              cpu_time,
+    double              wait_time,
+    double              init_time,
+    mpi::Context const& ctx) {
+  double test_total   = (test_time * 1e6) / options.iterations;
+  double tcomp_total  = (cpu_time * 1e6) / options.iterations;
+  double overall_time = (timer * 1e6) / options.iterations;
+  double wait_total   = (wait_time * 1e6) / options.iterations;
+  double init_total   = (init_time * 1e6) / options.iterations;
+  double comm_time    = latency;
+
+  if (rank != 0) {
+    MPI_CHECK(MPI_Reduce(
+        &test_total, &test_total, 1, MPI_DOUBLE, MPI_SUM, 0, ctx.mpiComm()));
+    MPI_CHECK(MPI_Reduce(
+        &comm_time, &comm_time, 1, MPI_DOUBLE, MPI_SUM, 0, ctx.mpiComm()));
+    MPI_CHECK(MPI_Reduce(
+        &overall_time,
+        &overall_time,
+        1,
+        MPI_DOUBLE,
+        MPI_SUM,
+        0,
+        ctx.mpiComm()));
+    MPI_CHECK(MPI_Reduce(
+        &tcomp_total,
+        &tcomp_total,
+        1,
+        MPI_DOUBLE,
+        MPI_SUM,
+        0,
+        ctx.mpiComm()));
+    MPI_CHECK(MPI_Reduce(
+        &wait_total, &wait_total, 1, MPI_DOUBLE, MPI_SUM, 0, ctx.mpiComm()));
+    MPI_CHECK(MPI_Reduce(
+        &init_total, &init_total, 1, MPI_DOUBLE, MPI_SUM, 0, ctx.mpiComm()));
+  } else {
+    MPI_CHECK(MPI_Reduce(
+        MPI_IN_PLACE, &test_total, 1, MPI_DOUBLE, MPI_SUM, 0, ctx.mpiComm()));
+    MPI_CHECK(MPI_Reduce(
+        MPI_IN_PLACE, &comm_time, 1, MPI_DOUBLE, MPI_SUM, 0, ctx.mpiComm()));
+    MPI_CHECK(MPI_Reduce(
+        MPI_IN_PLACE,
+        &overall_time,
+        1,
+        MPI_DOUBLE,
+        MPI_SUM,
+        0,
+        ctx.mpiComm()));
+    MPI_CHECK(MPI_Reduce(
+        MPI_IN_PLACE,
+        &tcomp_total,
+        1,
+        MPI_DOUBLE,
+        MPI_SUM,
+        0,
+        ctx.mpiComm()));
+    MPI_CHECK(MPI_Reduce(
+        MPI_IN_PLACE, &wait_total, 1, MPI_DOUBLE, MPI_SUM, 0, ctx.mpiComm()));
+    MPI_CHECK(MPI_Reduce(
+        MPI_IN_PLACE, &init_total, 1, MPI_DOUBLE, MPI_SUM, 0, ctx.mpiComm()));
+  }
+
+  MPI_CHECK(MPI_Barrier(ctx.mpiComm()));
+
+  /* Overall Time (Overlapped) */
+  overall_time = overall_time / numprocs;
+  /* Computation Time */
+  tcomp_total = tcomp_total / numprocs;
+  /* Time taken by MPI_Test calls */
+  test_total = test_total / numprocs;
+  /* Pure Communication Time */
+  comm_time = comm_time / numprocs;
+  /* Time for MPI_Wait() call */
+  wait_total = wait_total / numprocs;
+  /* Time for the NBC call */
+  init_total = init_total / numprocs;
+
+  print_stats_nbc(
+      rank,
+      size,
+      overall_time,
+      tcomp_total,
+      comm_time,
+      wait_total,
+      init_total,
+      test_total);
 }

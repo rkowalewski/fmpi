@@ -11,7 +11,7 @@
 
 #define FMPI_LOG_PREFIX "fmpi"
 
-#ifdef FMPI_DEBUG_ASSERT
+#if FMPI_DEBUG_ASSERT == 0
 #define FMPI_NOEXCEPT
 #else
 #define FMPI_NOEXCEPT noexcept

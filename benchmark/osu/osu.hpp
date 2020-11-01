@@ -60,4 +60,24 @@ void set_buffer_pt2pt(void* buffer, int rank, int data, size_t size);
 void     print_topology(mpi::Context const& ctx, std::size_t nhosts);
 uint32_t num_nodes(mpi::Context const& comm);
 
+// collectives
+int  allocate_memory_coll(void** buffer, size_t size);
+void free_buffer(void* buffer);
+
+void print_preamble_nbc(int rank, std::string_view name);
+void init_arrays(double target_time);
+
+double do_compute_and_probe(double seconds);
+
+void calculate_and_print_stats(
+    int                 rank,
+    int                 size,
+    int                 numprocs,
+    double              timer,
+    double              latency,
+    double              test_time,
+    double              cpu_time,
+    double              wait_time,
+    double              init_time,
+    mpi::Context const& ctx);
 #endif
