@@ -1,4 +1,3 @@
-#include <omp.h>
 #include <unistd.h>
 
 #include <fmpi/Debug.hpp>
@@ -12,13 +11,13 @@
 #include "osu.hpp"
 
 pthread_barrier_t sender_barrier;
-// pthread_barrier_t recv_barrier;
+pthread_barrier_t recv_barrier;
 
 // static int num_threads_sender = 1;
 
-static int    finished_size        = 0;
-static int    finished_size_sender = 0;
-static double t_start = 0, t_end = 0;
+int    finished_size        = 0;
+int    finished_size_sender = 0;
+double t_start = 0, t_end = 0;
 
 pthread_mutex_t finished_size_mutex;
 pthread_cond_t  finished_size_cond;
@@ -82,11 +81,9 @@ int main(int argc, char* argv[]) {
   print_topology(world, num_nodes(world));
 
   pthread_barrier_init(&sender_barrier, NULL, options.sender_threads);
-  // pthread_barrier_init(&recv_barrier, NULL, options.num_threads);
+  pthread_barrier_init(&recv_barrier, NULL, options.num_threads);
 
   MPI_Barrier(world.mpiComm());
-
-  printf("after barrier\n");
 
   auto& mydispatcher = fmpi::static_dispatcher_pool();
 
@@ -101,35 +98,23 @@ int main(int argc, char* argv[]) {
     for (auto i = 0; i < nt; i++) {
       tags[i].id                = i;
       tags[i].static_dispatcher = &mydispatcher;
-      // pthread_create(&sr_threads[i], NULL, send_thread, &tags[i]);
+      pthread_create(&sr_threads[i], NULL, send_thread, &tags[i]);
     }
     for (auto i = 0; i < nt; i++) {
       pthread_join(sr_threads[i], NULL);
       FMPI_DBG_STREAM("thread " << i << " joined");
     }
   } else {
-#if 0
     for (auto i = 0; i < options.num_threads; i++) {
       tags[i].id                = i;
       tags[i].static_dispatcher = &mydispatcher;
-      // pthread_create(&sr_threads[i], NULL, recv_thread, &tags[i]);
+      pthread_create(&sr_threads[i], NULL, recv_thread, &tags[i]);
     }
-
 
     for (auto i = 0; i < options.num_threads; i++) {
       pthread_join(sr_threads[i], NULL);
       FMPI_DBG_STREAM("thread " << i << " joined");
     }
-#else
-    omp_set_num_threads(options.num_threads);
-
-#pragma omp parallel
-    {
-      auto const i = omp_get_thread_num();
-      tags[i].id   = i;
-      recv_thread(&tags[i]);
-    }
-#endif
   }
 
   return EXIT_SUCCESS;
@@ -199,14 +184,10 @@ void* send_thread(void* arg) {
     set_buffer_pt2pt(s_buf, myid, 'a', size);
     set_buffer_pt2pt(r_buf, myid, 'b', size);
 
-    auto slots = std::array<std::size_t, 2>{1, 1};
-
-    if (options.sender_threads > 1) {
-      slots.fill(tlx::div_ceil(options.iterations, options.sender_threads));
-    }
-
     {
       MYDBG("preparing dispatcher");
+      auto slots = std::array<std::size_t, 2>{};
+      slots.fill(tlx::div_ceil(options.warmups, options.sender_threads));
 
       auto promise = fmpi::collective_promise{};
       auto future  = promise.get_future();
@@ -252,6 +233,9 @@ void* send_thread(void* arg) {
 
     {
       MYDBG("preparing dispatcher");
+      t_start = MPI_Wtime();
+      auto slots = std::array<std::size_t, 2>{};
+      slots.fill(tlx::div_ceil(options.iterations, options.sender_threads));
 
       auto promise = fmpi::collective_promise{};
       auto future  = promise.get_future();
@@ -262,7 +246,6 @@ void* send_thread(void* arg) {
       auto const hdl = dispatcher.submit(std::move(schedule_state));
       MYDBG(hdl.id());
 
-      t_start = MPI_Wtime();
 
       for (i = val; i < options.iterations; i += options.sender_threads) {
         auto const s_tag = (options.sender_threads > 1) ? i : 1;
@@ -282,9 +265,6 @@ void* send_thread(void* arg) {
 
         auto const r_succ =
             dispatcher.schedule(hdl, fmpi::message_type::IRECV, recv);
-
-        if (options.sender_threads == 1) {
-        }
 
         FMPI_ASSERT(s_succ and r_succ);
       }
@@ -382,14 +362,12 @@ void* recv_thread(void* arg) {
 
   for (std::size_t size = options.smin, iter = 0; size <= options.smax;
        size = (size ? size * 2 : 1)) {
-    MYDBG("before lock");
     pthread_mutex_lock(&finished_size_mutex);
 
     if (finished_size == options.num_threads) {
       MPI_CHECK(MPI_Barrier(world.mpiComm()));
 
       finished_size = 1;
-      MYDBG(finished_size);
 
       pthread_mutex_unlock(&finished_size_mutex);
       pthread_cond_broadcast(&finished_size_cond);
@@ -397,8 +375,6 @@ void* recv_thread(void* arg) {
 
     else {
       finished_size++;
-
-      MYDBG(finished_size);
 
       pthread_cond_wait(&finished_size_cond, &finished_size_mutex);
       pthread_mutex_unlock(&finished_size_mutex);
@@ -417,14 +393,11 @@ void* recv_thread(void* arg) {
 
     MYDBG("preparing schedule");
 
-    auto slots = std::array<std::size_t, 2>{1, 1};
-    if (options.num_threads > 1) {
-      slots.fill(tlx::div_ceil(options.warmups, options.num_threads));
-    }
-
     {
       auto promise = fmpi::collective_promise{};
       auto future  = promise.get_future();
+      auto slots   = std::array<std::size_t, 2>{};
+      slots.fill(tlx::div_ceil(options.warmups, options.num_threads));
 
       FMPI_DBG(slots);
       auto schedule_state =
@@ -459,8 +432,7 @@ void* recv_thread(void* arg) {
         FMPI_ASSERT(s_succ and r_succ and b_succ);
       }
 
-      // pthread_barrier_wait(&recv_barrier);
-#pragma omp barrier
+      pthread_barrier_wait(&recv_barrier);
 
       if (thread_id->id == 0) {
         dispatcher.schedule(hdl, fmpi::message_type::COMMIT_ALL);
@@ -469,11 +441,11 @@ void* recv_thread(void* arg) {
 
     MYDBG("after warmups");
 
-#pragma omp barrier
-
     {
       auto promise = fmpi::collective_promise{};
       auto future  = promise.get_future();
+      auto slots   = std::array<std::size_t, 2>{};
+      slots.fill(tlx::div_ceil(options.iterations, options.num_threads));
 
       FMPI_DBG(slots);
       auto schedule_state =
@@ -508,8 +480,7 @@ void* recv_thread(void* arg) {
         FMPI_ASSERT(s_succ and r_succ and b_succ);
       }
 
-#pragma omp barrier
-      // pthread_barrier_wait(&recv_barrier);
+      pthread_barrier_wait(&recv_barrier);
 
       if (thread_id->id == 0) {
         dispatcher.schedule(hdl, fmpi::message_type::COMMIT_ALL);
