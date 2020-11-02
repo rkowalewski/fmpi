@@ -13,6 +13,12 @@
 
 #include "osu.hpp"
 
+static constexpr std::size_t MIN_MESSAGE_SIZE = 1;
+static constexpr uint32_t    COLL_LOOP_SMALL  = 1000;
+static constexpr uint32_t    COLL_SKIP_SMALL  = 100;
+static constexpr uint32_t    COLL_LOOP_LARGE  = 100;
+static constexpr uint32_t    COLL_SKIP_LARGE  = 10;
+
 double dummy_compute(double seconds) {
   double test_time = 0.0;
 
@@ -29,6 +35,13 @@ int main(int argc, char* argv[]) {
   if (!read_input(argc, argv)) {
     return 0;
   }
+
+  options.smin          = std::max(options.smin, MIN_MESSAGE_SIZE);
+  options.warmups       = std::max(options.warmups, COLL_SKIP_SMALL);
+  options.warmups_large = std::max(options.warmups_large, COLL_SKIP_LARGE);
+  options.iterations    = std::max(options.iterations, COLL_LOOP_SMALL);
+  options.iterations_large =
+      std::max(options.iterations_large, COLL_LOOP_LARGE);
 
   const auto& world    = mpi::Context::world();
   auto const  rank     = world.rank();
