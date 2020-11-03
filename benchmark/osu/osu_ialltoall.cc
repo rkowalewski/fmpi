@@ -92,6 +92,7 @@ int main(int argc, char* argv[]) {
     constexpr auto winsz    = 64ul;
     auto const     opts = fmpi::ScheduleOpts{schedule, winsz, "", win_type};
     for (auto i = 0; i < options.iterations + options.warmups; i++) {
+      t_start = MPI_Wtime();
       auto future = fmpi::alltoall(
           sendbuf, size, MPI_CHAR, recvbuf, size, MPI_CHAR, world, opts);
 
@@ -104,6 +105,8 @@ int main(int argc, char* argv[]) {
       MPI_CHECK(MPI_Barrier(world.mpiComm()));
     }
 
+    FMPI_DBG("after warmups");
+
     MPI_CHECK(MPI_Barrier(world.mpiComm()));
 
     /* This is the pure comm. time */
@@ -111,6 +114,8 @@ int main(int argc, char* argv[]) {
 
     /* Comm. latency in seconds, fed to dummy_compute */
     auto const latency_in_secs = timer / options.iterations;
+
+    FMPI_DBG(latency_in_secs);
 
     init_arrays(latency_in_secs);
 
