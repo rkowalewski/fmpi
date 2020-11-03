@@ -128,7 +128,7 @@ collective_future Alltoall::execute() {
       });
 #endif
 
-#if 0
+#if 1
   schedule_state->register_callback(
       message_type::IRECV,
       [sptr = future.allocate_queue(ctx.size())](
@@ -146,6 +146,7 @@ collective_future Alltoall::execute() {
   auto const rounds =
       std::max(schedule.phaseCount() / opts.winsz, 1u);
 
+#if 0
   auto msg = Message{
       send_offset(ctx.rank()),
       sendcount,
@@ -160,6 +161,9 @@ collective_future Alltoall::execute() {
       ctx.mpiComm()};
 
   dispatcher.schedule(hdl, message_type::COPY, msg);
+#endif
+
+  Message msg{};
 
   for (auto&& r : range(rounds)) {
     auto const last = std::min(schedule.phaseCount(), (r + 1) * opts.winsz);
@@ -222,7 +226,7 @@ collective_future Alltoall::execute() {
     }
   }
 
-#if 0
+#if 1
   // copy
   {
     // using scoped_timer_switch = rtlx::ScopedTimerSwitch<steady_timer>;
@@ -233,13 +237,13 @@ collective_future Alltoall::execute() {
 
     local_copy();
 
-    future.arrival_queue()->push(make_receive(
-        recv_offset(ctx.rank()),
-        recvcount,
-        recvtype,
-        ctx.rank(),
-        sendrecvtag_,
-        ctx.mpiComm()));
+    //future.arrival_queue()->push(make_receive(
+    //    recv_offset(ctx.rank()),
+    //    recvcount,
+    //    recvtype,
+    //    ctx.rank(),
+    //    sendrecvtag_,
+    //    ctx.mpiComm()));
   }
 #endif
 
