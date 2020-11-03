@@ -128,7 +128,7 @@ collective_future Alltoall::execute() {
       });
 #endif
 
-#if 1
+#if 0
   schedule_state->register_callback(
       message_type::IRECV,
       [sptr = future.allocate_queue(ctx.size())](
@@ -144,7 +144,7 @@ collective_future Alltoall::execute() {
   auto const hdl = dispatcher.submit(std::move(schedule_state));
 
   auto const rounds =
-      std::max(tlx::div_ceil(schedule.phaseCount(), opts.winsz), 1u);
+      std::max(schedule.phaseCount() / opts.winsz, 1u);
 
   auto msg = Message{
       send_offset(ctx.rank()),
@@ -212,10 +212,13 @@ collective_future Alltoall::execute() {
       }
     }
 
-    if (opts.type == ScheduleOpts::WindowType::fixed) {
-      dispatcher.schedule(hdl, message_type::BARRIER);
-    } else {
-      dispatcher.schedule(hdl, message_type::WAITSOME);
+    if (r < (rounds - 1)) {
+      //if this is not the last round
+      if (opts.type == ScheduleOpts::WindowType::fixed) {
+        dispatcher.schedule(hdl, message_type::BARRIER);
+      } else {
+        dispatcher.schedule(hdl, message_type::WAITSOME);
+      }
     }
   }
 
