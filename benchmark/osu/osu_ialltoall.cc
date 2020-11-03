@@ -27,6 +27,13 @@ double dummy_compute(double seconds) {
   return test_time;
 }
 
+fmpi::ScheduleOpts schedule_options(
+    int                            algorithm,
+    std::uint32_t                  winsz,
+    std::string_view               id,
+    fmpi::ScheduleOpts::WindowType win_type,
+    mpi::Context const&            ctx);
+
 int main(int argc, char* argv[]) {
   // Initialize MPI
   mpi::initialize(&argc, &argv, mpi::ThreadLevel::Serialized);
@@ -36,12 +43,12 @@ int main(int argc, char* argv[]) {
     return 0;
   }
 
-  options.smin          = std::max(options.smin, MIN_MESSAGE_SIZE);
-  options.warmups       = std::max(options.warmups, COLL_SKIP_SMALL);
-  options.warmups_large = std::max(options.warmups_large, COLL_SKIP_LARGE);
-  options.iterations    = std::max(options.iterations, COLL_LOOP_SMALL);
-  options.iterations_large =
-      std::max(options.iterations_large, COLL_LOOP_LARGE);
+  // options.smin          = std::max(options.smin, MIN_MESSAGE_SIZE);
+  // options.warmups       = std::max(options.warmups, COLL_SKIP_SMALL);
+  // options.warmups_large = std::max(options.warmups_large, COLL_SKIP_LARGE);
+  // options.iterations    = std::max(options.iterations, COLL_LOOP_SMALL);
+  // options.iterations_large =
+  //    std::max(options.iterations_large, COLL_LOOP_LARGE);
 
   const auto& world    = mpi::Context::world();
   auto const  rank     = world.rank();
@@ -91,10 +98,10 @@ int main(int argc, char* argv[]) {
     double t_start = 0.0;
     double t_stop  = 0.0;
 
-    auto           schedule = fmpi::FlatHandshake{world};
     auto const     win_type = fmpi::ScheduleOpts::WindowType::fixed;
     constexpr auto winsz    = 64ul;
-    auto const     opts = fmpi::ScheduleOpts{schedule, winsz, "", win_type};
+    auto const     opts =
+        schedule_options(options.algorithm, winsz, "", win_type, world);
     for (auto i = 0; i < options.iterations + options.warmups; i++) {
       t_start     = MPI_Wtime();
       auto future = fmpi::alltoall(
@@ -180,4 +187,18 @@ int main(int argc, char* argv[]) {
   free_buffer(recvbuf);
 
   return EXIT_SUCCESS;
+}
+
+fmpi::ScheduleOpts schedule_options(
+    int                            algorithm,
+    std::uint32_t                  winsz,
+    std::string_view               id,
+    fmpi::ScheduleOpts::WindowType win_type,
+    mpi::Context const&            ctx) {
+  if (algorithm == 0) {
+    return fmpi::ScheduleOpts{fmpi::FlatHandshake{ctx}, winsz, "", win_type};
+  } else if (algorithm == 1) {
+    return fmpi::ScheduleOpts{fmpi::OneFactor{ctx}, winsz, "", win_type};
+  }
+  return fmpi::ScheduleOpts{fmpi::Linear{ctx}, winsz, "", win_type};
 }

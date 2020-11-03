@@ -12,7 +12,7 @@ namespace detail {
 using namespace std::literals::string_view_literals;
 // constexpr auto t_copy = "Tcomm.local_copy"sv;
 
-Alltoall::Alltoall(
+AlltoallCtx::AlltoallCtx(
     const void*         sendbuf_,
     size_t              sendcount_,
     MPI_Datatype        sendtype_,
@@ -38,21 +38,21 @@ Alltoall::Alltoall(
   MPI_Type_get_extent(sendtype, &sendlb, &sendextent_);
 }
 
-inline void* Alltoall::recv_offset(mpi::Rank r) const {
+inline void* AlltoallCtx::recv_offset(mpi::Rank r) const {
   FMPI_ASSERT(r >= 0);
   auto const segsz  = recvcount * recvextent_;
   auto const offset = static_cast<std::size_t>(r) * segsz;
   return fmpi::detail::add(recvbuf, offset);
 }
 
-inline const void* Alltoall::send_offset(mpi::Rank r) const {
+inline const void* AlltoallCtx::send_offset(mpi::Rank r) const {
   FMPI_ASSERT(r >= 0);
   auto const segsz  = sendcount * sendextent_;
   auto const offset = static_cast<std::size_t>(r) * segsz;
   return fmpi::detail::add(sendbuf, offset);
 }
 
-inline void Alltoall::local_copy() {
+inline void AlltoallCtx::local_copy() {
   auto const& ctx = comm;
   auto*       dst = recv_offset(ctx.rank());
   auto const* src = send_offset(ctx.rank());
@@ -60,7 +60,7 @@ inline void Alltoall::local_copy() {
   std::memcpy(dst, src, sendcount * sendextent_);
 }
 
-collective_future Alltoall::execute() {
+collective_future AlltoallCtx::execute() {
   auto const& schedule = opts.schedule;
   auto const& ctx      = comm;
 
@@ -128,7 +128,7 @@ collective_future Alltoall::execute() {
       });
 #endif
 
-#if 1
+#if 0
   schedule_state->register_callback(
       message_type::IRECV,
       [sptr = future.allocate_queue(ctx.size())](

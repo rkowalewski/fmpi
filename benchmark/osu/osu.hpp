@@ -43,6 +43,7 @@ struct Params {
   int          pairs;
   int          sender_threads = -1;
   int          num_threads    = 2;
+  int          algorithm      = 0;
 };
 
 extern struct Params options;

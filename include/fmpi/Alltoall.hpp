@@ -7,9 +7,9 @@
 namespace fmpi {
 namespace detail {
 
-class Alltoall {
+class AlltoallCtx {
  public:
-  Alltoall(
+  AlltoallCtx(
       const void*         sendbuf_,
       std::size_t         sendcount_,
       MPI_Datatype        sendtype_,
@@ -50,7 +50,7 @@ inline collective_future alltoall(
     MPI_Datatype        recvtype,
     mpi::Context const& ctx,
     ScheduleOpts const& schedule_args) {
-  auto coll = detail::Alltoall{
+  auto coll = detail::AlltoallCtx{
       sendbuf,
       sendcount,
       sendtype,

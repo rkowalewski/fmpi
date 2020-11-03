@@ -71,6 +71,9 @@ bool read_input(int argc, char* argv[]) {
   cp.add_int(
       'T', "receiver_threads", options.num_threads, "Receiver threads");
 
+  cp.add_int(
+      'a', "algorithm", options.algorithm, "Algorithm selection");
+
   // cp.add_flag('V', "vary-window", options.window_varied, "Variable
   // Windows");
 
