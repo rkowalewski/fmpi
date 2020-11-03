@@ -338,18 +338,11 @@ collective_future AlltoallCtx::comm_intermediate() {
 
       for (auto&& b : range(nblocks)) {
         auto const block = blocks[b];
-        auto       copy  = Message{
+        auto       copy  = make_copy(
+            add(&*algo->sbuf, b * blocksize),
             add(algo->tmpbuf.data(), block * blocksize),
             blocksize,
-            MPI_BYTE,
-            comm.rank(),
-            sendrecvtag_,
-            add(&*algo->sbuf, b * blocksize),
-            blocksize,
-            MPI_BYTE,
-            comm.rank(),
-            sendrecvtag_,
-            comm.mpiComm()};
+            MPI_BYTE);
 
         dispatcher.schedule(hdl, message_type::COPY, copy);
       }
@@ -374,6 +367,7 @@ collective_future AlltoallCtx::comm_intermediate() {
             recvfrom,
             sendrecvtag_,
             comm.mpiComm()};
+
         dispatcher.schedule(hdl, message_type::ISENDRECV, msg);
       }
 
@@ -382,18 +376,11 @@ collective_future AlltoallCtx::comm_intermediate() {
       for (auto&& b : range(nblocks)) {
         auto const block = blocks[b];
 
-        auto copy = Message{
+        auto copy = make_copy(
+            add(&*algo->tmpbuf.data(), block * blocksize),
             add(&*algo->rbuf, b * blocksize),
             blocksize,
-            MPI_BYTE,
-            comm.rank(),
-            sendrecvtag_,
-            add(&*algo->tmpbuf.data(), block * blocksize),
-            blocksize,
-            MPI_BYTE,
-            comm.rank(),
-            sendrecvtag_,
-            comm.mpiComm()};
+            MPI_BYTE);
 
         dispatcher.schedule(hdl, message_type::COPY, copy);
       }

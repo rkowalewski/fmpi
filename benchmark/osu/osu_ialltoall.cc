@@ -65,21 +65,21 @@ int main(int argc, char* argv[]) {
 
   auto const bufsize = options.smax * numprocs;
 
-  using value_t = int;
-  auto mpi_type = MPI_INT;
+  using value_t = char;
+  auto mpi_type = MPI_CHAR;
 
   value_t* sendbuf = NULL;
   value_t* recvbuf = NULL;
 
-  if (allocate_memory_coll((void**)&sendbuf, bufsize * sizeof(value_t))) {
+  if (allocate_memory_coll((void**)&sendbuf, bufsize)) {
     fprintf(stderr, "Could Not Allocate Memory [rank %d]\n", rank);
     world.abort(EXIT_FAILURE);
   }
 
-  // std::memset(sendbuf, 1, bufsize);
-  std::iota(sendbuf, sendbuf + bufsize, world.rank() * bufsize);
+  std::memset(sendbuf, 1, bufsize);
+  // std::iota(sendbuf, sendbuf + bufsize, world.rank() * bufsize);
 
-  if (allocate_memory_coll((void**)&recvbuf, bufsize * sizeof(value_t))) {
+  if (allocate_memory_coll((void**)&recvbuf, bufsize)) {
     fprintf(
         stderr,
         "Could Not Allocate Memory [rank %d]\n",
@@ -87,8 +87,8 @@ int main(int argc, char* argv[]) {
     world.abort(EXIT_FAILURE);
   }
 
-  std::memset(recvbuf, 0, bufsize);
-  // std::memset(recvbuf, 1, bufsize);
+  // std::memset(recvbuf, 0, bufsize);
+  std::memset(recvbuf, 1, bufsize);
 
   print_preamble_nbc(rank, std::string_view("osu_ialltoall"));
 
@@ -114,8 +114,7 @@ int main(int argc, char* argv[]) {
           sendbuf, size, mpi_type, recvbuf, size, mpi_type, world, opts);
 
       future.wait();
-      FMPI_DBG_RANGE(recvbuf, recvbuf + bufsize);
-      return 0;
+      // FMPI_DBG_RANGE(recvbuf, recvbuf + bufsize);
       t_stop = MPI_Wtime();
 
       if (i >= options.warmups) {

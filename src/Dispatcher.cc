@@ -307,7 +307,7 @@ void CommDispatcher::worker() {
       }
     }
     if (schedules_.size() > 1) {
-      //progress_all();
+      // progress_all();
     }
   }
 }
