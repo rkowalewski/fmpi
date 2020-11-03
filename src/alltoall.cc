@@ -387,14 +387,13 @@ collective_future AlltoallCtx::comm_intermediate() {
     }
   }
 
-  for (auto&& b_src : fmpi::range(static_cast<mpi::Rank>(comm.size()))) {
-    auto const b_dest =
-        mod(comm.rank() - b_src, static_cast<mpi::Rank>(comm.size()));
-
-    auto const offset = static_cast<std::size_t>(b_src) * blocksize;
+  for (auto&& b_src : fmpi::range(comm.size())) {
+    auto const my_rank = static_cast<uint32_t>(comm.rank());
+    auto const b_dest  = mod(my_rank - b_src, comm.size());
+    auto const offset  = b_src * blocksize;
 
     auto copy = make_copy(
-        recv_offset(b_dest),
+        recv_offset(static_cast<mpi::Rank>(b_dest)),
         add(algo->tmpbuf.data(), offset),
         blocksize,
         MPI_BYTE);
