@@ -79,9 +79,6 @@ int main(int argc, char* argv[]) {
 
   print_preamble_nbc(rank, std::string_view("osu_ialltoall"));
 
-  double timer = 0.0;
-  double t_start, t_stop;
-
   for (auto size = options.smin; size <= options.smax; size *= 2) {
     if (size > LARGE_MESSAGE_SIZE) {
       options.warmups    = options.warmups_large;
@@ -89,6 +86,10 @@ int main(int argc, char* argv[]) {
     }
 
     MPI_CHECK(MPI_Barrier(world.mpiComm()));
+
+    double timer   = 0.0;
+    double t_start = 0.0;
+    double t_stop  = 0.0;
 
     auto           schedule = fmpi::FlatHandshake{world};
     auto const     win_type = fmpi::ScheduleOpts::WindowType::fixed;
