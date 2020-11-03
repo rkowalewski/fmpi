@@ -68,7 +68,10 @@ int main(int argc, char* argv[]) {
   std::memset(sendbuf, 1, bufsize);
 
   if (allocate_memory_coll((void**)&recvbuf, options.smax * numprocs)) {
-    fprintf(stderr, "Could Not Allocate Memory [rank %d]\n", rank);
+    fprintf(
+        stderr,
+        "Could Not Allocate Memory [rank %d]\n",
+        static_cast<int>(rank));
     world.abort(EXIT_FAILURE);
   }
 
@@ -92,7 +95,7 @@ int main(int argc, char* argv[]) {
     constexpr auto winsz    = 64ul;
     auto const     opts = fmpi::ScheduleOpts{schedule, winsz, "", win_type};
     for (auto i = 0; i < options.iterations + options.warmups; i++) {
-      t_start = MPI_Wtime();
+      t_start     = MPI_Wtime();
       auto future = fmpi::alltoall(
           sendbuf, size, MPI_CHAR, recvbuf, size, MPI_CHAR, world, opts);
 

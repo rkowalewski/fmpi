@@ -86,7 +86,7 @@ bool read_input(int argc, char* argv[]) {
   }
 }
 
-int allocate_memory_pt2pt(char** sbuf, char** rbuf, int rank) {
+int allocate_memory_pt2pt(char** sbuf, char** rbuf, int /*rank*/) {
   auto const align_size = sysconf(_SC_PAGESIZE);
   if (posix_memalign((void**)sbuf, align_size, options.smax)) {
     fprintf(stderr, "Error allocating host memory\n");
@@ -206,7 +206,8 @@ void print_topology(mpi::Context const& ctx, std::size_t nhosts) {
   }
 }
 
-void free_memory_pt2pt_mul(void* sbuf, void* rbuf, int rank, int pairs) {
+void free_memory_pt2pt_mul(
+    void* sbuf, void* rbuf, int /*rank*/, int /*pairs*/) {
   free(sbuf);
   free(rbuf);
 }
@@ -366,7 +367,6 @@ static inline void do_compute_cpu(double target_seconds) {
 }
 
 double do_compute_and_probe(double seconds) {
-  double     t1 = 0.0, t2 = 0.0;
   double     test_time                  = 0.0;
   int        num_tests                  = 0;
   double     target_seconds_for_compute = 0.0;
@@ -376,6 +376,8 @@ double do_compute_and_probe(double seconds) {
   target_seconds_for_compute = seconds;
 
 #ifdef _ENABLE_CUDA_KERNEL_
+  double t1 = 0.0;
+  double t2 = 0.0;
   if (options.target == GPU) {
     if (options.num_probes) {
       /* Do the dummy compute on GPU only */
