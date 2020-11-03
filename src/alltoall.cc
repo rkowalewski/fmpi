@@ -146,6 +146,8 @@ collective_future AlltoallCtx::execute() {
   auto const rounds =
       std::max(schedule.phaseCount() / opts.winsz, 1u);
 
+  FMPI_DBG(rounds);
+
 #if 0
   auto msg = Message{
       send_offset(ctx.rank()),
@@ -217,6 +219,7 @@ collective_future AlltoallCtx::execute() {
     }
 
     if (r < (rounds - 1)) {
+      FMPI_DBG("scheduling barrier");
       //if this is not the last round
       if (opts.type == ScheduleOpts::WindowType::fixed) {
         dispatcher.schedule(hdl, message_type::BARRIER);
