@@ -32,6 +32,10 @@ class Schedule {
     return object->phaseCount();
   }
 
+  [[nodiscard]] bool is_intermediate() const {
+    return object->is_intermediate();
+  }
+
  private:
   struct Concept {
     virtual ~Concept() {
@@ -40,6 +44,7 @@ class Schedule {
     [[nodiscard]] virtual mpi::Rank        sendRank(uint32_t p) const = 0;
     [[nodiscard]] virtual mpi::Rank        recvRank(uint32_t p) const = 0;
     [[nodiscard]] virtual uint32_t         phaseCount() const         = 0;
+    [[nodiscard]] virtual bool             is_intermediate() const    = 0;
   };
 
   template <typename T>
@@ -61,6 +66,10 @@ class Schedule {
 
     [[nodiscard]] uint32_t phaseCount() const override {
       return object.phaseCount();
+    }
+
+    [[nodiscard]] bool is_intermediate() const override {
+      return object.is_intermediate();
     }
 
    private:
@@ -110,6 +119,10 @@ class FlatHandshake {
     return std::string_view("Ring");
   }
 
+  static constexpr bool is_intermediate() noexcept {
+    return false;
+  }
+
  private:
   Rank const     rank_{};
   uint32_t const nodes_{};
@@ -145,6 +158,10 @@ class OneFactor {
 
   static constexpr std::string_view name() noexcept {
     return std::string_view("OneFactor");
+  }
+
+  static constexpr bool is_intermediate() noexcept {
+    return false;
   }
 
  private:
@@ -202,6 +219,50 @@ class Linear {
 
   static constexpr std::string_view name() noexcept {
     return std::string_view("Linear");
+  }
+
+  static constexpr bool is_intermediate() noexcept {
+    return false;
+  }
+
+ private:
+  Rank const     rank_{};
+  uint32_t const nodes_{};
+};
+
+class Bruck {
+  using Rank    = mpi::Rank;
+  using Context = mpi::Context;
+
+ public:
+  constexpr Bruck() = default;
+
+  constexpr explicit Bruck(Context const& ctx) FMPI_NOEXCEPT
+    : Bruck(ctx.size(), ctx.rank()) {
+  }
+
+  constexpr Bruck(uint32_t nodes, Rank rank) FMPI_NOEXCEPT : rank_(rank),
+                                                             nodes_(nodes) {
+  }
+
+  [[nodiscard]] static constexpr Rank sendRank(uint32_t phase) FMPI_NOEXCEPT {
+    return Rank{static_cast<int>(phase)};
+  }
+
+  [[nodiscard]] static constexpr Rank recvRank(uint32_t phase) FMPI_NOEXCEPT {
+    return Rank{static_cast<int>(phase)};
+  }
+
+  [[nodiscard]] constexpr uint32_t phaseCount() const FMPI_NOEXCEPT {
+    return nodes_;
+  }
+
+  static constexpr std::string_view name() noexcept {
+    return std::string_view("Bruck");
+  }
+
+  static constexpr bool is_intermediate() noexcept {
+    return true;
   }
 
  private:

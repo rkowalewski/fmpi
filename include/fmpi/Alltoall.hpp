@@ -20,6 +20,7 @@ class AlltoallCtx {
       ScheduleOpts const& opts_);
 
   collective_future execute();
+  collective_future comm_intermediate();
 
  private:
   [[nodiscard]] const void* send_offset(mpi::Rank r) const;

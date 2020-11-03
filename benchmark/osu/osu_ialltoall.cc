@@ -7,6 +7,7 @@
 #include <fmpi/concurrency/Dispatcher.hpp>
 #include <fmpi/concurrency/Future.hpp>
 #include <iostream>
+#include <numeric>
 #include <rtlx/ScopedLambda.hpp>
 #include <sstream>
 #include <tlx/math/div_ceil.hpp>
@@ -64,17 +65,21 @@ int main(int argc, char* argv[]) {
 
   auto const bufsize = options.smax * numprocs;
 
-  char* sendbuf = NULL;
-  char* recvbuf = NULL;
+  using value_t = int;
+  auto mpi_type = MPI_INT;
 
-  if (allocate_memory_coll((void**)&sendbuf, bufsize)) {
+  value_t* sendbuf = NULL;
+  value_t* recvbuf = NULL;
+
+  if (allocate_memory_coll((void**)&sendbuf, bufsize * sizeof(value_t))) {
     fprintf(stderr, "Could Not Allocate Memory [rank %d]\n", rank);
     world.abort(EXIT_FAILURE);
   }
 
-  std::memset(sendbuf, 1, bufsize);
+  // std::memset(sendbuf, 1, bufsize);
+  std::iota(sendbuf, sendbuf + bufsize, world.rank() * bufsize);
 
-  if (allocate_memory_coll((void**)&recvbuf, options.smax * numprocs)) {
+  if (allocate_memory_coll((void**)&recvbuf, bufsize * sizeof(value_t))) {
     fprintf(
         stderr,
         "Could Not Allocate Memory [rank %d]\n",
@@ -82,7 +87,8 @@ int main(int argc, char* argv[]) {
     world.abort(EXIT_FAILURE);
   }
 
-  std::memset(recvbuf, 1, bufsize);
+  std::memset(recvbuf, 0, bufsize);
+  // std::memset(recvbuf, 1, bufsize);
 
   print_preamble_nbc(rank, std::string_view("osu_ialltoall"));
 
@@ -105,9 +111,11 @@ int main(int argc, char* argv[]) {
     for (auto i = 0; i < options.iterations + options.warmups; i++) {
       t_start     = MPI_Wtime();
       auto future = fmpi::alltoall(
-          sendbuf, size, MPI_CHAR, recvbuf, size, MPI_CHAR, world, opts);
+          sendbuf, size, mpi_type, recvbuf, size, mpi_type, world, opts);
 
       future.wait();
+      FMPI_DBG_RANGE(recvbuf, recvbuf + bufsize);
+      return 0;
       t_stop = MPI_Wtime();
 
       if (i >= options.warmups) {
@@ -144,7 +152,7 @@ int main(int argc, char* argv[]) {
       auto init_time = MPI_Wtime();
 
       auto future = fmpi::alltoall(
-          sendbuf, size, MPI_CHAR, recvbuf, size, MPI_CHAR, world, opts);
+          sendbuf, size, mpi_type, recvbuf, size, mpi_type, world, opts);
 
       init_time = MPI_Wtime() - init_time;
 
@@ -199,6 +207,9 @@ fmpi::ScheduleOpts schedule_options(
     return fmpi::ScheduleOpts{fmpi::FlatHandshake{ctx}, winsz, "", win_type};
   } else if (algorithm == 1) {
     return fmpi::ScheduleOpts{fmpi::OneFactor{ctx}, winsz, "", win_type};
+  } else if (algorithm == 2) {
+    return fmpi::ScheduleOpts{fmpi::Linear{ctx}, winsz, "", win_type};
   }
-  return fmpi::ScheduleOpts{fmpi::Linear{ctx}, winsz, "", win_type};
+
+  return fmpi::ScheduleOpts{fmpi::Bruck{ctx}, winsz, "", win_type};
 }

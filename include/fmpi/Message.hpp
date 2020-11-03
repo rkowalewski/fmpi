@@ -178,6 +178,25 @@ inline Message make_receive(
       comm);
 }
 
+inline Message make_copy(
+    void*        recvbuf,
+    const void*  sendbuf,
+    std::size_t  count,
+    MPI_Datatype type) noexcept {
+  return Message{
+      sendbuf,
+      count,
+      type,
+      mpi::Rank::null(),
+      MPI_ANY_TAG,
+      recvbuf,
+      count,
+      type,
+      mpi::Rank::null(),
+      MPI_ANY_TAG,
+      MPI_COMM_NULL};
+}
+
 struct DefaultMessageHandler {
   int operator()(message_type type, Message& message, MPI_Request& req) const;
 

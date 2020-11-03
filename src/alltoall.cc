@@ -3,6 +3,7 @@
 #include <fmpi/Debug.hpp>
 #include <fmpi/concurrency/Dispatcher.hpp>
 #include <fmpi/memory/detail/pointer_arithmetic.hpp>
+#include <fmpi/util/Math.hpp>
 #include <fmpi/util/NumericRange.hpp>
 #include <fmpi/util/Trace.hpp>
 
@@ -100,6 +101,10 @@ collective_future AlltoallCtx::execute() {
     return future;
   }
 
+  if (schedule.is_intermediate()) {
+    return comm_intermediate();
+  }
+
   // intermediate buffer for two pipelines
   // using thread_alloc = ThreadAllocator<std::byte>;
   // auto buf_alloc     = thread_alloc{};
@@ -143,8 +148,7 @@ collective_future AlltoallCtx::execute() {
   // submit into dispatcher
   auto const hdl = dispatcher.submit(std::move(schedule_state));
 
-  auto const rounds =
-      std::max(schedule.phaseCount() / opts.winsz, 1u);
+  auto const rounds = std::max(schedule.phaseCount() / opts.winsz, 1u);
 
   FMPI_DBG(rounds);
 
@@ -220,7 +224,7 @@ collective_future AlltoallCtx::execute() {
 
     if (r < (rounds - 1)) {
       FMPI_DBG("scheduling barrier");
-      //if this is not the last round
+      // if this is not the last round
       if (opts.type == ScheduleOpts::WindowType::fixed) {
         dispatcher.schedule(hdl, message_type::BARRIER);
       } else {
@@ -240,7 +244,7 @@ collective_future AlltoallCtx::execute() {
 
     local_copy();
 
-    //future.arrival_queue()->push(make_receive(
+    // future.arrival_queue()->push(make_receive(
     //    recv_offset(ctx.rank()),
     //    recvcount,
     //    recvtype,
@@ -253,5 +257,167 @@ collective_future AlltoallCtx::execute() {
   dispatcher.commit(hdl);
   return future;
 }
+
+struct BruckAlgorithm {
+ private:
+  using buffer_t = fmpi::FixedVector<std::byte>;
+
+ public:
+  BruckAlgorithm(std::size_t bytes)
+    : tmpbuf(bytes) {
+  }
+  int                round = 0;
+  buffer_t           tmpbuf;
+  buffer_t::iterator sbuf;
+  buffer_t::iterator rbuf;
+};
+
+collective_future AlltoallCtx::comm_intermediate() {
+  constexpr auto r = 2u;
+  // w = log_2 n
+  auto const w = static_cast<uint32_t>(std::ceil(fmpi::log(r, comm.size())));
+
+  auto  promise    = collective_promise{};
+  auto  future     = promise.get_future();
+  auto& dispatcher = static_dispatcher_pool();
+
+  auto const blocksize  = sendextent_ * sendcount;
+  auto const buffersize = blocksize * comm.size() * 2;
+  auto       algo       = std::make_shared<BruckAlgorithm>(buffersize);
+  auto       blocks     = fmpi::FixedVector<std::size_t>(comm.size() / 2);
+  algo->sbuf            = algo->tmpbuf.begin() + blocksize * comm.size();
+  algo->rbuf            = algo->sbuf + blocksize * comm.size() / 2;
+
+  std::array<std::size_t, detail::n_types> nslots{};
+  nslots.fill(r - 1);
+  auto schedule_state =
+      std::make_unique<ScheduleCtx>(nslots, std::move(promise));
+
+  // This is somehow an ugly hack
+  schedule_state->register_callback(
+      message_type::IRECV,
+      [sptr = algo](const std::vector<Message>& /*msgs*/) mutable {
+        sptr->round++;
+      });
+
+  // submit into dispatcher
+  auto const hdl = dispatcher.submit(std::move(schedule_state));
+
+  // rotate leftwards
+  std::memcpy(
+      algo->tmpbuf.data(),
+      send_offset(comm.rank()),
+      (comm.size() - comm.rank()) * blocksize);
+
+  if (comm.rank() != 0) {
+    std::memcpy(
+        algo->tmpbuf.data() + (comm.size() - comm.rank()) * blocksize,
+        sendbuf,
+        comm.rank() * blocksize);
+  }
+
+  using fmpi::mod;
+
+  for (auto&& i : fmpi::range(w)) {
+    for (auto&& d : fmpi::range(1u, r)) {
+      std::ignore = d;
+      // auto const j = static_cast<mpi::Rank>(d * std::pow(r, i));
+      auto j = static_cast<mpi::Rank>(1 << i);
+
+      // We exchange all blocks where the j-th bit is set
+      auto rng = range(1u, comm.size());
+
+      auto const b_last = std::copy_if(
+          std::begin(rng), std::end(rng), std::begin(blocks), [j](auto idx) {
+            return idx & j;
+          });
+
+      // a) pack blocks into a contigous send buffer
+
+      auto const nblocks = std::distance(std::begin(blocks), b_last);
+
+      for (auto&& b : range(nblocks)) {
+        auto const block = blocks[b];
+        auto       copy  = Message{
+            add(algo->tmpbuf.data(), block * blocksize),
+            blocksize,
+            MPI_BYTE,
+            comm.rank(),
+            sendrecvtag_,
+            add(&*algo->sbuf, b * blocksize),
+            blocksize,
+            MPI_BYTE,
+            comm.rank(),
+            sendrecvtag_,
+            comm.mpiComm()};
+
+        dispatcher.schedule(hdl, message_type::COPY, copy);
+      }
+
+      {
+        auto const peers = std::make_pair(
+            mod(comm.rank() - j, static_cast<mpi::Rank>(comm.size())),
+            mod(comm.rank() + j, static_cast<mpi::Rank>(comm.size())));
+        auto const [recvfrom, sendto] = peers;
+
+        FMPI_DBG(peers);
+
+        auto msg = Message{
+            &*algo->sbuf,
+            nblocks * blocksize,
+            MPI_BYTE,
+            sendto,
+            sendrecvtag_,
+            &*algo->rbuf,
+            nblocks * blocksize,
+            MPI_BYTE,
+            recvfrom,
+            sendrecvtag_,
+            comm.mpiComm()};
+        dispatcher.schedule(hdl, message_type::ISENDRECV, msg);
+      }
+
+      dispatcher.schedule(hdl, message_type::BARRIER);
+
+      for (auto&& b : range(nblocks)) {
+        auto const block = blocks[b];
+
+        auto copy = Message{
+            add(&*algo->rbuf, b * blocksize),
+            blocksize,
+            MPI_BYTE,
+            comm.rank(),
+            sendrecvtag_,
+            add(&*algo->tmpbuf.data(), block * blocksize),
+            blocksize,
+            MPI_BYTE,
+            comm.rank(),
+            sendrecvtag_,
+            comm.mpiComm()};
+
+        dispatcher.schedule(hdl, message_type::COPY, copy);
+      }
+    }
+  }
+
+  for (auto&& b_src : fmpi::range(static_cast<mpi::Rank>(comm.size()))) {
+    auto const b_dest =
+        mod(comm.rank() - b_src, static_cast<mpi::Rank>(comm.size()));
+
+    auto const offset = static_cast<std::size_t>(b_src) * blocksize;
+
+    auto copy = make_copy(
+        recv_offset(b_dest),
+        add(algo->tmpbuf.data(), offset),
+        blocksize,
+        MPI_BYTE);
+
+    dispatcher.schedule(hdl, message_type::COPY, copy);
+  }
+
+  dispatcher.commit(hdl);
+  return future;
+}
+
 }  // namespace detail
 }  // namespace fmpi

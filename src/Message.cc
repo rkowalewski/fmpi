@@ -24,8 +24,8 @@ int DefaultMessageHandler::operator()(
 
 int DefaultMessageHandler::send(const Message& message, MPI_Request& req) {
   std::ostringstream os;
-  os << "Send : { dest : " << message.dest()
-     << ", tag: " << message.sendtag() << "}";
+  os << "Send : { dest : " << message.dest() << ", tag: " << message.sendtag()
+     << "}";
   FMPI_DBG(os.str());
   return MPI_Isend(
       message.sendbuffer(),
