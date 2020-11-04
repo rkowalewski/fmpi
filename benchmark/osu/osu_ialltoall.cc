@@ -206,9 +206,12 @@ fmpi::ScheduleOpts schedule_options(
     return fmpi::ScheduleOpts{fmpi::FlatHandshake{ctx}, winsz, "", win_type};
   } else if (algorithm == 1) {
     return fmpi::ScheduleOpts{fmpi::OneFactor{ctx}, winsz, "", win_type};
-  } else if (algorithm == 2) {
+  }
+#if 0
+  else if (algorithm == 2) {
     return fmpi::ScheduleOpts{fmpi::Linear{ctx}, winsz, "", win_type};
   }
+#endif
 
   return fmpi::ScheduleOpts{fmpi::Bruck{ctx}, winsz, "", win_type};
 }
