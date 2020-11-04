@@ -204,6 +204,9 @@ struct DefaultMessageHandler {
   static int send(const Message& message, MPI_Request& req);
   static int recv(Message& message, MPI_Request& req);
   static int lcopy(Message& message);
+
+ public:
+  static int sendrecv(Message& message, std::array<MPI_Request*, 2> reqs);
 };
 
 }  // namespace fmpi

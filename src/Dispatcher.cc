@@ -303,11 +303,17 @@ void CommDispatcher::worker() {
           up->notify_ready();
         }
       } else if (task.type == message_type::ISENDRECV) {
+#if 0
         task.type = message_type::IRECV;
         uptr->dispatch_task(task);
         task.type = message_type::ISEND;
         uptr->dispatch_task(task);
         uptr->test_all();
+#else
+
+        FMPI_ASSERT(uptr->state_ == ScheduleCtx::status::pending);
+        uptr->dispatch_task(task);
+#endif
       } else {
         // FMPI_DBG(task.id.id());
         // FMPI_DBG(int(rtlx::to_underlying(task.type)));
@@ -377,11 +383,84 @@ int ScheduleCtx::complete_any(message_type type) {
 
   FMPI_ASSERT(ret == MPI_SUCCESS);
   FMPI_ASSERT(c != MPI_UNDEFINED);
-  FMPI_ASSERT(pending_[idxs[c]].valid());
 
   auto slot      = idxs[c];
   handles_[slot] = MPI_REQUEST_NULL;
+
+  auto& task = pending_[slot];
+  FMPI_ASSERT(task.valid());
+
+  if (callbacks_[ti]) {
+    callbacks_[ti](std::vector<Message>({task.message}));
+  }
+
+  task.reset();
+
   return slot;
+}
+
+int ScheduleCtx::acquire_slot(message_type type) {
+  auto const ti = rtlx::to_underlying(type);
+  auto&      rb = slots_[ti];
+
+  if (rb.empty()) {
+    return complete_any(type);
+  }
+  // obtain free slot from ring buffer
+  auto const slot = rb.back();
+  rb.pop_back();
+  return slot;
+}
+
+void ScheduleCtx::release_slot(message_type type, int slot) {
+  auto const ti     = rtlx::to_underlying(type);
+  handles_.at(slot) = MPI_REQUEST_NULL;
+  slots_[ti].push_front(slot);
+}
+
+void ScheduleCtx::dispatch_sendrecv(CommTask task) {
+  auto& message = task.message;
+
+  auto const slot_recv = acquire_slot(message_type::IRECV);
+  auto const slot_send = acquire_slot(message_type::ISEND);
+
+  auto& signal_send = signals_[rtlx::to_underlying(message_type::ISEND)];
+  auto& signal_recv = signals_[rtlx::to_underlying(message_type::IRECV)];
+
+  if (signal_send) {
+    signal_send(message);
+  }
+
+  if (signal_recv) {
+    signal_recv(message);
+  }
+
+  auto& rsend = handles_.at(slot_send);
+  auto& rrecv = handles_.at(slot_recv);
+
+  FMPI_ASSERT(rsend == MPI_REQUEST_NULL);
+  FMPI_ASSERT(rrecv == MPI_REQUEST_NULL);
+
+  auto reqs = std::array<MPI_Request*, 2>{&rsend, &rrecv};
+  FMPI_DBG(reqs);
+
+  auto ret = handler_.sendrecv(message, reqs);
+
+  if (rsend == MPI_REQUEST_NULL) {
+    release_slot(message_type::ISEND, slot_send);
+  } else {
+    pending_[slot_send]      = task;
+    pending_[slot_send].type = message_type::ISEND;
+  }
+
+  if (rrecv == MPI_REQUEST_NULL) {
+    release_slot(message_type::IRECV, slot_recv);
+  } else {
+    pending_[slot_recv]      = task;
+    pending_[slot_recv].type = message_type::IRECV;
+  }
+
+  FMPI_ASSERT(ret == MPI_SUCCESS);
 }
 
 void ScheduleCtx::dispatch_task(CommTask task) {
@@ -399,51 +478,39 @@ void ScheduleCtx::dispatch_task(CommTask task) {
     return;
   }
 
-  auto const ti   = rtlx::to_underlying(task.type);
-  auto&      rb   = slots_[ti];
-  int        slot = MPI_UNDEFINED;
-
-  if (rb.empty()) {
-    slot = complete_any(task.type);
-  } else {
-  // obtain free slot from ring buffer
-    slot = rb.back();
-  }
-
   steady_timer timer{trace_.duration(internal::t_dispatch)};
 
-  FMPI_ASSERT(handles_[slot] == MPI_REQUEST_NULL);
+  if (task.type == message_type::ISENDRECV) {
+    dispatch_sendrecv(task);
+    return;
+  }
+
+  auto const slot = acquire_slot(task.type);
+  auto const ti   = rtlx::to_underlying(task.type);
+
+  FMPI_ASSERT(handles_.at(slot) == MPI_REQUEST_NULL);
 
   // Issue new message
   if (signals_[ti]) {
     signals_[ti](task.message);
   }
 
-  FMPI_ASSERT(
-      task.type == message_type::IRECV || task.type == message_type::ISEND);
-
   auto& req = handles_[slot];
-
-  auto ret = handler_(task.type, task.message, req);
+  auto  ret = handler_(task.type, task.message, req);
 
   FMPI_ASSERT(ret == MPI_SUCCESS);
 
   if (req == MPI_REQUEST_NULL) {
-    // if request is still null, we are done
+    release_slot(task.type, slot);
     return;
   }
 
-  // acquire slot only if there is really a request
-  rb.pop_back();
-
   std::swap(task, pending_[slot]);
+
+  FMPI_ASSERT(not task.valid());
 
   // task holds now the previous task...
   // so let's complete callbacks for it
-
-  if (task.valid() and callbacks_[ti]) {
-    callbacks_[ti](std::vector<Message>({task.message}));
-  }
 
 #if 0
   int flag = 0;
