@@ -17,6 +17,7 @@ constexpr std::size_t      schedules_capacity = 100;
 static std::atomic_int32_t last_schedule_id   = 0;
 
 static constexpr auto t_complete_all  = std::string_view("t_complete_all");
+static constexpr auto t_test_all      = std::string_view("t_test_all");
 static constexpr auto t_complete_any  = std::string_view("t_complete_any");
 static constexpr auto t_complete_some = std::string_view("t_complete_some");
 static constexpr auto t_dispatch      = std::string_view("t_dispatch");
@@ -109,6 +110,7 @@ inline void ScheduleCtx::complete_some() {
 }
 
 inline void ScheduleCtx::test_all() {
+  steady_timer            timer{trace_.duration(internal::t_test_all)};
   FixedVector<MPI_Status> statuses(handles_.size());
 
   std::vector<int> idxs;
@@ -303,7 +305,7 @@ void CommDispatcher::worker() {
           up->notify_ready();
         }
       } else if (task.type == message_type::ISENDRECV) {
-#if 0
+#if 1
         task.type = message_type::IRECV;
         uptr->dispatch_task(task);
         task.type = message_type::ISEND;

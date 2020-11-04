@@ -88,25 +88,27 @@ int DefaultMessageHandler::sendrecv(
   auto const rb =
       detail::message_length(message.recvtype(), message.recvcount());
 
-  if (sb < detail::eager_limit and rb < detail::eager_limit) {
-    return MPI_Sendrecv(
-        message.sendbuffer(),
-        static_cast<int>(message.sendcount()),
-        message.sendtype(),
-        message.dest(),
-        message.sendtag(),
-        message.recvbuffer(),
-        static_cast<int>(message.recvcount()),
-        message.recvtype(),
-        message.source(),
-        message.recvtag(),
-        message.comm(),
-        MPI_STATUS_IGNORE);
-  }
+  // if (sb < detail::eager_limit and rb < detail::eager_limit) {
+  return MPI_Sendrecv(
+      message.sendbuffer(),
+      static_cast<int>(message.sendcount()),
+      message.sendtype(),
+      message.dest(),
+      message.sendtag(),
+      message.recvbuffer(),
+      static_cast<int>(message.recvcount()),
+      message.recvtype(),
+      message.source(),
+      message.recvtag(),
+      message.comm(),
+      MPI_STATUS_IGNORE);
+  //}
 
+#if 0
   FMPI_DBG(reqs);
 
   FMPI_CHECK_MPI(recv(message, *reqs[1]));
   return send(message, *reqs[0]);
+#endif
 }
 }  // namespace fmpi

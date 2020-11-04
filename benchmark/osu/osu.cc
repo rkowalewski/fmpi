@@ -53,11 +53,16 @@ static constexpr auto t_complete_all = std::string_view("t_complete_all");
 static constexpr auto t_complete_any = std::string_view("t_complete_any");
 static constexpr auto t_dispatch     = std::string_view("t_dispatch");
 static constexpr auto t_copy         = std::string_view("t_copy");
+static constexpr auto t_test_all     = std::string_view("t_test_all");
 
-std::array<std::string_view, 4> trace_names = {
-    t_complete_all, t_complete_any, t_dispatch, t_copy};
-std::array<std::string_view, 4> trace_headers = {
-    "wait_all (us)", "wait_any (us)", "dispatch(us)", "copy (us)"};
+std::array<std::string_view, 5> trace_names = {
+    t_complete_all, t_test_all, t_complete_any, t_dispatch, t_copy};
+std::array<std::string_view, 5> trace_headers = {
+    "wait_all (us)",
+    "test_all (us)",
+    "wait_any (us)",
+    "dispatch(us)",
+    "copy (us)"};
 
 }  // namespace detail
 
