@@ -112,6 +112,8 @@ collective_future AlltoallCtx::execute() {
   std::array<std::size_t, detail::n_types> nslots{};
   nslots.fill(opts.winsz);
 
+  FMPI_DBG(nslots);
+
   auto promise = collective_promise{};
   auto future  = promise.get_future();
   auto schedule_state =

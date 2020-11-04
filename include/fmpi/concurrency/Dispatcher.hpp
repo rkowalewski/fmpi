@@ -8,6 +8,7 @@
 #include <fmpi/concurrency/Future.hpp>
 #include <fmpi/container/FixedVector.hpp>
 #include <fmpi/memory/HeapAllocator.hpp>
+#include <fmpi/util/Trace.hpp>
 #include <list>
 #include <rtlx/Enum.hpp>
 #include <rtlx/Timer.hpp>
@@ -146,6 +147,8 @@ class ScheduleCtx {
 
   // promise to notify waiting tasks
   collective_promise promise_{};
+
+  MultiTrace trace_;
 };
 
 class CommDispatcher {
@@ -197,7 +200,7 @@ class CommDispatcher {
 
   CommDispatcher(CommDispatcher const&) = delete;
   CommDispatcher& operator=(CommDispatcher const&) = delete;
-  CommDispatcher(CommDispatcher&&) = delete;
+  CommDispatcher(CommDispatcher&&)                 = delete;
   CommDispatcher& operator=(CommDispatcher&&) = delete;
 
   ScheduleHandle submit(std::unique_ptr<ScheduleCtx> ctx);

@@ -16,6 +16,13 @@ constexpr std::size_t      channel_capacity   = 10000;
 constexpr std::size_t      schedules_capacity = 100;
 static std::atomic_int32_t last_schedule_id   = 0;
 
+static constexpr auto t_complete_all  = std::string_view("t_complete_all");
+static constexpr auto t_complete_any  = std::string_view("t_complete_any");
+static constexpr auto t_complete_some = std::string_view("t_complete_some");
+static constexpr auto t_dispatch      = std::string_view("t_dispatch");
+static constexpr auto t_copy          = std::string_view("t_copy");
+static constexpr auto trace_name      = std::string_view("schedule_ctx");
+
 }  // namespace internal
 
 CommDispatcher& static_dispatcher_pool() {
@@ -32,7 +39,8 @@ ScheduleCtx::ScheduleCtx(
   , handles_(winsz_, MPI_REQUEST_NULL)
   , pending_(winsz_)
   , max_tasks_(max_tasks)
-  , promise_(std::move(pr)) {
+  , promise_(std::move(pr))
+  , trace_(internal::trace_name) {
   // generate the slots
   for (auto&& i : range(detail::n_types)) {
     // FMPI_DBG(nslots_[i]);
@@ -58,6 +66,8 @@ inline void ScheduleCtx::reset_slots() {
 }
 
 inline void ScheduleCtx::complete_some() {
+  steady_timer timer{trace_.duration(internal::t_complete_some)};
+
   FixedVector<MPI_Status> statuses(handles_.size());
   std::vector<int>        idxs_completed(handles_.size());
   int                     n = MPI_UNDEFINED;
@@ -150,6 +160,8 @@ inline void ScheduleCtx::notify_ready() {
 }
 
 inline void ScheduleCtx::complete_all() {
+  steady_timer timer{trace_.duration(internal::t_complete_all)};
+
   FixedVector<MPI_Status> statuses(handles_.size());
 
   std::vector<std::size_t> idxs;
@@ -315,6 +327,8 @@ void CommDispatcher::worker() {
 int ScheduleCtx::complete_any(message_type type) {
   // complete one of pending requests and replace it with new slot
 
+  steady_timer timer{trace_.duration(internal::t_complete_any)};
+
   MPI_Status status{};
 
   auto const ti = rtlx::to_underlying(type);
@@ -372,7 +386,8 @@ int ScheduleCtx::complete_any(message_type type) {
 
 void ScheduleCtx::dispatch_task(CommTask task) {
   if (task.type == message_type::COPY) {
-    MPI_Request dummy = MPI_REQUEST_NULL;
+    steady_timer timer{trace_.duration(internal::t_copy)};
+    MPI_Request  dummy = MPI_REQUEST_NULL;
 
     auto ret = handler_(message_type::COPY, task.message, dummy);
     FMPI_ASSERT(ret == MPI_SUCCESS);
@@ -395,6 +410,8 @@ void ScheduleCtx::dispatch_task(CommTask task) {
     slot = rb.back();
     rb.pop_back();
   }
+
+  steady_timer timer{trace_.duration(internal::t_dispatch)};
 
   FMPI_ASSERT(handles_[slot] == MPI_REQUEST_NULL);
 

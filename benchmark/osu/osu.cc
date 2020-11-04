@@ -3,7 +3,10 @@
 #include <algorithm>
 #include <cstring>
 #include <fmpi/Pinning.hpp>
+#include <fmpi/container/FixedVector.hpp>
 #include <fmpi/mpi/TypeMapper.hpp>
+#include <fmpi/util/NumericRange.hpp>
+#include <fmpi/util/Trace.hpp>
 #include <iostream>
 #include <sstream>
 #include <tlx/cmdline_parser.hpp>
@@ -43,6 +46,19 @@ class basic_onullstream : public std::basic_ostream<cT, traits> {
  private:
   basic_nullbuf<cT, traits> m_sbuf;
 };
+
+static constexpr auto trace_name = std::string_view("schedule_ctx");
+
+static constexpr auto t_complete_all = std::string_view("t_complete_all");
+static constexpr auto t_complete_any = std::string_view("t_complete_any");
+static constexpr auto t_dispatch     = std::string_view("t_dispatch");
+static constexpr auto t_copy         = std::string_view("t_copy");
+
+std::array<std::string_view, 4> trace_names = {
+    t_complete_all, t_complete_any, t_dispatch, t_copy};
+std::array<std::string_view, 4> trace_headers = {
+    "wait_all (us)", "wait_any (us)", "dispatch(us)", "copy (us)"};
+
 }  // namespace detail
 
 bool read_input(int argc, char* argv[]) {
@@ -71,8 +87,7 @@ bool read_input(int argc, char* argv[]) {
   cp.add_int(
       'T', "receiver_threads", options.num_threads, "Receiver threads");
 
-  cp.add_int(
-      'a', "algorithm", options.algorithm, "Algorithm selection");
+  cp.add_int('a', "algorithm", options.algorithm, "Algorithm selection");
 
   // cp.add_flag('V', "vary-window", options.window_varied, "Variable
   // Windows");
@@ -295,7 +310,13 @@ void print_preamble_nbc(int rank, std::string_view name) {
   fprintf(stdout, "%*s", FIELD_WIDTH, "MPI_Test(us)");
   fprintf(stdout, "%*s", FIELD_WIDTH, "MPI_Wait(us)");
   fprintf(stdout, "%*s", FIELD_WIDTH, "Pure Comm.(us)");
-  fprintf(stdout, "%*s\n", FIELD_WIDTH, "Overlap(%)");
+  fprintf(stdout, "%*s", FIELD_WIDTH, "Overlap(%)");
+
+  for (auto&& h : detail::trace_headers) {
+    fprintf(stdout, "%*s", FIELD_WIDTH, h.data());
+  }
+
+  fprintf(stdout, "\n");
 
   fflush(stdout);
 }
@@ -428,14 +449,15 @@ double do_compute_and_probe(double seconds) {
 }
 
 void print_stats_nbc(
-    int    rank,
-    int    size,
-    double overall_time,
-    double cpu_time,
-    double comm_time,
-    double wait_time,
-    double init_time,
-    double test_time) {
+    int                              rank,
+    int                              size,
+    double                           overall_time,
+    double                           cpu_time,
+    double                           comm_time,
+    double                           wait_time,
+    double                           init_time,
+    double                           test_time,
+    fmpi::FixedVector<double> const& dispatch_times) {
   if (rank) {
     return;
   }
@@ -456,7 +478,7 @@ void print_stats_nbc(
 
   fprintf(
       stdout,
-      "%*.*f%*.*f%*.*f%*.*f%*.*f%*.*f\n",
+      "%*.*f%*.*f%*.*f%*.*f%*.*f%*.*f",
       FIELD_WIDTH,
       FLOAT_PRECISION,
       (cpu_time - test_time),
@@ -475,6 +497,12 @@ void print_stats_nbc(
       FIELD_WIDTH,
       FLOAT_PRECISION,
       overlap);
+
+  for (auto&& i : fmpi::range(detail::trace_names.size())) {
+    fprintf(stdout, "%*.*f", FIELD_WIDTH, FLOAT_PRECISION, dispatch_times[i]);
+  }
+
+  fprintf(stdout, "\n");
 
   fflush(stdout);
 }
@@ -495,6 +523,35 @@ void calculate_and_print_stats(
   double wait_total   = (wait_time * 1e6) / options.iterations;
   double init_total   = (init_time * 1e6) / options.iterations;
   double comm_time    = latency;
+
+  auto& trace_store = fmpi::TraceStore::instance();
+
+  auto my_times = fmpi::FixedVector<double>(detail::trace_names.size(), 0.0);
+  auto my_times_red =
+      fmpi::FixedVector<double>(detail::trace_names.size(), 0.0);
+
+  if (not trace_store.empty()) {
+    auto const& traces = trace_store.traces(detail::trace_name);
+
+    using double_usecs =
+        std::chrono::duration<double, std::chrono::microseconds::period>;
+
+    for (auto&& idx : fmpi::range(detail::trace_names.size())) {
+      auto const trace_name = detail::trace_names[idx];
+
+      auto it = traces.find(std::string(trace_name));
+      if (it != traces.end()) {
+        auto const   t_val = it->second;
+        double const us =
+            std::chrono::duration_cast<double_usecs>(t_val).count();
+        my_times[idx] = us / (options.warmups + options.iterations);
+      }
+    }
+
+    fmpi::TraceStore::instance().erase(detail::trace_name);
+  }
+
+  FMPI_ASSERT(fmpi::TraceStore::instance().empty());
 
   if (rank != 0) {
     MPI_CHECK(MPI_Reduce(
@@ -521,6 +578,15 @@ void calculate_and_print_stats(
         &wait_total, &wait_total, 1, MPI_DOUBLE, MPI_SUM, 0, ctx.mpiComm()));
     MPI_CHECK(MPI_Reduce(
         &init_total, &init_total, 1, MPI_DOUBLE, MPI_SUM, 0, ctx.mpiComm()));
+
+    MPI_CHECK(MPI_Reduce(
+        my_times.data(),
+        my_times.data(),
+        static_cast<int>(my_times.size()),
+        MPI_DOUBLE,
+        MPI_SUM,
+        0,
+        ctx.mpiComm()));
   } else {
     MPI_CHECK(MPI_Reduce(
         MPI_IN_PLACE, &test_total, 1, MPI_DOUBLE, MPI_SUM, 0, ctx.mpiComm()));
@@ -546,6 +612,14 @@ void calculate_and_print_stats(
         MPI_IN_PLACE, &wait_total, 1, MPI_DOUBLE, MPI_SUM, 0, ctx.mpiComm()));
     MPI_CHECK(MPI_Reduce(
         MPI_IN_PLACE, &init_total, 1, MPI_DOUBLE, MPI_SUM, 0, ctx.mpiComm()));
+    MPI_CHECK(MPI_Reduce(
+        my_times.data(),
+        my_times_red.data(),
+        static_cast<int>(my_times.size()),
+        MPI_DOUBLE,
+        MPI_SUM,
+        0,
+        ctx.mpiComm()));
   }
 
   MPI_CHECK(MPI_Barrier(ctx.mpiComm()));
@@ -563,6 +637,10 @@ void calculate_and_print_stats(
   /* Time for the NBC call */
   init_total = init_total / numprocs;
 
+  for (auto& t : my_times_red) {
+    t = t / numprocs;
+  }
+
   print_stats_nbc(
       rank,
       size,
@@ -571,5 +649,6 @@ void calculate_and_print_stats(
       comm_time,
       wait_total,
       init_total,
-      test_total);
+      test_total,
+      my_times_red);
 }

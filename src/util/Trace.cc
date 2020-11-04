@@ -20,6 +20,15 @@ void TraceStore::insert(std::string_view ctx, multi_trace const& values) {
   }
 }
 
+void TraceStore::merge(std::string_view ctx, multi_trace const& values) {
+  if constexpr (kEnableTrace) {
+    auto& trace = m_traces[context(ctx)];
+    for (auto it = values.begin(); it != values.end(); ++it) {
+      trace[it->first] += it->second;
+    }
+  }
+}
+
 void TraceStore::erase(std::string_view ctx) {
   m_traces.erase(std::string(ctx));
 }
@@ -41,8 +50,8 @@ MultiTrace::~MultiTrace() {
   if constexpr (kEnableTrace) {
     if (!name_.empty() && name_ != anonymous) {
       auto& global_instance = TraceStore::instance();
-      FMPI_ASSERT(!global_instance.contains(name_));
-      global_instance.insert(name_, values_);
+      //FMPI_ASSERT(!global_instance.contains(name_));
+      global_instance.merge(name_, values_);
     }
   }
 }
