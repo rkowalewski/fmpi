@@ -406,9 +406,8 @@ void ScheduleCtx::dispatch_task(CommTask task) {
   if (rb.empty()) {
     slot = complete_any(task.type);
   } else {
-    // obtain free slot from ring buffer
+  // obtain free slot from ring buffer
     slot = rb.back();
-    rb.pop_back();
   }
 
   steady_timer timer{trace_.duration(internal::t_dispatch)};
@@ -423,9 +422,19 @@ void ScheduleCtx::dispatch_task(CommTask task) {
   FMPI_ASSERT(
       task.type == message_type::IRECV || task.type == message_type::ISEND);
 
-  auto ret = handler_(task.type, task.message, handles_[slot]);
+  auto& req = handles_[slot];
+
+  auto ret = handler_(task.type, task.message, req);
 
   FMPI_ASSERT(ret == MPI_SUCCESS);
+
+  if (req == MPI_REQUEST_NULL) {
+    // if request is still null, we are done
+    return;
+  }
+
+  // acquire slot only if there is really a request
+  rb.pop_back();
 
   std::swap(task, pending_[slot]);
 
