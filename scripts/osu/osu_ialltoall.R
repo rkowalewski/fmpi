@@ -46,6 +46,7 @@ if (argv$input == "-") {
 }
 
 data <- data %>%
+    filter(size <= 128 * 1024) %>%
     group_by(nodes,procs,size) %>%
     mutate(speedup = total[bench == "Baseline"] / total) %>%
     ungroup()
@@ -59,8 +60,6 @@ data <- data %>%
                   sub(pattern = "(.*)\\.(.*)\\.(.*)$", replacement = "\\3", bench))
     )
 
-cat(format_csv(data))
-
 if (nrow(data) == 0) {
     stop("no data available")
 }
@@ -69,7 +68,10 @@ if (nrow(data) == 0) {
 title <- argv$title
 
 if (argv$output == '') {
-    argv$output = paste0(remove_extension(basename(argv$input)),".latency")
+    argv$output = paste0(remove_extension(basename(argv$input)),".ialltoall")
+    if (argv$speedup) {
+        argv$output = paste0(argv$output,".speedup")
+    }
 }
 
 if (title == '') {
@@ -109,6 +111,8 @@ theme$legend.position = "top"
 theme$legend.background = element_rect(size=.2)
 theme$axis.title.x=element_text(margin = margin(t = 10, r = 0, b = 0, l = 0))
 
+# data <- data %>% filter(algo != "Ring")
+
 # The errorbars overlapped, so use position_dodge to move them horizontally
 pd <- position_dodge(0.1) # move them .05 to the left and right
 
@@ -118,13 +122,16 @@ p <- p + geom_line(aes_string(linetype=color, colour=color)) +
                aes_string(shape=shape,colour=color)) +
     theme +
     scale_x_discrete(labels=data$hr) +
-    labs(shape="Window Size", colour="Algorithm", linetype="Algorithm") +
     # To use for line and point colors, add
     # scale_colour_grey() +
     # scale_colour_brewer() +
     scale_color_npg() +
     guides(color = guide_legend(override.aes = list(shape = NA))) +
     ylab(ylab) + xlab("Message Size (bytes)")
+
+# if (isFALSE(argv$speedup)) {
+#     p <- p + labs(shape="Window Size", colour="Algorithm", linetype="Algorithm")
+# }
 
 if (argv$speedup) {
     mylimit <- function(x) {

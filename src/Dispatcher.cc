@@ -305,7 +305,7 @@ void CommDispatcher::worker() {
           up->notify_ready();
         }
       } else if (task.type == message_type::ISENDRECV) {
-#if 1
+#if 0
         task.type = message_type::IRECV;
         uptr->dispatch_task(task);
         task.type = message_type::ISEND;

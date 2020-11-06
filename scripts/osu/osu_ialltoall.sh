@@ -73,7 +73,7 @@ for f in "$dirname"/*"$name"*.log; do
   echo "$data" | sed "s/^/$nodes,$procs,/g" >> "$csv"
 done
 
-# Rscript "$SCRIPTPATH"/osu_ialltoall.R --input "$csv" "$@"
-# Rscript "$SCRIPTPATH"/osu_ialltoall.R --input "$csv" "$@" --speedup
+Rscript "$SCRIPTPATH"/osu_ialltoall.R --input "$csv" "$@"
+Rscript "$SCRIPTPATH"/osu_ialltoall.R --input "$csv" "$@" --speedup
 
 echo "generated plots for $name"
