@@ -446,7 +446,10 @@ void ScheduleCtx::dispatch_sendrecv(CommTask task) {
   auto reqs = std::array<MPI_Request*, 2>{&rsend, &rrecv};
   FMPI_DBG(reqs);
 
-  auto ret = handler_.sendrecv(message, reqs);
+  auto const nslots = nslots_[rtlx::to_underlying(message_type::ISEND)] +
+                      nslots_[rtlx::to_underlying(message_type::IRECV)];
+
+  auto ret = handler_.sendrecv(message, reqs, nslots == 2);
 
   if (rsend == MPI_REQUEST_NULL) {
     release_slot(message_type::ISEND, slot_send);

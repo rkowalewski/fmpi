@@ -224,7 +224,7 @@ collective_future AlltoallCtx::execute() {
       }
     }
 
-    if (r < (rounds - 1)) {
+    if (r < (rounds - 1) and opts.winsz > 1) {
       FMPI_DBG("scheduling barrier");
       // if this is not the last round
       if (opts.type == ScheduleOpts::WindowType::fixed) {
