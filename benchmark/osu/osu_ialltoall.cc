@@ -104,14 +104,14 @@ int main(int argc, char* argv[]) {
     double t_start = 0.0;
     double t_stop  = 0.0;
 
-    auto const     win_type = fmpi::ScheduleOpts::WindowType::fixed;
-    constexpr auto winsz    = 64ul;
-    auto const     opts =
-        schedule_options(options.algorithm, winsz, "", win_type, world);
+    // auto const     win_type = fmpi::ScheduleOpts::WindowType::fixed;
+    // constexpr auto winsz    = 64ul;
+    // auto const     opts =
+    //    schedule_options(options.algorithm, winsz, "", win_type, world);
     for (auto i = 0; i < options.iterations + options.warmups; i++) {
       t_start     = MPI_Wtime();
-      auto future = fmpi::alltoall(
-          sendbuf, size, mpi_type, recvbuf, size, mpi_type, world, opts);
+      auto future = fmpi::alltoall_tune(
+          sendbuf, size, mpi_type, recvbuf, size, mpi_type, world);
 
       future.wait();
       // FMPI_DBG_RANGE(recvbuf, recvbuf + bufsize);
@@ -150,8 +150,8 @@ int main(int argc, char* argv[]) {
 
       auto init_time = MPI_Wtime();
 
-      auto future = fmpi::alltoall(
-          sendbuf, size, mpi_type, recvbuf, size, mpi_type, world, opts);
+      auto future = fmpi::alltoall_tune(
+          sendbuf, size, mpi_type, recvbuf, size, mpi_type, world);
 
       init_time = MPI_Wtime() - init_time;
 
@@ -207,11 +207,6 @@ fmpi::ScheduleOpts schedule_options(
   } else if (algorithm == 1) {
     return fmpi::ScheduleOpts{fmpi::OneFactor{ctx}, winsz, "", win_type};
   }
-#if 0
-  else if (algorithm == 2) {
-    return fmpi::ScheduleOpts{fmpi::Linear{ctx}, winsz, "", win_type};
-  }
-#endif
 
   return fmpi::ScheduleOpts{fmpi::Bruck{ctx}, winsz, "", win_type};
 }
