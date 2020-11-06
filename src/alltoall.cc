@@ -423,17 +423,16 @@ collective_future alltoall_tune(
   auto const n = extent * sendcount;
   auto const p = ctx.size();
 
-  constexpr std::size_t twoK  = 2 * 1024;
-  constexpr std::size_t fourK = 4 * 1024;
+  constexpr std::size_t kb = 1024;
 
   std::uint32_t winsz = 0;
 
-  if (p <= 64 and n >= twoK) {
+  if (p <= 64 and n >= 2 * kb) {
     winsz = 4;
   } else if (p <= 128 and n >= 256) {
-    winsz = n > fourK ? 64 : 1;
+    winsz = n > 4 * kb ? 64 : 1;
   } else if (p > 128 and n >= 512) {
-    winsz = n > fourK ? 64 : 1;
+    winsz = n > 4 * kb ? 64 : 1;
   }
 
   if (winsz != 0u) {
