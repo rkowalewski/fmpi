@@ -408,4 +408,65 @@ collective_future AlltoallCtx::comm_intermediate() {
 }
 
 }  // namespace detail
+
+collective_future alltoall_tune(
+    const void*         sendbuf,
+    std::size_t         sendcount,
+    MPI_Datatype        sendtype,
+    void*               recvbuf,
+    std::size_t         recvcount,
+    MPI_Datatype        recvtype,
+    mpi::Context const& ctx) {
+  MPI_Aint extent, lb;
+  MPI_Type_get_extent(sendtype, &lb, &extent);
+
+  auto const n = extent * sendcount;
+  auto const p = ctx.size();
+
+  constexpr std::size_t twoK  = 2 * 1024;
+  constexpr std::size_t fourK = 4 * 1024;
+
+  std::uint32_t winsz = 0;
+
+  if (p <= 64 and n >= twoK) {
+    winsz = 4;
+  } else if (p <= 128 and n >= 256) {
+    winsz = n > fourK ? 64 : 1;
+  } else if (p > 128 and n >= 512) {
+    winsz = n > fourK ? 64 : 1;
+  }
+
+  if (winsz != 0u) {
+    auto           one_factor = OneFactor{ctx};
+    constexpr auto win_type   = ScheduleOpts::WindowType::fixed;
+    auto           opts       = ScheduleOpts{one_factor, winsz, "", win_type};
+    auto           coll       = detail::AlltoallCtx{
+        sendbuf,
+        sendcount,
+        sendtype,
+        recvbuf,
+        recvcount,
+        recvtype,
+        ctx,
+        opts};
+
+    return coll.execute();
+  }
+
+  auto request = make_mpi_future();
+
+  auto ret = MPI_Ialltoall(
+      sendbuf,
+      static_cast<int>(sendcount),
+      sendtype,
+      recvbuf,
+      static_cast<int>(recvcount),
+      recvtype,
+      ctx.mpiComm(),
+      &request.native_handle());
+
+  FMPI_ASSERT(ret == MPI_SUCCESS);
+
+  return request;
+}
 }  // namespace fmpi

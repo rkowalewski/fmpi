@@ -62,6 +62,16 @@ inline collective_future alltoall(
       schedule_args};
   return coll.execute();
 }
+
+collective_future alltoall_tune(
+    const void*         sendbuf,
+    std::size_t         sendcount,
+    MPI_Datatype        sendtype,
+    void*               recvbuf,
+    std::size_t         recvcount,
+    MPI_Datatype        recvtype,
+    mpi::Context const& ctx);
+
 }  // namespace fmpi
 
 #endif
