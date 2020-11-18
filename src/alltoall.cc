@@ -401,7 +401,7 @@ collective_future AlltoallCtx::comm_intermediate() {
   //    sendcount * sendextent_,
   //    static_cast<std::byte*>(recvbuf));
 
-  auto blocks = fmpi::FixedVector<int>(comm.size());
+  // auto blocks = fmpi::FixedVector<int>(comm.size());
   auto displs = fmpi::FixedVector<int>(comm.size());
   // auto blens  = fmpi::FixedVector<int>(comm.size());
 
@@ -414,24 +414,19 @@ collective_future AlltoallCtx::comm_intermediate() {
       // auto const j = static_cast<mpi::Rank>(d * std::pow(r, i));
       auto j = static_cast<mpi::Rank>(1 << i);
 
-      // We exchange all blocks where the j-th bit is set
-      auto rng = range(1u, comm.size());
-
-      auto const b_last = std::copy_if(
-          std::begin(rng), std::end(rng), std::begin(blocks), [j](auto idx) {
-            return idx & j;
-          });
-
       // a) pack blocks into a contigous send buffer
-      auto const nblocks = std::distance(std::begin(blocks), b_last);
+      int nblocks = 0;
 
-      for (auto&& b : range(nblocks)) {
-        displs[b] = blocks[b] * static_cast<int>(sendcount);
-        // blens[b]  = static_cast<int>(sendcount);
+      for (auto&& idx : range(1u, comm.size())) {
+        if (idx & j) {
+          displs[nblocks] = idx * static_cast<int>(sendcount);
+          // blens[nblocks]  = static_cast<int>(sendcount);
+          nblocks++;
+        }
       }
 
       FMPI_CHECK_MPI(MPI_Type_create_indexed_block(
-          static_cast<int>(nblocks),
+          nblocks,
           static_cast<int>(sendcount),
           displs.data(),
           sendtype,

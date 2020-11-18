@@ -14,12 +14,6 @@
 
 #include "osu.hpp"
 
-static constexpr std::size_t MIN_MESSAGE_SIZE = 1;
-static constexpr uint32_t    COLL_LOOP_SMALL  = 1000;
-static constexpr uint32_t    COLL_SKIP_SMALL  = 100;
-static constexpr uint32_t    COLL_LOOP_LARGE  = 100;
-static constexpr uint32_t    COLL_SKIP_LARGE  = 10;
-
 double dummy_compute(double seconds) {
   double test_time = 0.0;
 
@@ -43,13 +37,6 @@ int main(int argc, char* argv[]) {
   if (!read_input(argc, argv)) {
     return 0;
   }
-
-  // options.smin          = std::max(options.smin, MIN_MESSAGE_SIZE);
-  // options.warmups       = std::max(options.warmups, COLL_SKIP_SMALL);
-  // options.warmups_large = std::max(options.warmups_large, COLL_SKIP_LARGE);
-  // options.iterations    = std::max(options.iterations, COLL_LOOP_SMALL);
-  // options.iterations_large =
-  //    std::max(options.iterations_large, COLL_LOOP_LARGE);
 
   const auto& world    = mpi::Context::world();
   auto const  rank     = world.rank();
@@ -100,119 +87,130 @@ int main(int argc, char* argv[]) {
 
   print_preamble_nbc(rank, std::string_view("osu_ialltoall"));
 
+  std::vector<std::uint32_t> ws;
+  ws.emplace_back(1u);
+
+  if (options.algorithm < 2) {
+    // bruck == 2
+    ws.emplace_back(8u);
+    ws.emplace_back(64u);
+  }
+
   for (auto size = options.smin; size <= options.smax; size *= 2) {
     if (size > LARGE_MESSAGE_SIZE) {
       options.warmups    = options.warmups_large;
       options.iterations = options.iterations_large;
     }
 
-    MPI_CHECK(MPI_Barrier(world.mpiComm()));
+    for (auto&& w : ws) {
+      MPI_CHECK(MPI_Barrier(world.mpiComm()));
 
-    double timer   = 0.0;
-    double t_start = 0.0;
-    double t_stop  = 0.0;
+      double timer   = 0.0;
+      double t_start = 0.0;
+      double t_stop  = 0.0;
 
-    auto const     win_type = fmpi::ScheduleOpts::WindowType::fixed;
-    constexpr auto winsz    = 64ul;
-    auto const     opts =
-        schedule_options(options.algorithm, winsz, "", win_type, world);
-    for (uint32_t i = 0; i < options.iterations + options.warmups; i++) {
-      t_start = MPI_Wtime();
+      auto const win_type = fmpi::ScheduleOpts::WindowType::fixed;
+      auto const opts =
+          schedule_options(options.algorithm, w, "", win_type, world);
+      for (uint32_t i = 0; i < options.iterations + options.warmups; i++) {
+        t_start = MPI_Wtime();
 #if 0
       auto future = fmpi::alltoall_tune(
           sendbuf, size, mpi_type, recvbuf, size, mpi_type, world);
 #else
-      auto future = fmpi::alltoall(
-          sendbuf, size, mpi_type, recvbuf, size, mpi_type, world, opts);
+        auto future = fmpi::alltoall(
+            sendbuf, size, mpi_type, recvbuf, size, mpi_type, world, opts);
 #endif
 
-      future.wait();
-      FMPI_DBG_RANGE(recvbuf, recvbuf + bufsize);
-      t_stop = MPI_Wtime();
+        future.wait();
+        FMPI_DBG_RANGE(recvbuf, recvbuf + bufsize);
+        t_stop = MPI_Wtime();
 
-      if (i >= options.warmups) {
-        timer += t_stop - t_start;
+        if (i >= options.warmups) {
+          timer += t_stop - t_start;
+        }
+        MPI_CHECK(MPI_Barrier(world.mpiComm()));
       }
+
+      FMPI_DBG("after warmups");
+      // clear trace everything
+
       MPI_CHECK(MPI_Barrier(world.mpiComm()));
-    }
 
-    FMPI_DBG("after warmups");
-    // clear trace everything
+      /* This is the pure comm. time */
+      auto const latency = (timer * 1e6) / options.iterations;
 
-    MPI_CHECK(MPI_Barrier(world.mpiComm()));
+      /* Comm. latency in seconds, fed to dummy_compute */
+      auto const latency_in_secs = timer / options.iterations;
 
-    /* This is the pure comm. time */
-    auto const latency = (timer * 1e6) / options.iterations;
+      FMPI_DBG(latency_in_secs);
 
-    /* Comm. latency in seconds, fed to dummy_compute */
-    auto const latency_in_secs = timer / options.iterations;
+      init_arrays(latency_in_secs);
 
-    FMPI_DBG(latency_in_secs);
+      MPI_CHECK(MPI_Barrier(world.mpiComm()));
 
-    init_arrays(latency_in_secs);
+      timer              = 0.0;
+      double tcomp_total = 0.0;
+      double init_total  = 0.0;
+      double wait_total  = 0.0;
+      double test_total  = 0.0;
 
-    MPI_CHECK(MPI_Barrier(world.mpiComm()));
+      for (uint32_t i = 0; i < options.iterations + options.warmups; i++) {
+        t_start = MPI_Wtime();
 
-    timer              = 0.0;
-    double tcomp_total = 0.0;
-    double init_total  = 0.0;
-    double wait_total  = 0.0;
-    double test_total  = 0.0;
-
-    for (uint32_t i = 0; i < options.iterations + options.warmups; i++) {
-      t_start = MPI_Wtime();
-
-      auto init_time = MPI_Wtime();
+        auto init_time = MPI_Wtime();
 
 #if 0
       auto future = fmpi::alltoall_tune(
           sendbuf, size, mpi_type, recvbuf, size, mpi_type, world);
 #else
-      auto future = fmpi::alltoall(
-          sendbuf, size, mpi_type, recvbuf, size, mpi_type, world, opts);
+        auto future = fmpi::alltoall(
+            sendbuf, size, mpi_type, recvbuf, size, mpi_type, world, opts);
 #endif
 
-      init_time = MPI_Wtime() - init_time;
+        init_time = MPI_Wtime() - init_time;
 
-      auto tcomp     = MPI_Wtime();
-      auto test_time = dummy_compute(latency_in_secs);
-      tcomp          = MPI_Wtime() - tcomp;
+        auto tcomp     = MPI_Wtime();
+        auto test_time = dummy_compute(latency_in_secs);
+        tcomp          = MPI_Wtime() - tcomp;
 
-      auto wait_time = MPI_Wtime();
-      future.wait();
-      wait_time = MPI_Wtime() - wait_time;
+        auto wait_time = MPI_Wtime();
+        future.wait();
+        wait_time = MPI_Wtime() - wait_time;
 
-      t_stop = MPI_Wtime();
+        t_stop = MPI_Wtime();
 
-      if (i == options.warmups) {
-        fmpi::TraceStore::instance().erase(std::string_view("schedule_ctx"));
-        assert(fmpi::TraceStore::instance().empty());
+        if (i == options.warmups) {
+          fmpi::TraceStore::instance().erase(
+              std::string_view("schedule_ctx"));
+          assert(fmpi::TraceStore::instance().empty());
+        }
+
+        if (i >= options.warmups) {
+          timer += t_stop - t_start;
+          tcomp_total += tcomp;
+          init_total += init_time;
+          test_total += test_time;
+          wait_total += wait_time;
+        }
+
+        MPI_CHECK(MPI_Barrier(world.mpiComm()));
       }
 
-      if (i >= options.warmups) {
-        timer += t_stop - t_start;
-        tcomp_total += tcomp;
-        init_total += init_time;
-        test_total += test_time;
-        wait_total += wait_time;
-      }
+      MPI_Barrier(world.mpiComm());
 
-      MPI_CHECK(MPI_Barrier(world.mpiComm()));
+      calculate_and_print_stats(
+          rank,
+          size,
+          numprocs,
+          timer,
+          latency,
+          test_total,
+          tcomp_total,
+          wait_total,
+          init_total,
+          world);
     }
-
-    MPI_Barrier(world.mpiComm());
-
-    calculate_and_print_stats(
-        rank,
-        size,
-        numprocs,
-        timer,
-        latency,
-        test_total,
-        tcomp_total,
-        wait_total,
-        init_total,
-        world);
   }
 
   free_buffer(sendbuf);
