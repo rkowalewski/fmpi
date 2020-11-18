@@ -58,7 +58,10 @@ inline void AlltoallCtx::local_copy() {
   auto*       dst = recv_offset(ctx.rank());
   auto const* src = send_offset(ctx.rank());
 
-  std::memcpy(dst, src, sendcount * sendextent_);
+  std::copy_n(
+      static_cast<std::byte const*>(src),
+      sendcount * sendextent_,
+      static_cast<std::byte*>(dst));
 }
 
 collective_future AlltoallCtx::execute() {
@@ -361,10 +364,18 @@ collective_future AlltoallCtx::comm_intermediate() {
         auto const& message = msgs.front();
         FMPI_ASSERT(message.sendtype() == message.recvtype());
 
-        sptr->unpack(message);
+        auto const done = sptr->done();
 
-        if (sptr->done()) {
+        // note: if we have an associative-decomposable function,
+        // unpacking is only in need in communication rounds
+        // and the rotate_down can be omitted.
+        //
+        // otherwise: always unpack, and rotate down in the last round
+        sptr->unpack(message);
+        if (done) {
           sptr->rotate_down();
+        } else {
+          // sptr->unpack(message);
         }
       });
 
@@ -382,6 +393,13 @@ collective_future AlltoallCtx::comm_intermediate() {
     // rotate leftwards
     std::rotate_copy(first, n_first, last, algo->buffer().data());
   }
+
+  // note: this can be included with associative-decomposable functions
+  // local copy
+  // std::copy_n(
+  //    static_cast<std::byte const*>(send_offset(comm.rank())),
+  //    sendcount * sendextent_,
+  //    static_cast<std::byte*>(recvbuf));
 
   auto blocks = fmpi::FixedVector<int>(comm.size());
   auto displs = fmpi::FixedVector<int>(comm.size());
