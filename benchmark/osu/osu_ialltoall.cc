@@ -63,23 +63,23 @@ int main(int argc, char* argv[]) {
     return EXIT_FAILURE;
   }
 
-  auto const bufsize = options.smax * numprocs;
+  using value_t = int;
+  auto mpi_type = MPI_INT;
 
-  using value_t = char;
-  auto mpi_type = MPI_CHAR;
+  auto const bufsize = options.smax * numprocs;
 
   value_t* sendbuf = NULL;
   value_t* recvbuf = NULL;
 
-  if (allocate_memory_coll((void**)&sendbuf, bufsize)) {
+  if (allocate_memory_coll((void**)&sendbuf, bufsize * sizeof(value_t))) {
     fprintf(stderr, "Could Not Allocate Memory [rank %d]\n", rank);
     world.abort(EXIT_FAILURE);
   }
 
-  std::memset(sendbuf, 1, bufsize);
-  // std::iota(sendbuf, sendbuf + bufsize, world.rank() * bufsize);
+  // std::memset(sendbuf, 1, bufsize);
+  std::iota(sendbuf, sendbuf + bufsize, world.rank() * bufsize);
 
-  if (allocate_memory_coll((void**)&recvbuf, bufsize)) {
+  if (allocate_memory_coll((void**)&recvbuf, bufsize * sizeof(value_t))) {
     fprintf(
         stderr,
         "Could Not Allocate Memory [rank %d]\n",
@@ -104,17 +104,22 @@ int main(int argc, char* argv[]) {
     double t_start = 0.0;
     double t_stop  = 0.0;
 
-    // auto const     win_type = fmpi::ScheduleOpts::WindowType::fixed;
-    // constexpr auto winsz    = 64ul;
-    // auto const     opts =
-    //    schedule_options(options.algorithm, winsz, "", win_type, world);
+    auto const     win_type = fmpi::ScheduleOpts::WindowType::fixed;
+    constexpr auto winsz    = 64ul;
+    auto const     opts =
+        schedule_options(options.algorithm, winsz, "", win_type, world);
     for (auto i = 0; i < options.iterations + options.warmups; i++) {
-      t_start     = MPI_Wtime();
+      t_start = MPI_Wtime();
+#if 0
       auto future = fmpi::alltoall_tune(
           sendbuf, size, mpi_type, recvbuf, size, mpi_type, world);
+#else
+      auto future = fmpi::alltoall(
+          sendbuf, size, mpi_type, recvbuf, size, mpi_type, world, opts);
+#endif
 
       future.wait();
-      // FMPI_DBG_RANGE(recvbuf, recvbuf + bufsize);
+      FMPI_DBG_RANGE(recvbuf, recvbuf + bufsize);
       t_stop = MPI_Wtime();
 
       if (i >= options.warmups) {
@@ -150,8 +155,13 @@ int main(int argc, char* argv[]) {
 
       auto init_time = MPI_Wtime();
 
+#if 0
       auto future = fmpi::alltoall_tune(
           sendbuf, size, mpi_type, recvbuf, size, mpi_type, world);
+#else
+      auto future = fmpi::alltoall(
+          sendbuf, size, mpi_type, recvbuf, size, mpi_type, world, opts);
+#endif
 
       init_time = MPI_Wtime() - init_time;
 

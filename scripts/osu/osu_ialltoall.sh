@@ -47,21 +47,23 @@ echo "nodes,procs,bench,size,total,compute,init,mpi.test,mpi.wait,comm,overlap,"
 
 pattern="${name//\./\\.}"
 
-variants=("blocking" "nonblocking" "nonblocking")
+# variants=("blocking" "nonblocking" "nonblocking")
 # algos=("ring" "of" "bruck")
-algos=("Ring" "OneFactor")
-winsz=("1" "64" "4")
+# algos=("Ring" "OneFactor")
+# winsz=("1" "64" "4")
 
 for f in "$dirname"/*"$name"*.log; do
   num="$(echo "$f" | sed 's#.*'"$pattern"'-\([0-9]\+\).*#\1#g')"
 
-  v_idx="$(((num - 1) / 2))"
-  w_idx="$v_idx"
+  # v_idx="$(((num - 1) / 2))"
+  # w_idx="$v_idx"
 
-  if [[ "$num" -lt 7 ]]; then
+  if [[ "$num" -eq 1 ]]; then
     a_idx="$(((num - 1) % 2))"
     data="$(awk '/^[0-9]/{printf "%d,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f\n", $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12 , $13}' "$f")"
-    data="$(echo "$data" | sed 's/^/'"${algos[$a_idx]}.${variants[$v_idx]}.${winsz[$w_idx]}"',/g')"
+    # bench="${algos[$a_idx]}.${variants[$v_idx]}.${winsz[$w_idx]}"
+    bench="FMPI"
+    data="$(echo "$data" | sed 's/^/'"$bench"',/g')"
     #   elif [[ "$num" -lt 7 ]]; then
     #     data="$(awk '/^[0-9]/{printf "%d,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f\n", $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12 , $13}' "$f")"
     #     echo "$data" | sed 's/^/'"${algos[$((num - 4))]}.nonblocking"',/g' >>"$csv"
@@ -73,7 +75,7 @@ for f in "$dirname"/*"$name"*.log; do
   echo "$data" | sed "s/^/$nodes,$procs,/g" >> "$csv"
 done
 
-Rscript "$SCRIPTPATH"/osu_ialltoall.R --input "$csv" "$@"
+# Rscript "$SCRIPTPATH"/osu_ialltoall.R --input "$csv" "$@"
 Rscript "$SCRIPTPATH"/osu_ialltoall.R --input "$csv" "$@" --speedup
 
 echo "generated plots for $name"

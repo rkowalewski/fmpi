@@ -262,16 +262,16 @@ collective_future AlltoallCtx::execute() {
 
 struct BruckAlgorithm {
  private:
-  using buffer_t = fmpi::FixedVector<std::byte>;
+  using buffer_t = fmpi::SimpleVector<std::byte>;
 
  public:
   BruckAlgorithm(std::size_t bytes)
     : tmpbuf(bytes) {
   }
-  int                round = 0;
-  buffer_t           tmpbuf;
-  buffer_t::iterator sbuf;
-  buffer_t::iterator rbuf;
+  // int                round = 0;
+  buffer_t tmpbuf;
+  // buffer_t::iterator sbuf;
+  // buffer_t::iterator rbuf;
 };
 
 collective_future AlltoallCtx::comm_intermediate() {
@@ -284,22 +284,43 @@ collective_future AlltoallCtx::comm_intermediate() {
   auto& dispatcher = static_dispatcher_pool();
 
   auto const blocksize  = sendextent_ * sendcount;
-  auto const buffersize = blocksize * comm.size() * 2;
+  auto const buffersize = blocksize * comm.size();
   auto       algo       = std::make_shared<BruckAlgorithm>(buffersize);
-  auto       blocks     = fmpi::FixedVector<std::size_t>(comm.size() / 2);
-  algo->sbuf            = algo->tmpbuf.begin() + blocksize * comm.size();
-  algo->rbuf            = algo->sbuf + blocksize * comm.size() / 2;
+  // algo->sbuf            = algo->tmpbuf.begin() + blocksize * comm.size();
+  // algo->rbuf            = algo->sbuf + blocksize * comm.size() / 2;
 
   std::array<std::size_t, detail::n_types> nslots{};
   nslots.fill(r - 1);
   auto schedule_state =
       std::make_unique<ScheduleCtx>(nslots, std::move(promise));
 
-  // This is somehow an ugly hack
   schedule_state->register_callback(
       message_type::IRECV,
-      [sptr = algo](const std::vector<Message>& /*msgs*/) mutable {
-        sptr->round++;
+      [sptr = algo, rank = comm.rank(), tag = sendrecvtag_](
+          const std::vector<Message>& msgs) {
+        FMPI_ASSERT(msgs.size() == 1);
+        auto const& message = msgs.front();
+        FMPI_ASSERT(message.sendtype() == message.recvtype());
+
+        FMPI_DBG("callback");
+
+#if 1
+        MPI_Sendrecv(
+            message.recvbuffer(),
+            1,
+            message.recvtype(),
+            rank,
+            tag,
+            sptr->tmpbuf.data(),
+            1,
+            message.recvtype(),
+            rank,
+            tag,
+            message.comm(),
+            MPI_STATUS_IGNORE);
+#endif
+        auto my_type = message.recvtype();
+        MPI_Type_free(&my_type);
       });
 
   // submit into dispatcher
@@ -320,6 +341,14 @@ collective_future AlltoallCtx::comm_intermediate() {
 
   using fmpi::mod;
 
+  // datatype stuff
+
+  auto blocks = fmpi::FixedVector<int>(comm.size());
+  auto displs = fmpi::FixedVector<int>(comm.size());
+  // auto blens  = fmpi::FixedVector<int>(comm.size());
+
+  MPI_Datatype packed_type{};
+
   for (auto&& i : fmpi::range(w)) {
     for (auto&& d : fmpi::range(1u, r)) {
       std::ignore = d;
@@ -335,19 +364,38 @@ collective_future AlltoallCtx::comm_intermediate() {
           });
 
       // a) pack blocks into a contigous send buffer
-
       auto const nblocks = std::distance(std::begin(blocks), b_last);
 
       for (auto&& b : range(nblocks)) {
-        auto const block = blocks[b];
-        auto       copy  = make_copy(
-            add(&*algo->sbuf, b * blocksize),
-            add(algo->tmpbuf.data(), block * blocksize),
-            blocksize,
-            MPI_BYTE);
+        // auto const block = blocks[b];
+        // auto       copy  = make_copy(
+        //     add(&*algo->sbuf, b * blocksize),
+        //     add(algo->tmpbuf.data(), block * blocksize),
+        //     blocksize,
+        //     MPI_BYTE);
+        // dispatcher.schedule(hdl, message_type::COPY, copy);
 
-        dispatcher.schedule(hdl, message_type::COPY, copy);
+        // displs[b] = blocks[b] * static_cast<int>(blocksize);
+        displs[b] = blocks[b] * static_cast<int>(sendcount);
+        // blens[b]  = static_cast<int>(sendcount);
       }
+
+      FMPI_CHECK_MPI(MPI_Type_create_indexed_block(
+          static_cast<int>(nblocks),
+          static_cast<int>(sendcount),
+          displs.data(),
+          sendtype,
+          &packed_type));
+
+      {
+        MPI_Aint lb, extent;
+        MPI_Type_get_extent(packed_type, &lb, &extent);
+        FMPI_DBG(nblocks);
+        FMPI_DBG(std::make_pair(
+            static_cast<std::size_t>(lb), static_cast<std::size_t>(extent)));
+      }
+
+      FMPI_CHECK_MPI(MPI_Type_commit(&packed_type));
 
       {
         auto const peers = std::make_pair(
@@ -357,24 +405,28 @@ collective_future AlltoallCtx::comm_intermediate() {
 
         FMPI_DBG(peers);
 
-        auto msg = Message{
-            &*algo->sbuf,
-            nblocks * blocksize,
-            MPI_BYTE,
-            sendto,
-            sendrecvtag_,
-            &*algo->rbuf,
-            nblocks * blocksize,
-            MPI_BYTE,
-            recvfrom,
-            sendrecvtag_,
-            comm.mpiComm()};
+        auto msg = Message{//&*algo->sbuf,
+                           algo->tmpbuf.data(),
+                           // nblocks * blocksize,
+                           1,
+                           // MPI_BYTE,
+                           packed_type,
+                           sendto,
+                           sendrecvtag_,
+                           recvbuf,
+                           1,
+                           packed_type,
+                           recvfrom,
+                           sendrecvtag_,
+                           comm.mpiComm()};
 
         dispatcher.schedule(hdl, message_type::ISENDRECV, msg);
       }
 
-      dispatcher.schedule(hdl, message_type::BARRIER);
+      // not needed here because we have winsz == 1
+      // dispatcher.schedule(hdl, message_type::BARRIER);
 
+#if 0
       for (auto&& b : range(nblocks)) {
         auto const block = blocks[b];
 
@@ -386,6 +438,7 @@ collective_future AlltoallCtx::comm_intermediate() {
 
         dispatcher.schedule(hdl, message_type::COPY, copy);
       }
+#endif
     }
   }
 
@@ -405,7 +458,7 @@ collective_future AlltoallCtx::comm_intermediate() {
 
   dispatcher.commit(hdl);
   return future;
-}
+}  // namespace detail
 
 }  // namespace detail
 

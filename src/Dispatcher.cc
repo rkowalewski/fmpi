@@ -449,10 +449,17 @@ void ScheduleCtx::dispatch_sendrecv(CommTask task) {
   auto const nslots = nslots_[rtlx::to_underlying(message_type::ISEND)] +
                       nslots_[rtlx::to_underlying(message_type::IRECV)];
 
-  auto ret = handler_.sendrecv(message, reqs, nslots == 2);
+  auto const blocking = nslots == 2;
+  auto       ret      = handler_.sendrecv(message, reqs, blocking);
 
   if (rsend == MPI_REQUEST_NULL) {
     release_slot(message_type::ISEND, slot_send);
+
+    auto& cb_send = callbacks_[rtlx::to_underlying(message_type::ISEND)];
+
+    if (cb_send) {
+      cb_send({message});
+    }
   } else {
     pending_[slot_send]      = task;
     pending_[slot_send].type = message_type::ISEND;
@@ -460,6 +467,12 @@ void ScheduleCtx::dispatch_sendrecv(CommTask task) {
 
   if (rrecv == MPI_REQUEST_NULL) {
     release_slot(message_type::IRECV, slot_recv);
+
+    auto& cb_recv = callbacks_[rtlx::to_underlying(message_type::IRECV)];
+
+    if (cb_recv) {
+      cb_recv({message});
+    }
   } else {
     pending_[slot_recv]      = task;
     pending_[slot_recv].type = message_type::IRECV;
@@ -478,7 +491,7 @@ void ScheduleCtx::dispatch_task(CommTask task) {
 
     auto const ti = rtlx::to_underlying(message_type::IRECV);
     if (callbacks_[ti]) {
-      callbacks_[ti](std::vector<Message>({task.message}));
+      //callbacks_[ti](std::vector<Message>({task.message}));
     }
     return;
   }
