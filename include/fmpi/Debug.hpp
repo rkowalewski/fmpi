@@ -122,9 +122,10 @@ auto operator<<(std::ostream& os, std::pair<F, T> const& p) -> std::ostream& {
 #define FMPI_DBG_RANGE(f, l)                                                \
   do {                                                                      \
     std::ostringstream os;                                                  \
-    using value_t = typename std::iterator_traits<decltype(f)>::value_type; \
+    using value_t__ =                                                       \
+        typename std::iterator_traits<decltype(f)>::value_type;             \
     os << "[";                                                              \
-    std::copy(f, std::prev(l), std::ostream_iterator<value_t>(os, ", "));   \
+    std::copy(f, std::prev(l), std::ostream_iterator<value_t__>(os, ", ")); \
     os << *std::prev(l);                                                    \
     os << "]";                                                              \
     auto range = os.str();                                                  \

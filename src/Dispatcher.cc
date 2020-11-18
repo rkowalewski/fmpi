@@ -491,7 +491,7 @@ void ScheduleCtx::dispatch_task(CommTask task) {
 
     auto const ti = rtlx::to_underlying(message_type::IRECV);
     if (callbacks_[ti]) {
-      //callbacks_[ti](std::vector<Message>({task.message}));
+      // callbacks_[ti](std::vector<Message>({task.message}));
     }
     return;
   }

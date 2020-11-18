@@ -549,7 +549,7 @@ void calculate_and_print_stats(
         auto const   t_val = it->second;
         double const us =
             std::chrono::duration_cast<double_usecs>(t_val).count();
-        my_times[idx] = us / (options.warmups + options.iterations);
+        my_times[idx] = us / options.iterations;
       }
     }
 

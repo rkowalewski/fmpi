@@ -108,7 +108,7 @@ int main(int argc, char* argv[]) {
     constexpr auto winsz    = 64ul;
     auto const     opts =
         schedule_options(options.algorithm, winsz, "", win_type, world);
-    for (auto i = 0; i < options.iterations + options.warmups; i++) {
+    for (uint32_t i = 0; i < options.iterations + options.warmups; i++) {
       t_start = MPI_Wtime();
 #if 0
       auto future = fmpi::alltoall_tune(
@@ -129,6 +129,7 @@ int main(int argc, char* argv[]) {
     }
 
     FMPI_DBG("after warmups");
+    // clear trace everything
 
     MPI_CHECK(MPI_Barrier(world.mpiComm()));
 
@@ -150,7 +151,7 @@ int main(int argc, char* argv[]) {
     double wait_total  = 0.0;
     double test_total  = 0.0;
 
-    for (auto i = 0; i < options.iterations + options.warmups; i++) {
+    for (uint32_t i = 0; i < options.iterations + options.warmups; i++) {
       t_start = MPI_Wtime();
 
       auto init_time = MPI_Wtime();
@@ -175,6 +176,11 @@ int main(int argc, char* argv[]) {
 
       t_stop = MPI_Wtime();
 
+      if (i == options.warmups) {
+        fmpi::TraceStore::instance().erase(std::string_view("schedule_ctx"));
+        assert(fmpi::TraceStore::instance().empty());
+      }
+
       if (i >= options.warmups) {
         timer += t_stop - t_start;
         tcomp_total += tcomp;
@@ -182,6 +188,7 @@ int main(int argc, char* argv[]) {
         test_total += test_time;
         wait_total += wait_time;
       }
+
       MPI_CHECK(MPI_Barrier(world.mpiComm()));
     }
 
