@@ -63,8 +63,13 @@ int main(int argc, char* argv[]) {
     return EXIT_FAILURE;
   }
 
+#if 0
   using value_t = int;
   auto mpi_type = MPI_INT;
+#else
+  using value_t = char;
+  auto mpi_type = MPI_CHAR;
+#endif
 
   auto const bufsize = options.smax * numprocs;
 
@@ -76,8 +81,11 @@ int main(int argc, char* argv[]) {
     world.abort(EXIT_FAILURE);
   }
 
-  // std::memset(sendbuf, 1, bufsize);
+#if 0
   std::iota(sendbuf, sendbuf + bufsize, world.rank() * bufsize);
+#else
+  std::memset(sendbuf, 1, bufsize);
+#endif
 
   if (allocate_memory_coll((void**)&recvbuf, bufsize * sizeof(value_t))) {
     fprintf(
