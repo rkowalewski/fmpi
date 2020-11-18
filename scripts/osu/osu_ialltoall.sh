@@ -7,7 +7,6 @@ SCRIPTPATH=$(dirname "$SCRIPT")
 
 file="$1"
 
-
 if [[ "$#" -lt 1 ]]; then
   echo "arguments: $#: $@"
   echo "usage: <outfile.csv> <input...>"
@@ -38,44 +37,35 @@ procs="$(echo $name | sed 's#.*\.p\([0-9]\+\).*#\1#')"
 
 sed 's#^\(\[0\].*version.*$\)#\n\1#g;s#^\(\-\-.*$\)#\n\1#g' "$file" |
   sed -n '/^#\sSize/,/^$/p;' |
-   awk -v RS= "{print > (\"$filename-\" NR \".log\")}"
+  awk -v RS= "{print > (\"$filename-\" NR \".log\")}"
 
 csv="$name.csv"
 
-echo "nodes,procs,bench,size,total,compute,init,mpi.test,mpi.wait,comm,overlap," \
+echo "nodes,procs,bench,size,winsz,total,compute,init,mpi.test,mpi.wait,comm,overlap," \
   "fmpi.waitall,fmpi.testall,fmpi.waitany,fmpi.dispatch,fmpi.copy" >"$csv"
 
 pattern="${name//\./\\.}"
 
-# variants=("blocking" "nonblocking" "nonblocking")
-# algos=("ring" "of" "bruck")
-# algos=("Ring" "OneFactor")
-# winsz=("1" "64" "4")
+algos=("Ring" "OneFactor" "Bruck")
 
 for f in "$dirname"/*"$name"*.log; do
   num="$(echo "$f" | sed 's#.*'"$pattern"'-\([0-9]\+\).*#\1#g')"
 
-  # v_idx="$(((num - 1) / 2))"
-  # w_idx="$v_idx"
-
-  if [[ "$num" -eq 1 ]]; then
-    a_idx="$(((num - 1) % 2))"
-    data="$(awk '/^[0-9]/{printf "%d,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f\n", $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12 , $13}' "$f")"
-    # bench="${algos[$a_idx]}.${variants[$v_idx]}.${winsz[$w_idx]}"
-    bench="FMPI"
+  if [[ "$num" -lt 4 ]]; then
+    a_idx="$((num - 1))"
+    data="$(awk '/^[0-9]/{printf "%d,%d,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f\n", $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12 , $13, $14}' "$f")"
+    bench="${algos[$a_idx]}"
+    #bench="FMPI"
     data="$(echo "$data" | sed 's/^/'"$bench"',/g')"
-    #   elif [[ "$num" -lt 7 ]]; then
-    #     data="$(awk '/^[0-9]/{printf "%d,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f\n", $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12 , $13}' "$f")"
-    #     echo "$data" | sed 's/^/'"${algos[$((num - 4))]}.nonblocking"',/g' >>"$csv"
   else
-    data="$(awk '/^[0-9]/{printf "%d,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f\n", $1, $2, $3, $4, $5, $6, $7, $8}' "$f")"
+    data="$(awk '/^[0-9]/{printf "%d,,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f\n", $1, $2, $3, $4, $5, $6, $7, $8}' "$f")"
     data="$(echo "$data" | sed 's/^/Baseline,/g')"
   fi
 
-  echo "$data" | sed "s/^/$nodes,$procs,/g" >> "$csv"
+  echo "$data" | sed "s/^/$nodes,$procs,/g" >>"$csv"
 done
 
 # Rscript "$SCRIPTPATH"/osu_ialltoall.R --input "$csv" "$@"
-Rscript "$SCRIPTPATH"/osu_ialltoall.R --input "$csv" "$@" --speedup
+# Rscript "$SCRIPTPATH"/osu_ialltoall.R --input "$csv" "$@" --speedup
 
 echo "generated plots for $name"

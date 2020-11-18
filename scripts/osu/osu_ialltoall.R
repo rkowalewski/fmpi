@@ -46,18 +46,18 @@ if (argv$input == "-") {
 }
 
 data <- data %>%
-    filter(size <= 128 * 1024) %>%
+    # filter(size <= 128 * 1024) %>%
     group_by(nodes,procs,size) %>%
     mutate(speedup = total[bench == "Baseline"] / total) %>%
     ungroup()
 
 data <- data %>%
     mutate(
-         hr=humanReadable(size, digits=0, standard="Unix" ),
-           algo = ifelse(bench == "Baseline" | bench == "Bruck", bench,
-                  sub(pattern = "(.*)\\.(.*)\\.(.*)$", replacement = "\\1", bench)),
-           winsz = ifelse(bench == "Baseline" | bench == "Bruck", NA,
-                  sub(pattern = "(.*)\\.(.*)\\.(.*)$", replacement = "\\3", bench))
+         hr=humanReadable(size, digits=0, standard="Unix" )
+           #algo = ifelse(bench == "Baseline" | bench == "Bruck", bench,
+           #       sub(pattern = "(.*)\\.(.*)\\.(.*)$", replacement = "\\1", bench)),
+           #winsz = ifelse(bench == "Baseline" | bench == "Bruck", NA,
+           #       sub(pattern = "(.*)\\.(.*)\\.(.*)$", replacement = "\\3", bench))
     )
 
 if (nrow(data) == 0) {
@@ -86,21 +86,6 @@ if (argv$device == 'pdf') {
     tikz(file=paste0(argv$output, ".tex"), width=5, height=5)
 }
 
-x_variable <- "size"
-
-ylab <- "Total Time (usecs)"
-yvar <- "total"
-color <- "algo"
-shape <- "winsz"
-
-if (argv$speedup) {
-    ylab <- "Speedup"
-    yvar <- "speedup"
-    data <- data %>% filter(bench != "Baseline")
-}
-
-# cat(format_csv(data[data$bench != "Baseline",]))
-
 
 theme <- theme_bw()
 # change xaxis text
@@ -115,6 +100,21 @@ theme$legend.justification=c(0.02,0.98)
 theme$legend.box="horizontal";
 # theme$legend.direction="horizontal";
 
+xvar <- "size"
+yvar <- "total"
+ylab <- "Total Time (usecs)"
+color <- "algo"
+shape <- "winsz"
+
+if (argv$speedup) {
+    ylab <- "Speedup"
+    yvar <- "speedup"
+    data <- data %>% filter(bench != "Baseline")
+}
+
+# cat(format_csv(data[data$bench != "Baseline",]))
+
+
 # theme$legend.position="none"
 
 # data <- data %>% filter(algo != "Ring")
@@ -122,7 +122,7 @@ theme$legend.box="horizontal";
 # The errorbars overlapped, so use position_dodge to move them horizontally
 pd <- position_dodge(0.1) # move them .05 to the left and right
 
-p <- ggplot(data, aes_string(x=paste0("factor(", x_variable, ")"), y=yvar,
+p <- ggplot(data, aes_string(x=paste0("factor(", xvar, ")"), y=yvar,
                              group="bench", shape=shape, colour=color, linetype=color))
 
 #e41a1c

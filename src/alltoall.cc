@@ -267,7 +267,7 @@ class BruckAlgorithm {
   using buffer_t = fmpi::SimpleVector<std::byte>;
 
   buffer_t          tmpbuf;
-  void*             recvbuf;
+  void*             recvbuffer;
   std::size_t const blocksize;
   mpi::Rank const   rank{};
   uint32_t const    size;
@@ -280,7 +280,7 @@ class BruckAlgorithm {
   BruckAlgorithm(
       void* rbuf, std::size_t blen, mpi::Context const& ctx, uint32_t rounds)
     : tmpbuf(blen * ctx.size())
-    , recvbuf(rbuf)
+    , recvbuffer(rbuf)
     , blocksize(blen)
     , rank(ctx.rank())
     , size(ctx.size())
@@ -290,7 +290,9 @@ class BruckAlgorithm {
  public:
   void unpack(Message message) {
     // unpack from recvbuffer to tmpbuf
-    auto my_type = message.recvtype();
+    // this is actually a memcpy, however, MPI does not provide a way to
+    // express memcpy with custom MPI datatypes.
+    // Therefore, we send a message to MPI_
     FMPI_CHECK_MPI(MPI_Sendrecv(
         message.recvbuffer(),
         1,
@@ -304,7 +306,6 @@ class BruckAlgorithm {
         message.recvtag(),
         message.comm(),
         MPI_STATUS_IGNORE));
-    FMPI_CHECK_MPI(MPI_Type_free(&my_type));
   }
 
   bool done() const FMPI_NOEXCEPT {
@@ -323,7 +324,7 @@ class BruckAlgorithm {
           static_cast<std::byte const*>(add(tmpbuf.data(), offset));
       auto const last = first + blocksize;
       auto const d_first =
-          static_cast<std::byte*>(add(recvbuf, b_dest * blocksize));
+          static_cast<std::byte*>(add(recvbuffer, b_dest * blocksize));
 
       std::copy(first, last, d_first);
     }
@@ -342,7 +343,10 @@ collective_future AlltoallCtx::comm_intermediate() {
   using fmpi::mod;
   constexpr auto r = 2u;
   // w = log_2 n
-  auto const w = static_cast<uint32_t>(std::ceil(fmpi::log(r, comm.size())));
+  /*
+   auto const w = static_cast<uint32_t>(std::ceil(fmpi::log(r, comm.size())));
+  */
+  auto const w = static_cast<uint32_t>(tlx::integer_log2_ceil(comm.size()));
 
   auto  promise    = collective_promise{};
   auto  future     = promise.get_future();
@@ -367,7 +371,7 @@ collective_future AlltoallCtx::comm_intermediate() {
         auto const done = sptr->done();
 
         // note: if we have an associative-decomposable function,
-        // unpacking is only in need in communication rounds
+        // unpacking is only needed in communication rounds
         // and the rotate_down can be omitted.
         //
         // otherwise: always unpack, and rotate down in the last round
@@ -377,14 +381,18 @@ collective_future AlltoallCtx::comm_intermediate() {
         } else {
           // sptr->unpack(message);
         }
+
+        // free message type
+        auto my_type = message.recvtype();
+        FMPI_CHECK_MPI(MPI_Type_free(&my_type));
       });
 
   // submit into dispatcher
   auto const hdl = dispatcher.submit(std::move(schedule_state));
 
-  // Phase 1: rotate
-  // O(p * blocksize)
   {
+    // Phase 1: rotate
+    // O(p * blocksize)
     auto r_size  = static_cast<mpi::Rank>(comm.size());
     auto first   = static_cast<const std::byte*>(sendbuf);
     auto n_first = static_cast<const std::byte*>(send_offset(comm.rank()));
@@ -412,7 +420,7 @@ collective_future AlltoallCtx::comm_intermediate() {
     for (auto&& d : fmpi::range(1u, r)) {
       std::ignore = d;
       // auto const j = static_cast<mpi::Rank>(d * std::pow(r, i));
-      auto j = static_cast<mpi::Rank>(1 << i);
+      auto const j = static_cast<mpi::Rank>(1 << i);
 
       // a) pack blocks into a contigous send buffer
       int nblocks = 0;
