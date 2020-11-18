@@ -80,5 +80,6 @@ void calculate_and_print_stats(
     double              cpu_time,
     double              wait_time,
     double              init_time,
-    mpi::Context const& ctx);
+    mpi::Context const& ctx,
+    uint32_t            window_size);
 #endif

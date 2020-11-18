@@ -209,7 +209,8 @@ int main(int argc, char* argv[]) {
           tcomp_total,
           wait_total,
           init_total,
-          world);
+          world,
+          w);
     }
   }
 

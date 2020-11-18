@@ -308,6 +308,7 @@ void print_preamble_nbc(int rank, std::string_view name) {
       stdout, "# Overall = Coll. Init + Compute + MPI_Test + MPI_Wait\n\n");
 
   fprintf(stdout, "%-*s", 10, "# Size");
+  fprintf(stdout, "%*s", 10, "Window");
   fprintf(stdout, "%*s", FIELD_WIDTH, "Overall(us)");
 
   fprintf(stdout, "%*s", FIELD_WIDTH, "Compute(us)");
@@ -456,6 +457,7 @@ double do_compute_and_probe(double seconds) {
 void print_stats_nbc(
     int                              rank,
     int                              size,
+    uint32_t                         window_size,
     double                           overall_time,
     double                           cpu_time,
     double                           comm_time,
@@ -479,6 +481,7 @@ void print_stats_nbc(
       0, 100 - (((overall_time - (cpu_time - test_time)) / comm_time) * 100));
 
   fprintf(stdout, "%-*d", 10, size);
+  fprintf(stdout, "%*d", 10, window_size);
   fprintf(stdout, "%*.*f", FIELD_WIDTH, FLOAT_PRECISION, overall_time);
 
   fprintf(
@@ -521,7 +524,8 @@ void calculate_and_print_stats(
     double              cpu_time,
     double              wait_time,
     double              init_time,
-    mpi::Context const& ctx) {
+    mpi::Context const& ctx,
+    uint32_t            window_size) {
   double test_total   = (test_time * 1e6) / options.iterations;
   double tcomp_total  = (cpu_time * 1e6) / options.iterations;
   double overall_time = (timer * 1e6) / options.iterations;
@@ -649,6 +653,7 @@ void calculate_and_print_stats(
   print_stats_nbc(
       rank,
       size,
+      window_size,
       overall_time,
       tcomp_total,
       comm_time,
