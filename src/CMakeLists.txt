@@ -13,6 +13,7 @@ add_library(fmpi
     mpi/Environment.cc
     mpi/Rank.cc
     mpi/Request.cc
+    neighbor_alltoall.cc
     # topo/BinaryTree.cc
     topo/Tree.cc
     util/Trace.cc

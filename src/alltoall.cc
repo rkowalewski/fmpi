@@ -29,26 +29,26 @@ AlltoallCtx::AlltoallCtx(
   , recvcount(recvcount_)
   , recvtype(recvtype_)
   , comm(comm_)
-  , sendrecvtag_(kTagRing)
+  , sendrecvtag(comm.collectiveTag())
   , opts(opts_) {
   MPI_Aint recvlb{};
   MPI_Aint sendlb{};
   FMPI_ASSERT(recvtype == sendtype);
-  FMPI_DBG(sendrecvtag_);
-  MPI_Type_get_extent(recvtype, &recvlb, &recvextent_);
-  MPI_Type_get_extent(sendtype, &sendlb, &sendextent_);
+  FMPI_DBG(sendrecvtag);
+  MPI_Type_get_extent(recvtype, &recvlb, &recvextent);
+  MPI_Type_get_extent(sendtype, &sendlb, &sendextent);
 }
 
 inline void* AlltoallCtx::recv_offset(mpi::Rank r) const {
   FMPI_ASSERT(r >= 0);
-  auto const segsz  = recvcount * recvextent_;
+  auto const segsz  = recvcount * recvextent;
   auto const offset = static_cast<std::size_t>(r) * segsz;
   return fmpi::detail::add(recvbuf, offset);
 }
 
 inline const void* AlltoallCtx::send_offset(mpi::Rank r) const {
   FMPI_ASSERT(r >= 0);
-  auto const segsz  = sendcount * sendextent_;
+  auto const segsz  = sendcount * sendextent;
   auto const offset = static_cast<std::size_t>(r) * segsz;
   return fmpi::detail::add(sendbuf, offset);
 }
@@ -60,7 +60,7 @@ inline void AlltoallCtx::local_copy() {
 
   std::copy_n(
       static_cast<std::byte const*>(src),
-      sendcount * sendextent_,
+      sendcount * sendextent,
       static_cast<std::byte*>(dst));
 }
 
@@ -85,7 +85,7 @@ collective_future AlltoallCtx::execute() {
         static_cast<int>(recvcount),
         recvtype,
         other,
-        sendrecvtag_,
+        sendrecvtag,
         ctx.mpiComm(),
         &future.native_handle());
 
@@ -96,7 +96,7 @@ collective_future AlltoallCtx::execute() {
         static_cast<int>(sendcount),
         sendtype,
         other,
-        sendrecvtag_,
+        sendrecvtag,
         ctx.mpiComm());
 
     local_copy();
@@ -163,12 +163,12 @@ collective_future AlltoallCtx::execute() {
       sendcount,
       sendtype,
       ctx.rank(),
-      sendrecvtag_,
+      sendrecvtag,
       recv_offset(ctx.rank()),
       recvcount,
       recvtype,
       ctx.rank(),
-      sendrecvtag_,
+      sendrecvtag,
       ctx.mpiComm()};
 
   dispatcher.schedule(hdl, message_type::COPY, msg);
@@ -192,12 +192,12 @@ collective_future AlltoallCtx::execute() {
             sendcount,
             sendtype,
             speer,
-            sendrecvtag_,
+            sendrecvtag,
             recv_offset(rpeer),
             recvcount,
             recvtype,
             rpeer,
-            sendrecvtag_,
+            sendrecvtag,
             ctx.mpiComm()};
         type = message_type::ISENDRECV;
       } else if (rpeer != ctx.rank()) {
@@ -207,7 +207,7 @@ collective_future AlltoallCtx::execute() {
             recvcount,
             recvtype,
             rpeer,
-            sendrecvtag_,
+            sendrecvtag,
             ctx.mpiComm());
         type = message_type::IRECV;
       } else if (speer != ctx.rank()) {
@@ -217,7 +217,7 @@ collective_future AlltoallCtx::execute() {
             sendcount,
             sendtype,
             speer,
-            sendrecvtag_,
+            sendrecvtag,
             ctx.mpiComm());
         type = message_type::ISEND;
       }
@@ -254,7 +254,7 @@ collective_future AlltoallCtx::execute() {
         recvcount,
         recvtype,
         ctx.rank(),
-        sendrecvtag_,
+        sendrecvtag,
         ctx.mpiComm()));
   }
 #endif
@@ -351,7 +351,7 @@ collective_future AlltoallCtx::comm_intermediate() {
   auto  future     = promise.get_future();
   auto& dispatcher = static_dispatcher_pool();
 
-  auto const blocksize = sendextent_ * sendcount;
+  auto const blocksize = sendextent * sendcount;
   auto algo = std::make_shared<BruckAlgorithm>(recvbuf, blocksize, comm, w);
   // algo->sbuf            = algo->tmpbuf.begin() + blocksize * comm.size();
   // algo->rbuf            = algo->sbuf + blocksize * comm.size() / 2;
@@ -405,7 +405,7 @@ collective_future AlltoallCtx::comm_intermediate() {
   // local copy
   // std::copy_n(
   //    static_cast<std::byte const*>(send_offset(comm.rank())),
-  //    sendcount * sendextent_,
+  //    sendcount * sendextent,
   //    static_cast<std::byte*>(recvbuf));
 
   // auto blocks = fmpi::FixedVector<int>(comm.size());
@@ -455,12 +455,12 @@ collective_future AlltoallCtx::comm_intermediate() {
           1,
           packed_type,
           static_cast<mpi::Rank>(sendto),
-          sendrecvtag_,
+          sendrecvtag,
           recvbuf,
           1,
           packed_type,
           static_cast<mpi::Rank>(recvfrom),
-          sendrecvtag_,
+          sendrecvtag,
           comm.mpiComm()};
 
       dispatcher.schedule(hdl, message_type::ISENDRECV, msg);

@@ -20,9 +20,9 @@ class AlltoallCtx {
       ScheduleOpts const& opts_);
 
   collective_future execute();
-  collective_future comm_intermediate();
 
  private:
+  collective_future         comm_intermediate();
   [[nodiscard]] const void* send_offset(mpi::Rank r) const;
   [[nodiscard]] void*       recv_offset(mpi::Rank r) const;
   void                      local_copy();
@@ -34,9 +34,9 @@ class AlltoallCtx {
   std::size_t const   recvcount;
   MPI_Datatype const  recvtype;
   mpi::Context const& comm;
-  MPI_Aint            recvextent_{};
-  MPI_Aint            sendextent_{};
-  int32_t const       sendrecvtag_{};
+  MPI_Aint            recvextent{};
+  MPI_Aint            sendextent{};
+  int32_t const       sendrecvtag{};
   ScheduleOpts const& opts;
 };
 

@@ -38,10 +38,12 @@ int DefaultMessageHandler::operator()(
 }
 
 int DefaultMessageHandler::send(const Message& message, MPI_Request& req) {
+#if FMPI_DEBUG_ASSERT
   std::ostringstream os;
   os << "Send : { dest : " << message.dest() << ", tag: " << message.sendtag()
      << "}";
   FMPI_DBG(os.str());
+#endif
 
   return MPI_Isend(
       message.sendbuffer(),
@@ -53,7 +55,7 @@ int DefaultMessageHandler::send(const Message& message, MPI_Request& req) {
       &req);
 }
 int DefaultMessageHandler::recv(Message& message, MPI_Request& req) {
-#ifdef FMPI_DEBUG_ASSERT
+#if FMPI_DEBUG_ASSERT
   std::ostringstream os;
   os << "Receive : { source : " << message.source()
      << ", tag: " << message.recvtag() << "}";
@@ -84,6 +86,18 @@ int DefaultMessageHandler::lcopy(Message& message) {
 int DefaultMessageHandler::sendrecv(
     Message& message, std::array<MPI_Request*, 2> reqs, bool blocking) {
   if (blocking) {
+#if FMPI_DEBUG_ASSERT
+    {
+      std::ostringstream os;
+      os << "SendRecv : { source : " << message.source();
+      os << ", recvtag: " << message.recvtag();
+      os << ", dest: " << message.dest();
+      os << ", sendtag: " << message.sendtag();
+      os << "}";
+      FMPI_DBG(os.str());
+    }
+#endif
+
     return MPI_Sendrecv(
         message.sendbuffer(),
         static_cast<int>(message.sendcount()),

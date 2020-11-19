@@ -53,7 +53,11 @@ class Context {
     return m_group;
   }
 
-  int32_t collectiveTag() const;
+  int32_t requestTagSpace(int32_t n) const;
+
+  int32_t collectiveTag() const {
+    return requestTagSpace(1);
+  }
 
   static Context const& world();
 

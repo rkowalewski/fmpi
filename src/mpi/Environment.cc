@@ -44,8 +44,8 @@ void Context::abort(int error) const {
   MPI_Abort(m_comm, error);
 }
 
-int32_t Context::collectiveTag() const {
-  return m_collective_tag--;
+int32_t Context::requestTagSpace(int32_t n) const {
+  return m_collective_tag.fetch_sub(n);
   // auto ret = m_collective_tag--;
   // if (m_collective_tag == -1) {
   //  m_collective_tag = MPI_TAG_UB;
