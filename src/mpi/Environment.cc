@@ -10,8 +10,8 @@ namespace mpi {
 
 static MPI_Comm comm_world = MPI_COMM_NULL;
 
-static bool    initialized = false;
-static int32_t mpi_tag_ub  = 32767;
+static bool          initialized = false;
+static int32_t const mpi_tag_ub  = 32767;
 
 Context::Context(MPI_Comm comm, bool free_self)
   : m_comm(comm)
@@ -99,6 +99,7 @@ bool initialize(int* argc, char*** argv, ThreadLevel level) {
 
   initialized = success && required <= provided;
 
+#if 0
   // Maximum tag value
   int32_t flag = 0;
 
@@ -109,8 +110,9 @@ bool initialize(int* argc, char*** argv, ThreadLevel level) {
   // although this does not conform with the MPI-3 standard. See
   // section 8.1.2.
   if (flag != 0) {
-    MPI_Allreduce(&tag_ub, &mpi_tag_ub, 1, MPI_INT, MPI_MIN, MPI_COMM_WORLD);
+    MPI_Allreduce(&tag_ub, &mpi_tag_ub, 1, MPI_INT, MPI_MAX, MPI_COMM_WORLD);
   }
+#endif
 
   return initialized;
 }
