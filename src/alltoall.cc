@@ -138,11 +138,11 @@ collective_future AlltoallCtx::execute() {
       });
 #endif
 
-#if 0
+#if 1
   schedule_state->register_callback(
       message_type::IRECV,
       [sptr = future.allocate_queue(ctx.size())](
-          const std::vector<Message>& msgs) mutable {
+          const std::vector<Message>& msgs) {
         for (auto&& msg : msgs) {
           sptr->push(msg);
         }
@@ -249,13 +249,13 @@ collective_future AlltoallCtx::execute() {
 
     local_copy();
 
-    // future.arrival_queue()->push(make_receive(
-    //    recv_offset(ctx.rank()),
-    //    recvcount,
-    //    recvtype,
-    //    ctx.rank(),
-    //    sendrecvtag_,
-    //    ctx.mpiComm()));
+    future.arrival_queue()->push(make_receive(
+        recv_offset(ctx.rank()),
+        recvcount,
+        recvtype,
+        ctx.rank(),
+        sendrecvtag_,
+        ctx.mpiComm()));
   }
 #endif
 

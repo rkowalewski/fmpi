@@ -382,10 +382,6 @@ std::vector<Runner> algorithm_list(
         Runner{Alltoall_Runner<fmpi::OneFactor, win_t::sliding, 4>()},
         Runner{Alltoall_Runner<fmpi::OneFactor, win_t::sliding, 8>()},
         Runner{Alltoall_Runner<fmpi::OneFactor, win_t::sliding, 16>()},
-        Runner{Alltoall_Runner<
-            fmpi::Linear,
-            win_t::sliding,
-            std::numeric_limits<uint32_t>::max()>()},
 #if 0
           // Bruck Algorithms, first the original one, then a modified
           // version which omits the last local rotation step

@@ -61,18 +61,20 @@ class Runner {
     times.emplace_back(Ttotal, d_total);
     times.emplace_back(Tschedule, d_schedule);
 
+#if 0
     {
       // Collect Traces
       auto&       traceStore = fmpi::TraceStore::instance();
       auto const& traces     = traceStore.traces(name());
 
       std::copy(
-          std::begin(traces), std::end(traces), std::back_inserter(times));
+         std::begin(traces), std::end(traces), std::back_inserter(times));
 
       traceStore.erase(name());
 
       assert(traceStore.empty());
     }
+#endif
 
     auto comms = std::partition(
         std::begin(times), std::end(times), [](const auto& pair) {
