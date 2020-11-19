@@ -50,9 +50,10 @@ int main(int argc, char* argv[]) {
     return EXIT_FAILURE;
   }
 
-#ifdef FMPI_DEBUG_ASSERT
+#if FMPI_DEBUG_ASSERT
   using value_t = int;
   auto mpi_type = MPI_INT;
+#pragma message("WARNING: You are compiling in debug mode. Be careful with benchmarks.")
 #else
   using value_t = char;
   auto mpi_type = MPI_CHAR;
@@ -68,7 +69,7 @@ int main(int argc, char* argv[]) {
     world.abort(EXIT_FAILURE);
   }
 
-#ifdef FMPI_DEBUG_ASSERT
+#if FMPI_DEBUG_ASSERT
   std::iota(sendbuf, sendbuf + bufsize, world.rank() * bufsize);
 #else
   std::memset(sendbuf, 1, bufsize * sizeof(value_t));
@@ -89,6 +90,8 @@ int main(int argc, char* argv[]) {
   if (options.algorithm < 2) {
     // bruck == 2
     ws.emplace_back(8u);
+    ws.emplace_back(16u);
+    ws.emplace_back(32u);
     ws.emplace_back(64u);
   }
 
