@@ -67,9 +67,7 @@ inline auto bruck(int nr) {
     for (auto&& r : fmpi::range(phase_count)) {
       for (auto&& w : fmpi::range(1, base)) {
         auto const j = static_cast<mpi::Rank>(w * std::pow(base, r));
-        res[r].emplace_back(
-            fmpi::mod(me + j, static_cast<mpi::Rank>(nr)),
-            fmpi::mod(me - j, static_cast<mpi::Rank>(nr)));
+        res[r].emplace_back((me + j) % nr, (me - j + nr) % nr);
       }
     }
   }
@@ -607,7 +605,7 @@ void print_dot(
     std::vector<std::vector<RankPair>> tournament, const std::string& title) {
   (void)title;
   auto nr = tournament.size();
-  int nd = ndigits(nr);
+  int  nd = ndigits(nr);
   std::cout << "digraph G {\n";
   std::cout << "graph [rankdir=TB ranksep=1 nodesep=1]\n";
   std::cout << "node [style=filled shape=circle]\n";
@@ -769,8 +767,8 @@ void print_dot_tree(std::vector<std::vector<RankPair>> pairs) {
 
   for (auto&& r : fmpi::range(pairs.size())) {
     auto partners = pairs[r];
-    for (auto&& r : partners) {
-      std::cout << "p_" << r.first << " -> p_" << r.second << ";\n";
+    for (auto&& p : partners) {
+      std::cout << "p_" << p.first << " -> p_" << p.second << ";\n";
     }
   }
 

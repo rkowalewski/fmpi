@@ -10,7 +10,7 @@ namespace fmpi {
 static void knomial_tree_aux(Tree* tree, mpi::Rank me, uint32_t size) {
   /* Receive from parent */
 
-  auto const vr    = fmpi::mod(me - tree->root, static_cast<mpi::Rank>(size));
+  auto const vr    = (me - tree->root + size) % size;
   auto const radix = static_cast<int>(tree->radix);
   auto const nr    = static_cast<int>(size);
   int        mask  = 0x1;
@@ -41,16 +41,15 @@ static void knomial_tree_aux(Tree* tree, mpi::Rank me, uint32_t size) {
 
 static void binomial_tree_aux(Tree* tree, mpi::Rank me, uint32_t size) {
   // cyclically shifted rank
-  auto const vr = static_cast<int>(
-      fmpi::mod(me - tree->root, static_cast<mpi::Rank>(size)));
-  auto const nr = static_cast<int>(size);
+  int32_t const vr = (me - tree->root + size) % size;
+  auto const    nr = static_cast<int>(size);
 
   int d = 1;  // distance
   int r = 0;  // round
   if (vr > 0) {
     r = tlx::ffs(vr) - 1;
     d <<= r;
-    auto const from = fmpi::mod((vr ^ d) + tree->root, nr);
+    auto const from = ((vr ^ d) + tree->root) % nr;
     tree->src       = mpi::Rank{from};
   } else {
     d = tlx::round_up_to_power_of_two(nr);

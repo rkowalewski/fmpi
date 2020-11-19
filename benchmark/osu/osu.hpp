@@ -72,7 +72,7 @@ double do_compute_and_probe(double seconds);
 
 void calculate_and_print_stats(
     int                 rank,
-    int                 size,
+    std::size_t         size,
     int                 numprocs,
     double              timer,
     double              latency,

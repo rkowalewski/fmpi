@@ -10,6 +10,9 @@
 namespace mpi {
 
 class Rank {
+  template <class T>
+  using is_integral = std::enable_if_t<!std::is_integral_v<T>>;
+
  public:
   constexpr Rank() = default;
   constexpr explicit Rank(int rank) noexcept;
@@ -116,6 +119,7 @@ constexpr Rank operator-(Rank const& lhs, Rank const& rhs) noexcept {
   return Rank{lhs.mpiRank() - rhs.mpiRank()};
 }
 
+#if 0
 constexpr Rank operator-(Rank const& lhs, int32_t diff) noexcept {
   return Rank{lhs.mpiRank() - diff};
 }
@@ -123,6 +127,7 @@ constexpr Rank operator-(Rank const& lhs, int32_t diff) noexcept {
 constexpr Rank operator+(Rank const& lhs, int32_t diff) noexcept {
   return Rank{lhs.mpiRank() + diff};
 }
+#endif
 
 constexpr Rank operator^(Rank const& lhs, Rank const& rhs) FMPI_NOEXCEPT {
   FMPI_ASSERT(lhs.mpiRank() >= 0);
@@ -140,6 +145,7 @@ constexpr Rank operator%(Rank const& lhs, Rank const& rhs) noexcept {
 
 }  // namespace mpi
 
+#if 0
 namespace std {
 /// Specialization of std traits for mpi::Rank
 template <>
@@ -147,5 +153,6 @@ struct is_signed<mpi::Rank> : std::true_type {};
 template <>
 struct is_integral<mpi::Rank> : std::true_type {};
 }  // namespace std
+#endif
 
 #endif

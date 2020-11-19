@@ -98,17 +98,14 @@ class FlatHandshake {
   }
 
   [[nodiscard]] constexpr Rank sendRank(uint32_t phase) const FMPI_NOEXCEPT {
-    auto const r_phase = static_cast<Rank>(phase);
-    auto const r_nodes = static_cast<Rank>(nodes_);
-
-    return isPow2(nodes_) ? rank_ xor r_phase : mod(rank_ + r_phase, r_nodes);
+    return isPow2(nodes_) ? rank_ xor static_cast<mpi::Rank>(phase)
+                          : static_cast<mpi::Rank>(rank_ + phase % nodes_);
   }
 
   [[nodiscard]] constexpr Rank recvRank(uint32_t phase) const FMPI_NOEXCEPT {
-    auto const r_phase = static_cast<Rank>(phase);
-    auto const r_nodes = static_cast<Rank>(nodes_);
-
-    return isPow2(nodes_) ? rank_ xor r_phase : mod(rank_ - r_phase, r_nodes);
+    return isPow2(nodes_)
+               ? rank_ xor static_cast<mpi::Rank>(phase)
+               : static_cast<Rank>((rank_ - phase + nodes_) % nodes_);
   }
 
   [[nodiscard]] constexpr uint32_t phaseCount() const FMPI_NOEXCEPT {
@@ -167,23 +164,23 @@ class OneFactor {
  private:
   [[nodiscard]] constexpr Rank factor_even(uint32_t phase) const
       FMPI_NOEXCEPT {
-    auto const count = static_cast<Rank>(nodes_ - 1);
-    auto const idle  = mod(static_cast<Rank>(nodes_ * phase / 2), count);
+    int32_t const count = nodes_ - 1;
+    auto const    idle = static_cast<mpi::Rank>((nodes_ * phase / 2) % count);
 
     if (rank_ == count) {
       return idle;
     }
 
     if (rank_ == idle) {
-      return count;
+      return static_cast<Rank>(count);
     }
 
-    return mod(static_cast<Rank>(phase) - rank_, count);
+    return static_cast<mpi::Rank>((phase - rank_ + count) % count);
   }
 
   [[nodiscard]] constexpr Rank factor_odd(uint32_t phase) const
       FMPI_NOEXCEPT {
-    return mod(static_cast<Rank>(phase) - rank_, static_cast<Rank>(nodes_));
+    return static_cast<Rank>((phase - rank_ + nodes_) % nodes_);
   }
 
   Rank const     rank_{};

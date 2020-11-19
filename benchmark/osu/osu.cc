@@ -184,12 +184,14 @@ void print_topology(mpi::Context const& ctx, std::size_t nhosts) {
   mpi::Rank left{};
   mpi::Rank right{};
 
+  constexpr auto one = static_cast<mpi::Rank>(1);
+
   if (ppn == 1) {
-    left  = (me == 0) ? mpi::Rank::null() : me - 1;
-    right = (me == ctx.size() - 1) ? mpi::Rank::null() : me + 1;
+    left  = (me == 0) ? mpi::Rank::null() : me - one;
+    right = (me == ctx.size() - 1) ? mpi::Rank::null() : me + one;
   } else {
-    left  = (me > 0 && me <= last) ? me - 1 : mpi::Rank::null();
-    right = (me < last) ? me + 1 : mpi::Rank::null();
+    left  = (me > 0 && me <= last) ? me - one : mpi::Rank::null();
+    right = (me < last) ? me + one : mpi::Rank::null();
   }
 
   if (not(left or right)) {
@@ -456,7 +458,7 @@ double do_compute_and_probe(double seconds) {
 
 void print_stats_nbc(
     int                              rank,
-    int                              size,
+    std::size_t                      size,
     uint32_t                         window_size,
     double                           overall_time,
     double                           cpu_time,
@@ -480,7 +482,7 @@ void print_stats_nbc(
   overlap = std::max<double>(
       0, 100 - (((overall_time - (cpu_time - test_time)) / comm_time) * 100));
 
-  fprintf(stdout, "%-*d", 10, size);
+  fprintf(stdout, "%-*zu", 10, size);
   fprintf(stdout, "%*d", 10, window_size);
   fprintf(stdout, "%*.*f", FIELD_WIDTH, FLOAT_PRECISION, overall_time);
 
@@ -516,7 +518,7 @@ void print_stats_nbc(
 }
 void calculate_and_print_stats(
     int                 rank,
-    int                 size,
+    std::size_t         size,
     int                 numprocs,
     double              timer,
     double              latency,

@@ -43,8 +43,9 @@ fmpi::Pinning::Pinning() {
 
   num_threads = get_num_user_threads();
 
-  auto const ncores = folly::CacheLocality::system().numCpus;
-  auto const ncpus  = ncores / 2;
+  auto const ncores =
+      static_cast<uint32_t>(folly::CacheLocality::system().numCpus);
+  auto const ncpus = ncores / 2;
 
   main_core                  = sched_getcpu();
   auto const domain_id       = (main_core % ncpus) / domain_size;
@@ -69,7 +70,7 @@ fmpi::Pinning::Pinning() {
     // comp_core       = main_core;
   }
 
-  //dispatcher_core = (main_core + ncpus) % ncores;
+  // dispatcher_core = (main_core + ncpus) % ncores;
 }
 
 std::ostream& fmpi::operator<<(std::ostream& os, const Pinning& pinning) {

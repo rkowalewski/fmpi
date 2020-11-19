@@ -8,6 +8,7 @@
 
 namespace fmpi {
 
+#if 0
 namespace detail {
 
 template <class T>
@@ -25,6 +26,7 @@ inline constexpr auto mod(T a, T b, std::false_type /*unused*/) -> T
   static_assert(std::is_unsigned<T>::value, "only unsigned types allowed");
   return a % b;
 }
+
 }  // namespace detail
 
 template <class T>
@@ -34,16 +36,15 @@ inline constexpr auto mod(T a, T b) -> T
 
   return detail::mod(a, b, typename std::is_signed<T>::type{});
 }
+#endif
 
 template <class T>
-inline constexpr auto log(T base, T x) -> double
-{
+inline constexpr auto log(T base, T x) -> double {
   return std::log(x) / std::log(base);
 }
 
 template <class T>
-inline constexpr auto isPow2(T v)
-{
+inline constexpr auto isPow2(T v) {
   static_assert(
       std::is_integral<T>::value && std::is_unsigned<T>::value,
       "only unsigned integer types supported");
@@ -52,8 +53,7 @@ inline constexpr auto isPow2(T v)
 }
 
 template <class T>
-inline constexpr auto abs(T v)
-{
+inline constexpr auto abs(T v) {
   static_assert(
       std::is_integral<T>::value && std::is_signed<T>::value,
       "only signed integer types supported");

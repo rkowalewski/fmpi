@@ -50,7 +50,7 @@ int main(int argc, char* argv[]) {
     return EXIT_FAILURE;
   }
 
-#if 0
+#ifdef FMPI_DEBUG_ASSERT
   using value_t = int;
   auto mpi_type = MPI_INT;
 #else
@@ -64,26 +64,22 @@ int main(int argc, char* argv[]) {
   value_t* recvbuf = NULL;
 
   if (allocate_memory_coll((void**)&sendbuf, bufsize * sizeof(value_t))) {
-    fprintf(stderr, "Could Not Allocate Memory [rank %d]\n", rank);
+    fprintf(stderr, "Could Not Allocate Memory [rank %d]\n", rank.mpiRank());
     world.abort(EXIT_FAILURE);
   }
 
-#if 0
+#ifdef FMPI_DEBUG_ASSERT
   std::iota(sendbuf, sendbuf + bufsize, world.rank() * bufsize);
 #else
-  std::memset(sendbuf, 1, bufsize);
+  std::memset(sendbuf, 1, bufsize * sizeof(value_t));
 #endif
 
   if (allocate_memory_coll((void**)&recvbuf, bufsize * sizeof(value_t))) {
-    fprintf(
-        stderr,
-        "Could Not Allocate Memory [rank %d]\n",
-        static_cast<int>(rank));
+    fprintf(stderr, "Could Not Allocate Memory [rank %d]\n", rank.mpiRank());
     world.abort(EXIT_FAILURE);
   }
 
-  // std::memset(recvbuf, 0, bufsize);
-  std::memset(recvbuf, 1, bufsize);
+  std::memset(recvbuf, 0, bufsize);
 
   print_preamble_nbc(rank, std::string_view("osu_ialltoall"));
 
@@ -221,9 +217,9 @@ int main(int argc, char* argv[]) {
 }
 
 fmpi::ScheduleOpts schedule_options(
-    int                            algorithm,
-    std::uint32_t                  winsz,
-    std::string_view               id,
+    int           algorithm,
+    std::uint32_t winsz,
+    std::string_view /*id*/,
     fmpi::ScheduleOpts::WindowType win_type,
     mpi::Context const&            ctx) {
   if (algorithm == 0) {

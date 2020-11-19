@@ -317,7 +317,7 @@ class BruckAlgorithm {
   void rotate_down() {
     for (auto&& b_src : fmpi::range(size)) {
       auto const my_rank = static_cast<uint32_t>(rank);
-      auto const b_dest  = ::fmpi::mod(my_rank - b_src, size);
+      auto const b_dest  = (my_rank - b_src + size) % size;
       auto const offset  = b_src * blocksize;
 
       auto const first =
@@ -340,7 +340,6 @@ class BruckAlgorithm {
 };
 
 collective_future AlltoallCtx::comm_intermediate() {
-  using fmpi::mod;
   constexpr auto r = 2u;
   // w = log_2 n
   /*
@@ -416,59 +415,60 @@ collective_future AlltoallCtx::comm_intermediate() {
   MPI_Datatype packed_type{};
 
   // Phase 2: Communication
-  for (auto&& i : fmpi::range(w)) {
-    for (auto&& d : fmpi::range(1u, r)) {
-      std::ignore = d;
-      // auto const j = static_cast<mpi::Rank>(d * std::pow(r, i));
-      auto const j = static_cast<mpi::Rank>(1 << i);
 
-      // a) pack blocks into a contigous send buffer
-      int nblocks = 0;
+  for (int32_t j = 1; j < static_cast<int32_t>(comm.size()); j <<= 1) {
+    // for (auto&& d : fmpi::range(1u, r)) {
+    // auto const j = static_cast<mpi::Rank>(d * std::pow(r, i));
 
-      for (auto&& idx : range(1u, comm.size())) {
-        if (idx & j) {
-          displs[nblocks] = idx * static_cast<int>(sendcount);
-          // blens[nblocks]  = static_cast<int>(sendcount);
-          nblocks++;
-        }
+    // a) pack blocks into a contigous send buffer
+    int nblocks = 0;
+
+    for (auto&& idx : range<int32_t>(1, comm.size())) {
+      if (idx & j) {
+        displs[nblocks] = idx * static_cast<int32_t>(sendcount);
+        // blens[nblocks]  = static_cast<int>(sendcount);
+        nblocks++;
       }
-
-      FMPI_CHECK_MPI(MPI_Type_create_indexed_block(
-          nblocks,
-          static_cast<int>(sendcount),
-          displs.data(),
-          sendtype,
-          &packed_type));
-
-      FMPI_CHECK_MPI(MPI_Type_commit(&packed_type));
-
-      {
-        auto const peers = std::make_pair(
-            mod(comm.rank() - j, static_cast<mpi::Rank>(comm.size())),
-            mod(comm.rank() + j, static_cast<mpi::Rank>(comm.size())));
-        auto const [recvfrom, sendto] = peers;
-
-        FMPI_DBG(peers);
-
-        auto msg = Message{
-            algo->buffer().data(),
-            1,
-            packed_type,
-            sendto,
-            sendrecvtag_,
-            recvbuf,
-            1,
-            packed_type,
-            recvfrom,
-            sendrecvtag_,
-            comm.mpiComm()};
-
-        dispatcher.schedule(hdl, message_type::ISENDRECV, msg);
-      }
-
-      // not needed here because we have winsz == 1
-      // dispatcher.schedule(hdl, message_type::BARRIER);
     }
+
+    FMPI_DBG(nblocks);
+
+    FMPI_CHECK_MPI(MPI_Type_create_indexed_block(
+        nblocks,
+        static_cast<int>(sendcount),
+        displs.data(),
+        sendtype,
+        &packed_type));
+
+    FMPI_CHECK_MPI(MPI_Type_commit(&packed_type));
+
+    {
+      int32_t const r_i      = comm.rank();
+      int32_t const s_i      = comm.size();
+      int32_t const recvfrom = (r_i - j + s_i) % s_i;
+      int32_t const sendto   = (r_i + j) % s_i;
+
+      FMPI_DBG(std::make_pair(recvfrom, sendto));
+
+      auto msg = Message{
+          algo->buffer().data(),
+          1,
+          packed_type,
+          static_cast<mpi::Rank>(sendto),
+          sendrecvtag_,
+          recvbuf,
+          1,
+          packed_type,
+          static_cast<mpi::Rank>(recvfrom),
+          sendrecvtag_,
+          comm.mpiComm()};
+
+      dispatcher.schedule(hdl, message_type::ISENDRECV, msg);
+    }
+
+    // not needed here because we have winsz == 1
+    // dispatcher.schedule(hdl, message_type::BARRIER);
+    //}
   }
 
   dispatcher.commit(hdl);
