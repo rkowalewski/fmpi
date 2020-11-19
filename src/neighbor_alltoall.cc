@@ -23,16 +23,14 @@ NeighborAlltoallCtx::NeighborAlltoallCtx(
     void*               recvbuf_,
     std::size_t         recvcount_,
     MPI_Datatype        recvtype_,
-    mpi::Context const& comm_,
-    ScheduleOpts const& opts_)
+    mpi::Context const& comm_)
   : sendbuf(sendbuf_)
   , sendcount(sendcount_)
   , sendtype(sendtype_)
   , recvbuf(recvbuf_)
   , recvcount(recvcount_)
   , recvtype(recvtype_)
-  , comm(comm_)
-  , opts(opts_) {
+  , comm(comm_) {
   MPI_Aint recvlb{};
   MPI_Aint sendlb{};
   FMPI_ASSERT(recvtype == sendtype);

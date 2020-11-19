@@ -13,7 +13,8 @@ namespace detail {
 using namespace std::literals::string_view_literals;
 // constexpr auto t_copy = "Tcomm.local_copy"sv;
 
-static constexpr int32_t alltoall_tag = 110435;
+static constexpr int32_t alltoall_tag       = 110435;
+static constexpr int32_t alltoall_tag_local = 110436;
 
 AlltoallCtx::AlltoallCtx(
     const void*         sendbuf_,
@@ -300,12 +301,12 @@ class BruckAlgorithm {
         1,
         message.recvtype(),
         rank,
-        message.sendtag(),
+        alltoall_tag_local,
         tmpbuf.data(),
         1,
         message.recvtype(),
         rank,
-        message.recvtag(),
+        alltoall_tag_local,
         message.comm(),
         MPI_STATUS_IGNORE));
   }
