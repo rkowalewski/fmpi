@@ -14,6 +14,8 @@ namespace detail {
 using namespace std::literals::string_view_literals;
 // constexpr auto t_copy = "Tcomm.local_copy"sv;
 
+static constexpr int32_t neighbor_alltoall_tag_base = 110400;
+
 NeighborAlltoallCtx::NeighborAlltoallCtx(
     const void*         sendbuf_,
     size_t              sendcount_,
@@ -162,7 +164,7 @@ collective_future NeighborAlltoallCtx::execute() {
   // submit into dispatcher
   auto const hdl = dispatcher.submit(std::move(schedule_state));
 
-  auto const tag_space = comm.requestTagSpace(2 * ndims);
+  auto const tag_space = neighbor_alltoall_tag_base;
 
   /* post receives first */
   for (auto&& dim : range(ndims)) {

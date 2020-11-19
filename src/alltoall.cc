@@ -13,6 +13,8 @@ namespace detail {
 using namespace std::literals::string_view_literals;
 // constexpr auto t_copy = "Tcomm.local_copy"sv;
 
+static constexpr int32_t alltoall_tag = 110435;
+
 AlltoallCtx::AlltoallCtx(
     const void*         sendbuf_,
     size_t              sendcount_,
@@ -29,7 +31,7 @@ AlltoallCtx::AlltoallCtx(
   , recvcount(recvcount_)
   , recvtype(recvtype_)
   , comm(comm_)
-  , sendrecvtag(comm.collectiveTag())
+  , sendrecvtag(alltoall_tag)
   , opts(opts_) {
   MPI_Aint recvlb{};
   MPI_Aint sendlb{};
