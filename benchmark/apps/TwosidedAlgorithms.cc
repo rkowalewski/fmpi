@@ -97,12 +97,13 @@ int main(int argc, char* argv[]) {
     }
 
     mpi::Context ctx{comm};
+    FMPI_DBG(ctx.size());
 
     assert(ctx.size() == nprocs);
 
     auto                  clock           = SynchronizedClock{};
     [[maybe_unused]] bool is_clock_synced = clock.Init(ctx.mpiComm());
-    assert(is_clock_synced);
+    // assert(is_clock_synced);
 
     for (std::size_t blocksize = params.smin; blocksize <= params.smax;
          blocksize <<= 1) {
@@ -147,7 +148,7 @@ int main(int argc, char* argv[]) {
           // time, so this is a real barrier
           auto       barrier         = clock.Barrier(ctx.mpiComm());
           auto const barrier_success = barrier.Success(ctx.mpiComm());
-          assert(barrier_success);
+          // assert(barrier_success);
 
           auto times = benchmark.run(coll_args);
 

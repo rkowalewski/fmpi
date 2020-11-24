@@ -6,6 +6,7 @@
 #include <fmpi/util/NumericRange.hpp>
 #include <fmpi/util/Trace.hpp>
 #include <numeric>
+#include <sstream>
 #include <utility>
 
 namespace fmpi {
@@ -266,8 +267,9 @@ void CommDispatcher::worker() {
 
       auto [it, ok] = schedules_.find(task.id);
 
-      FMPI_DBG(task.id.id());
       FMPI_ASSERT(ok);
+
+      FMPI_DBG(task);
 
       auto& uptr = it->second;
 
@@ -719,6 +721,38 @@ std::
     CommDispatcher::ctx_map::known_schedules() {
   std::lock_guard<std::mutex> lg{mtx_};
   return std::make_pair(std::begin(items_), std::end(items_));
+}
+
+std::ostream& operator<<(std::ostream& os, CommTask const& task) {
+  std::ostringstream ss;
+  ss << "CommTask { ";
+  if (task.type == message_type::ISEND) {
+    ss << "type: ISEND";
+    ss << ", id: " << task.id.id();
+    ss << ", dest: " << task.message.dest();
+  } else if (task.type == message_type::IRECV) {
+    ss << "type: IRECV";
+    ss << ", id: " << task.id.id();
+    ss << ", source: " << task.message.source();
+  } else if (task.type == message_type::ISENDRECV) {
+    ss << "type: ISENDRECV";
+    ss << ", id: " << task.id.id();
+    ss << ", source: " << task.message.source();
+    ss << ", dest: " << task.message.dest();
+  } else if (task.type == message_type::COMMIT) {
+    ss << "type: COMMIT";
+    ss << ", id: " << task.id.id();
+  } else if (task.type == message_type::BARRIER) {
+    ss << "type: BARRIER";
+    ss << ", id: " << task.id.id();
+  } else if (task.type == message_type::WAITSOME) {
+    ss << "type: WAITSOME";
+    ss << ", id: " << task.id.id();
+  }
+
+  ss << " }";
+  os << ss.str();
+  return os;
 }
 
 }  // namespace fmpi

@@ -73,6 +73,8 @@ struct CommTask {
   message_type   type{message_type::INVALID};
 };
 
+std::ostream& operator<<(std::ostream& os, CommTask const& task);
+
 namespace detail {
 
 static constexpr auto n_types = rtlx::to_underlying(message_type::INVALID);

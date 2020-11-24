@@ -151,6 +151,7 @@ collective_future AlltoallCtx::execute() {
       message_type::IRECV,
       [sptr = future.allocate_queue(ctx.size())](
           const std::vector<Message>& msgs) {
+        FMPI_DBG(msgs.size());
         for (auto&& msg : msgs) {
           sptr->push(msg);
         }
@@ -163,9 +164,7 @@ collective_future AlltoallCtx::execute() {
   auto       finalizer =
       rtlx::scope_exit([&dispatcher, hdl]() { dispatcher.commit(hdl); });
 
-  auto const rounds = std::max(schedule.phaseCount() / opts.winsz, 1u);
-
-  FMPI_DBG(rounds);
+  // FMPI_DBG(rounds);
 
 #if 0
   auto msg = Message{
@@ -186,10 +185,12 @@ collective_future AlltoallCtx::execute() {
 
   Message msg{};
 
-  for (auto&& r : range(rounds)) {
+  std::size_t dispatches = 0;
+
+  for (auto&& r : range(0u, schedule.phaseCount(), opts.winsz)) {
     auto const last = std::min(schedule.phaseCount(), (r + 1) * opts.winsz);
 
-    for (auto&& rr : range(r * opts.winsz, last)) {
+    for (auto&& rr : range(r, last)) {
       auto const rpeer = schedule.recvRank(rr);
       auto const speer = schedule.sendRank(rr);
 
@@ -233,12 +234,15 @@ collective_future AlltoallCtx::execute() {
       }
 
       if (type != message_type::INVALID) {
+        FMPI_DBG(std::make_pair(rpeer, speer));
         dispatcher.schedule(hdl, type, msg);
+        dispatches++;
       }
     }
 
-    if (r < (rounds - 1) and opts.winsz > 1) {
-      FMPI_DBG("scheduling barrier");
+    if (opts.winsz > 1 and dispatches == opts.winsz and
+        (r + opts.winsz) < schedule.phaseCount()) {
+      dispatches = 0;
       // if this is not the last round
       if (opts.type == ScheduleOpts::WindowType::fixed) {
         dispatcher.schedule(hdl, message_type::BARRIER);
