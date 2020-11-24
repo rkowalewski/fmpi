@@ -359,7 +359,7 @@ class Alltoall_Runner<void, WinT, NReqs> {
         static_cast<int>(coll_args.recvcount),
         coll_args.recvtype,
         coll_args.comm.mpiComm(),
-        &request.native_handle()));
+        &request.native_handles().front()));
 
     return request;
   }

@@ -155,10 +155,24 @@ int main(int argc, char* argv[]) {
         MPI_Recv(r_buf, size, MPI_CHAR, 0, 1, world.mpiComm(), &reqstat);
         MPI_Send(s_buf, size, MPI_CHAR, 0, 1, world.mpiComm());
 #else
-        FMPI_ASSERT(rsend.native_handle() == MPI_REQUEST_NULL);
-        FMPI_ASSERT(rrecv.native_handle() == MPI_REQUEST_NULL);
-        irecv(r_buf, size, MPI_CHAR, 0, 1, world, rrecv.native_handle());
-        isend(s_buf, size, MPI_CHAR, 0, 1, world, rsend.native_handle());
+        FMPI_ASSERT(rsend.native_handles().front() == MPI_REQUEST_NULL);
+        FMPI_ASSERT(rrecv.native_handles().front() == MPI_REQUEST_NULL);
+        irecv(
+            r_buf,
+            size,
+            MPI_CHAR,
+            0,
+            1,
+            world,
+            rrecv.native_handles().front());
+        isend(
+            s_buf,
+            size,
+            MPI_CHAR,
+            0,
+            1,
+            world,
+            rsend.native_handles().front());
         rrecv.wait();
         rsend.wait();
         // MPI_Wait(fut_recv.get(), &reqstat);

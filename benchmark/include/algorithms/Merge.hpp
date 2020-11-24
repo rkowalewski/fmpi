@@ -5,12 +5,14 @@
 #include <fmpi/Debug.hpp>
 #include <fmpi/Pinning.hpp>
 #include <fmpi/concurrency/Future.hpp>
+#include <fmpi/container/FixedVector.hpp>
 #include <fmpi/memory/ThreadAllocator.hpp>
 #include <fmpi/util/NumericRange.hpp>
 #include <fmpi/util/Trace.hpp>
 #include <numeric>
 #include <string_view>
 #include <tlx/algorithm.hpp>
+#include <tlx/math/div_ceil.hpp>
 #include <tlx/simple_vector.hpp>
 #include <utility>
 
@@ -56,6 +58,52 @@ RandomAccessIterator2 parallel_merge(
 #else
   return tlx::multiway_merge(std::begin(seqs), std::end(seqs), res, n);
 #endif
+}
+
+template <class RandomAccessIterator, class Queue>
+std::vector<std::pair<RandomAccessIterator, RandomAccessIterator>>
+merge_arrivals(
+    std::size_t                   nchunks,
+    std::size_t                   blocksize,
+    const std::shared_ptr<Queue>& queue,
+    RandomAccessIterator          target) {
+  using value_type =
+      typename std::iterator_traits<RandomAccessIterator>::value_type;
+
+  constexpr std::size_t radix = 2;
+  // auto const            ntasks = nchunks / radix;
+  auto const rem = nchunks % radix;
+
+  std::vector<std::pair<value_type*, value_type*>> pieces;
+  pieces.reserve(tlx::div_ceil(nchunks, radix));
+
+  for (std::size_t i = 0; i < nchunks;) {
+    auto n = std::min(radix, nchunks - i);
+    n += (n < nchunks) && (i == 0) && (rem > 0);
+
+    fmpi::FixedVector<std::pair<value_type*, value_type*>> seqs(n);
+
+    for (auto&& j : fmpi::range(n)) {
+      fmpi::Message msg{};
+      queue->pop(msg);
+      auto* first = static_cast<value_type*>(msg.recvbuffer());
+      auto* last  = std::next(first, blocksize);
+      seqs[j]     = std::make_pair(first, last);
+    }
+
+    auto const nels = n * blocksize;
+
+    auto d_first = target;
+
+#pragma omp task default(none) firstprivate(seqs, nels, d_first) if (0 == 1)
+    { tlx::multiway_merge(std::begin(seqs), std::end(seqs), d_first, nels); }
+
+    target += nels;
+    i += n;
+    pieces.emplace_back(std::make_pair(d_first, target));
+  }
+
+  return pieces;
 }
 
 template <class S, class R>
@@ -118,7 +166,6 @@ vector_times merge_async(
 }
 
 namespace detail {
-
 template <class T, class Allocator>
 class Piece;
 
@@ -166,13 +213,13 @@ vector_times merge_pieces(
   // auto* out = static_cast<value_type*>(collective_args.recvbuf);
 
   std::vector<iter_pair> chunks;
-  chunks.reserve(n_exchanges);
 
   // auto       d_first = out;
   auto const d_last = std::next(out, nels);
   {
     steady_timer        t_receive{d_receive};
     scoped_timer_switch switcher{t_idle, t_receive};
+#if 0
     while (n_exchanges--) {
       fmpi::Message msg{};
       queue->pop(msg);
@@ -180,15 +227,20 @@ vector_times merge_pieces(
       auto* first = static_cast<value_type*>(msg.recvbuffer());
       auto* last  = std::next(first, blocksize);
       chunks.emplace_back(first, last);
-    }
+#else
+    auto pieces = merge_arrivals(n_exchanges, blocksize, queue, out);
+    std::swap(pieces, chunks);
+#endif
   }
 
   FMPI_ASSERT(t_idle.running());
 
   {
-    steady_timer        t_merge{d_merge};
-    scoped_timer_switch switcher{t_idle, t_merge};
-    auto                last = parallel_merge(chunks, out, nels);
+    steady_timer                   t_merge{d_merge};
+    scoped_timer_switch            switcher{t_idle, t_merge};
+    fmpi::SimpleVector<value_type> buffer(nels);
+    parallel_merge(chunks, buffer.begin(), nels);
+    auto last = std::move(buffer.begin(), buffer.end(), out);
 
     FMPI_ASSERT(last == d_last);
   }

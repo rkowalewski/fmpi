@@ -48,9 +48,8 @@ class future_shared_state {
   mutable std::mutex              mtx_;
   std::condition_variable         cv_;
   std::optional<mpi::return_code> value_{};
-
-  state       state_ = state::async;
-  MPI_Request mpi_handle_{MPI_REQUEST_NULL};
+  state                           state_ = state::async;
+  std::vector<MPI_Request>        mpi_handles_;
 
  public:
   future_shared_state() = default;
@@ -63,12 +62,12 @@ class future_shared_state {
     return state_ == state::deferred;
   }
 
-  MPI_Request& native_handle() noexcept {
-    return mpi_handle_;
+  std::vector<MPI_Request>& native_handles() noexcept {
+    return mpi_handles_;
   }
 
-  MPI_Request const& native_handle() const noexcept {
-    return mpi_handle_;
+  std::vector<MPI_Request> const& native_handles() const noexcept {
+    return mpi_handles_;
   }
 
  private:
@@ -102,17 +101,17 @@ class collective_promise {
 class collective_future {
   friend class collective_promise;
   friend collective_future make_ready_future(mpi::return_code u);
-  friend collective_future make_mpi_future();
-
-  using simple_message_queue = rigtorp::MPMCQueue<Message>;
+  friend collective_future make_mpi_future(std::size_t n);
 
   std::shared_ptr<detail::future_shared_state> sptr_;
   // Partial arrivals
-  std::shared_ptr<simple_message_queue> partials_;
+  std::shared_ptr<rigtorp::MPMCQueue<Message>> partials_;
 
   explicit collective_future(std::shared_ptr<detail::future_shared_state> p);
 
  public:
+  using simple_message_queue = rigtorp::MPMCQueue<Message>;
+
   collective_future() noexcept                    = default;
   collective_future(const collective_future&)     = delete;
   collective_future(collective_future&&) noexcept = default;
@@ -125,17 +124,18 @@ class collective_future {
   const std::shared_ptr<simple_message_queue>& allocate_queue(std::size_t n);
   const std::shared_ptr<simple_message_queue>& arrival_queue();
 
-  [[nodiscard]] bool valid() const noexcept;
-  [[nodiscard]] bool is_ready() const noexcept;
-  [[nodiscard]] bool is_deferred() const noexcept;
-  void               wait();
-  mpi::return_code   get();
-  MPI_Request&       native_handle() noexcept;
-  [[nodiscard]] const MPI_Request& native_handle() const noexcept;
+  [[nodiscard]] bool                            valid() const noexcept;
+  [[nodiscard]] bool                            is_ready() const noexcept;
+  [[nodiscard]] bool                            is_deferred() const noexcept;
+  void                                          wait();
+  mpi::return_code                              get();
+  std::vector<MPI_Request>&                     native_handles() noexcept;
+  [[nodiscard]] std::vector<MPI_Request> const& native_handles()
+      const noexcept;
 };
 
 collective_future make_ready_future(mpi::return_code u);
-collective_future make_mpi_future();
+collective_future make_mpi_future(std::size_t nreqs = 1);
 
 }  // namespace fmpi
 #endif

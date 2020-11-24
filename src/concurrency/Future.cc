@@ -118,14 +118,15 @@ mpi::return_code collective_future::get() {
   return sptr->get_value_assume_ready();
 }
 
-MPI_Request& collective_future::native_handle() noexcept {
+std::vector<MPI_Request>& collective_future::native_handles() noexcept {
   FMPI_ASSERT(valid());
-  return sptr_->native_handle();
+  return sptr_->native_handles();
 }
 
-const MPI_Request& collective_future::native_handle() const noexcept {
+std::vector<MPI_Request> const& collective_future::native_handles()
+    const noexcept {
   FMPI_ASSERT(valid());
-  return sptr_->native_handle();
+  return sptr_->native_handles();
 }
 
 namespace detail {
@@ -135,7 +136,11 @@ future_shared_state::future_shared_state(state s)
 
 void future_shared_state::wait() {
   if (is_deferred()) {
-    auto ret = MPI_Wait(&mpi_handle_, MPI_STATUS_IGNORE);
+    auto const size = mpi_handles_.size();
+    FMPI_ASSERT(size < std::numeric_limits<int>::max());
+    auto ret = MPI_Waitall(
+        static_cast<int>(size), mpi_handles_.data(), MPI_STATUSES_IGNORE);
+    FMPI_ASSERT(ret == MPI_SUCCESS);
     value_.emplace(ret);
   } else {
     std::unique_lock<std::mutex> lk(mtx_);
@@ -179,9 +184,11 @@ collective_future make_ready_future(mpi::return_code u) {
   return collective_future{std::move(state)};
 }
 
-collective_future make_mpi_future() {
+collective_future make_mpi_future(std::size_t n) {
   auto sp = std::make_shared<detail::future_shared_state>(
       detail::future_shared_state::state::deferred);
+
+  sp->native_handles().resize(n, MPI_REQUEST_NULL);
 
   return collective_future{std::move(sp)};
 }

@@ -82,7 +82,10 @@ collective_future AlltoallCtx::execute() {
     auto const other =
         static_cast<mpi::Rank>((ctx.size()) == 1 ? me : 1 - me);
 
-    auto future = make_mpi_future();
+    const std::size_t nreqs  = 2;
+    auto              future = make_mpi_future(nreqs);
+
+    auto* reqs = future.native_handles().data();
 
     auto ret = MPI_Irecv(
         recv_offset(other),
@@ -91,17 +94,18 @@ collective_future AlltoallCtx::execute() {
         other,
         sendrecvtag,
         ctx.mpiComm(),
-        &future.native_handle());
+        reqs);
 
     FMPI_ASSERT(ret == MPI_SUCCESS);
 
-    MPI_Send(
+    MPI_Isend(
         send_offset(other),
         static_cast<int>(sendcount),
         sendtype,
         other,
         sendrecvtag,
-        ctx.mpiComm());
+        ctx.mpiComm(),
+        reqs + 1);
 
     local_copy();
 
@@ -523,6 +527,8 @@ collective_future alltoall_tune(
 
   auto request = make_mpi_future();
 
+  FMPI_ASSERT(request.native_handles().front() == MPI_REQUEST_NULL);
+
   auto ret = MPI_Ialltoall(
       sendbuf,
       static_cast<int>(sendcount),
@@ -531,7 +537,7 @@ collective_future alltoall_tune(
       static_cast<int>(recvcount),
       recvtype,
       ctx.mpiComm(),
-      &request.native_handle());
+      &request.native_handles().front());
 
   FMPI_ASSERT(ret == MPI_SUCCESS);
 
