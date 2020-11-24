@@ -21,6 +21,10 @@ class NeighborAlltoallCtx {
   collective_future execute();
 
  private:
+  collective_future alltoall_cartesian();
+  collective_future alltoall_dist_graph();
+
+ private:
   const void*         sendbuf;
   std::size_t const   sendcount;
   MPI_Datatype const  sendtype;
@@ -30,6 +34,7 @@ class NeighborAlltoallCtx {
   mpi::Context const& comm;
   MPI_Aint            recvextent{};
   MPI_Aint            sendextent{};
+  int                 topology{};
 };
 
 }  // namespace detail

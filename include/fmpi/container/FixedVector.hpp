@@ -21,6 +21,7 @@ struct FixedVector : private std::vector<T, A> {
   using FixedVector::vector::front;
   using FixedVector::vector::get_allocator;
   using FixedVector::vector::size;
+  using FixedVector::vector::swap;
   using FixedVector::vector::operator[];
 
   using iterator = typename FixedVector::vector::iterator;

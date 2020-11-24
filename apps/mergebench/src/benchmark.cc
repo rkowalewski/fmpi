@@ -1,8 +1,7 @@
-#include "benchmark.hpp"
-
 #include <fmpi/mpi/Environment.hpp>
-
 #include <sstream>
+
+#include "benchmark.hpp"
 
 std::ostream& operator<<(std::ostream& os, Params const& p) {
   std::ostringstream ss;
@@ -21,11 +20,11 @@ std::ostream& operator<<(std::ostream& os, Params const& p) {
 Params processParams(benchmark::State const& state) {
   Params params;
 
-  params.nprocs   = state.range(0);
-  params.blocksz  = state.range(1) / sizeof(value_t);
-  params.windowsz = state.range(2);
-
+  params.nprocs  = state.range(1);
   params.nblocks = params.nprocs;
+  params.blocksz = state.range(0) / (params.nblocks * sizeof(value_t));
+
+  params.windowsz = state.range(2);
 
   params.arraysize = params.nblocks * params.blocksz;
 
@@ -33,7 +32,6 @@ Params processParams(benchmark::State const& state) {
 
   return params;
 }
-
 
 // This reporter does nothing.
 // We can use it to disable output from all but the root process

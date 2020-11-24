@@ -53,6 +53,10 @@ class Context {
     return m_group;
   }
 
+  [[nodiscard]] constexpr size_type num_nodes() const noexcept {
+    return m_node_count;
+  }
+
   int32_t requestTagSpace(int32_t n) const;
 
   int32_t collectiveTag() const {
@@ -67,6 +71,7 @@ class Context {
   MPI_Comm                    m_comm{MPI_COMM_NULL};
   MPI_Group                   m_group{};
   size_type                   m_size{};
+  size_type                   m_node_count{};
   Rank                        m_rank{};
   mutable std::atomic_int32_t m_collective_tag{};
   bool                        m_free_self{false};

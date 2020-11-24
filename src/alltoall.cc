@@ -2,10 +2,12 @@
 #include <fmpi/Alltoall.hpp>
 #include <fmpi/Debug.hpp>
 #include <fmpi/concurrency/Dispatcher.hpp>
+#include <fmpi/detail/Tags.hpp>
 #include <fmpi/memory/detail/pointer_arithmetic.hpp>
 #include <fmpi/util/Math.hpp>
 #include <fmpi/util/NumericRange.hpp>
 #include <fmpi/util/Trace.hpp>
+#include <rtlx/ScopedLambda.hpp>
 
 namespace fmpi {
 namespace detail {
@@ -13,7 +15,6 @@ namespace detail {
 using namespace std::literals::string_view_literals;
 // constexpr auto t_copy = "Tcomm.local_copy"sv;
 
-static constexpr int32_t alltoall_tag       = 110435;
 static constexpr int32_t alltoall_tag_local = 110436;
 
 AlltoallCtx::AlltoallCtx(
@@ -32,7 +33,7 @@ AlltoallCtx::AlltoallCtx(
   , recvcount(recvcount_)
   , recvtype(recvtype_)
   , comm(comm_)
-  , sendrecvtag(alltoall_tag)
+  , sendrecvtag(TAG_ALLTOALL)
   , opts(opts_) {
   MPI_Aint recvlb{};
   MPI_Aint sendlb{};
@@ -155,6 +156,8 @@ collective_future AlltoallCtx::execute() {
   auto& dispatcher = static_dispatcher_pool();
   // submit into dispatcher
   auto const hdl = dispatcher.submit(std::move(schedule_state));
+  auto       finalizer =
+      rtlx::scope_exit([&dispatcher, hdl]() { dispatcher.commit(hdl); });
 
   auto const rounds = std::max(schedule.phaseCount() / opts.winsz, 1u);
 
@@ -241,28 +244,23 @@ collective_future AlltoallCtx::execute() {
     }
   }
 
-#if 1
-  // copy
-  {
-    // using scoped_timer_switch = rtlx::ScopedTimerSwitch<steady_timer>;
+  // finally, make the local copy
+  // using scoped_timer_switch = rtlx::ScopedTimerSwitch<steady_timer>;
 
-    // steady_timer t_copy{trace.duration(detail::t_copy)};
-    // we temporarily pause t_schedule and run t_copy.
-    // scoped_timer_switch switcher{t_schedule, t_copy};
+  // steady_timer t_copy{trace.duration(detail::t_copy)};
+  // we temporarily pause t_schedule and run t_copy.
+  // scoped_timer_switch switcher{t_schedule, t_copy};
 
-    local_copy();
+  local_copy();
 
-    future.arrival_queue()->push(make_receive(
-        recv_offset(ctx.rank()),
-        recvcount,
-        recvtype,
-        ctx.rank(),
-        sendrecvtag,
-        ctx.mpiComm()));
-  }
-#endif
+  future.arrival_queue()->push(make_receive(
+      recv_offset(ctx.rank()),
+      recvcount,
+      recvtype,
+      ctx.rank(),
+      sendrecvtag,
+      ctx.mpiComm()));
 
-  dispatcher.commit(hdl);
   return future;
 }
 
@@ -300,14 +298,14 @@ class BruckAlgorithm {
         message.recvbuffer(),
         1,
         message.recvtype(),
-        rank,
+        0,
         alltoall_tag_local,
         tmpbuf.data(),
         1,
         message.recvtype(),
-        rank,
+        0,
         alltoall_tag_local,
-        message.comm(),
+        MPI_COMM_SELF,
         MPI_STATUS_IGNORE));
   }
 
@@ -391,6 +389,8 @@ collective_future AlltoallCtx::comm_intermediate() {
 
   // submit into dispatcher
   auto const hdl = dispatcher.submit(std::move(schedule_state));
+  auto       finalizer =
+      rtlx::scope_exit([&dispatcher, hdl]() { dispatcher.commit(hdl); });
 
   {
     // Phase 1: rotate
@@ -473,8 +473,6 @@ collective_future AlltoallCtx::comm_intermediate() {
     // dispatcher.schedule(hdl, message_type::BARRIER);
     //}
   }
-
-  dispatcher.commit(hdl);
   return future;
 }
 

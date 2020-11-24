@@ -1,16 +1,15 @@
 #ifndef MERGEBENCH_BENCHMARK_HPP
 #define MERGEBENCH_BENCHMARK_HPP
 
+#include <benchmark/benchmark.h>
+
 #include <cstddef>
+#include <fmpi/Debug.hpp>
 #include <iosfwd>
 #include <random>
 #include <vector>
 
-#include <benchmark/benchmark.h>
-
-#include <fmpi/Debug.hpp>
-
-using value_t   = int;
+using value_t   = double;
 using container = std::vector<value_t>;
 
 int main(int argc, char** argv);
@@ -37,29 +36,31 @@ Params processParams(benchmark::State const& state);
 
 std::ostream& operator<<(std::ostream& os, Params const& p);
 
-template <class Integral>
+template <class T>
 class RandomBetween {
-  static_assert(std::is_integral<Integral>::value);
+  using uniform_dist = std::conditional_t<
+      std::is_integral_v<T>,
+      std::uniform_int_distribution<T>,
+      std::uniform_real_distribution<T>>;
 
  public:
   RandomBetween()
     : RandomBetween(
-          std::numeric_limits<Integral>::min(),
-          std::numeric_limits<Integral>::max()) {
+          std::numeric_limits<T>::min(), std::numeric_limits<T>::max()) {
   }
 
-  RandomBetween(Integral low, Integral high)
+  RandomBetween(T low, T high)
     : random_engine_{std::random_device{}()}
     , distribution_{low, high} {
   }
 
-  Integral operator()() {
+  T operator()() {
     return distribution_(random_engine_);
   }
 
  private:
-  std::mt19937                            random_engine_;
-  std::uniform_int_distribution<Integral> distribution_;
+  std::mt19937 random_engine_;
+  uniform_dist distribution_;
 };
 
 using block_spec = std::pair<std::size_t, std::size_t>;

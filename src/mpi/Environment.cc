@@ -33,6 +33,23 @@ Context::Context(MPI_Comm comm, bool free_self)
 
   // Size
   FMPI_CHECK_MPI(MPI_Comm_size(m_comm, &sz));
+
+  {
+    MPI_Comm tmp;
+    int      shared_rank;
+    FMPI_CHECK_MPI(MPI_Comm_split_type(
+        m_comm, MPI_COMM_TYPE_SHARED, 0, MPI_INFO_NULL, &tmp));
+    MPI_Comm_rank(tmp, &shared_rank);
+    int const is_rank0 = shared_rank == 0;
+    int       nhosts   = 0;
+
+    MPI_Allreduce(&is_rank0, &nhosts, 1, MPI_INT, MPI_SUM, m_comm);
+
+    m_node_count = nhosts;
+
+    MPI_Comm_free(&tmp);
+  }
+
   m_size = sz;
 }
 

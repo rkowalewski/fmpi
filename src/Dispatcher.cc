@@ -266,6 +266,7 @@ void CommDispatcher::worker() {
 
       auto [it, ok] = schedules_.find(task.id);
 
+      FMPI_DBG(task.id.id());
       FMPI_ASSERT(ok);
 
       auto& uptr = it->second;

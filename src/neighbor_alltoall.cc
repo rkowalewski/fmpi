@@ -4,17 +4,17 @@
 #include <fmpi/NeighborAlltoall.hpp>
 #include <fmpi/concurrency/Dispatcher.hpp>
 #include <fmpi/container/FixedVector.hpp>
+#include <fmpi/detail/Tags.hpp>
 #include <fmpi/memory/detail/pointer_arithmetic.hpp>
 #include <fmpi/mpi/Environment.hpp>
 #include <fmpi/util/NumericRange.hpp>
+#include <rtlx/ScopedLambda.hpp>
 
 namespace fmpi {
 namespace detail {
 
 using namespace std::literals::string_view_literals;
 // constexpr auto t_copy = "Tcomm.local_copy"sv;
-
-static constexpr int32_t neighbor_alltoall_tag_base = 110400;
 
 NeighborAlltoallCtx::NeighborAlltoallCtx(
     const void*         sendbuf_,
@@ -37,106 +37,10 @@ NeighborAlltoallCtx::NeighborAlltoallCtx(
   MPI_Type_get_extent(recvtype, &recvlb, &recvextent);
   MPI_Type_get_extent(sendtype, &sendlb, &sendextent);
 
-  int topo_t;
-  FMPI_CHECK_MPI(MPI_Topo_test(comm.mpiComm(), &topo_t));
-
-  if (topo_t != MPI_CART) {
-    throw fmpi::NotImplemented{};
-  }
+  FMPI_CHECK_MPI(MPI_Topo_test(comm.mpiComm(), &topology));
 }
-#if 0
 
-
-    if( 0 == cart->ndims ) return OMPI_SUCCESS;
-
-    ompi_datatype_get_extent(rdtype, &lb, &rdextent);
-    ompi_datatype_get_extent(sdtype, &lb, &sdextent);
-    reqs = preqs = ompi_coll_base_comm_get_reqs( module->base_data, 4 * cart->ndims);
-    if( NULL == reqs ) { return OMPI_ERR_OUT_OF_RESOURCE; }
-
-    /* post receives first */
-    for (dim = 0, nreqs = 0; dim < cart->ndims ; ++dim) {
-        int srank = MPI_PROC_NULL, drank = MPI_PROC_NULL;
-
-        if (cart->dims[dim] > 1) {
-            mca_topo_base_cart_shift (comm, dim, 1, &srank, &drank);
-        } else if (1 == cart->dims[dim] && cart->periods[dim]) {
-            srank = drank = rank;
-        }
-
-        if (MPI_PROC_NULL != srank) {
-            nreqs++;
-            rc = MCA_PML_CALL(irecv(rbuf, rcount, rdtype, srank,
-                                    MCA_COLL_BASE_TAG_NEIGHBOR_BASE - 2 * dim,
-                                    comm, preqs++));
-            if (OMPI_SUCCESS != rc) break;
-        }
-
-        rbuf = (char *) rbuf + rdextent * rcount;
-
-        if (MPI_PROC_NULL != drank) {
-            nreqs++;
-            rc = MCA_PML_CALL(irecv(rbuf, rcount, rdtype, drank,
-                                    MCA_COLL_BASE_TAG_NEIGHBOR_BASE - 2 * dim - 1,
-                                    comm, preqs++));
-            if (OMPI_SUCCESS != rc) break;
-        }
-
-        rbuf = (char *) rbuf + rdextent * rcount;
-    }
-
-    if (OMPI_SUCCESS != rc) {
-        ompi_coll_base_free_reqs( reqs, nreqs);
-        return rc;
-    }
-
-    for (dim = 0 ; dim < cart->ndims ; ++dim) {
-        int srank = MPI_PROC_NULL, drank = MPI_PROC_NULL;
-
-        if (cart->dims[dim] > 1) {
-            mca_topo_base_cart_shift (comm, dim, 1, &srank, &drank);
-        } else if (1 == cart->dims[dim] && cart->periods[dim]) {
-            srank = drank = rank;
-        }
-
-        if (MPI_PROC_NULL != srank) {
-            /* remove cast from const when the pml layer is updated to take
-             * a const for the send buffer. */
-            nreqs++;
-            rc = MCA_PML_CALL(isend((void *) sbuf, scount, sdtype, srank,
-                                    MCA_COLL_BASE_TAG_NEIGHBOR_BASE - 2 * dim - 1,
-                                    MCA_PML_BASE_SEND_STANDARD,
-                                    comm, preqs++));
-            if (OMPI_SUCCESS != rc) break;
-        }
-
-        sbuf = (const char *) sbuf + sdextent * scount;
-
-        if (MPI_PROC_NULL != drank) {
-            nreqs++;
-            rc = MCA_PML_CALL(isend((void *) sbuf, scount, sdtype, drank,
-                                    MCA_COLL_BASE_TAG_NEIGHBOR_BASE - 2 * dim,
-                                    MCA_PML_BASE_SEND_STANDARD,
-                                    comm, preqs++));
-            if (OMPI_SUCCESS != rc) break;
-        }
-
-        sbuf = (const char *) sbuf + sdextent * scount;
-    }
-
-    if (OMPI_SUCCESS != rc) {
-        ompi_coll_base_free_reqs( reqs, nreqs);
-        return rc;
-    }
-
-    rc = ompi_request_wait_all (nreqs, reqs, MPI_STATUSES_IGNORE);
-    if (OMPI_SUCCESS != rc) {
-        ompi_coll_base_free_reqs( reqs, nreqs);
-    }
-    return rc;
-#endif
-
-collective_future NeighborAlltoallCtx::execute() {
+collective_future NeighborAlltoallCtx::alltoall_cartesian() {
   int ndims;
   FMPI_CHECK_MPI(MPI_Cartdim_get(comm.mpiComm(), &ndims));
 
@@ -158,11 +62,12 @@ collective_future NeighborAlltoallCtx::execute() {
   auto future  = promise.get_future();
   auto schedule_state =
       std::make_unique<fmpi::ScheduleCtx>(nslots, std::move(promise));
-  auto& dispatcher = static_dispatcher_pool();
-  // submit into dispatcher
-  auto const hdl = dispatcher.submit(std::move(schedule_state));
 
-  auto const tag_space = neighbor_alltoall_tag_base;
+  // setup dispatcher
+  auto&      dispatcher = static_dispatcher_pool();
+  auto const hdl        = dispatcher.submit(std::move(schedule_state));
+  auto       finalizer =
+      rtlx::scope_exit([&dispatcher, hdl]() { dispatcher.commit(hdl); });
 
   /* post receives first */
   for (auto&& dim : range(ndims)) {
@@ -183,7 +88,7 @@ collective_future NeighborAlltoallCtx::execute() {
               recvcount,
               recvtype,
               static_cast<mpi::Rank>(srank),
-              tag_space - 2 * dim,
+              TAG_NEIGHBOR_ALLTOALL_CARTESIAN_BASE - 2 * dim,
               comm.mpiComm()));
     }
 
@@ -198,14 +103,14 @@ collective_future NeighborAlltoallCtx::execute() {
               recvcount,
               recvtype,
               static_cast<mpi::Rank>(drank),
-              tag_space - 2 * dim - 1,
+              TAG_NEIGHBOR_ALLTOALL_CARTESIAN_BASE - 2 * dim - 1,
               comm.mpiComm()));
     }
 
     recvbuf = add(recvbuf, recvextent * recvcount);
   }
 
-  /* post receives first */
+  /* then post sends */
   for (auto&& dim : range(ndims)) {
     int srank = MPI_PROC_NULL, drank = MPI_PROC_NULL;
 
@@ -224,7 +129,7 @@ collective_future NeighborAlltoallCtx::execute() {
               sendcount,
               sendtype,
               static_cast<mpi::Rank>(srank),
-              tag_space - 2 * dim - 1,
+              TAG_NEIGHBOR_ALLTOALL_CARTESIAN_BASE - 2 * dim - 1,
               comm.mpiComm()));
     }
 
@@ -239,7 +144,7 @@ collective_future NeighborAlltoallCtx::execute() {
               sendcount,
               sendtype,
               static_cast<mpi::Rank>(drank),
-              tag_space - 2 * dim,
+              TAG_NEIGHBOR_ALLTOALL_CARTESIAN_BASE - 2 * dim,
               comm.mpiComm()));
     }
 
@@ -247,6 +152,83 @@ collective_future NeighborAlltoallCtx::execute() {
   }
 
   return future;
+}
+
+collective_future NeighborAlltoallCtx::alltoall_dist_graph() {
+  int indegree;
+  int outdegree;
+  int weighted;
+  FMPI_CHECK_MPI(MPI_Dist_graph_neighbors_count(
+      comm.mpiComm(), &indegree, &outdegree, &weighted));
+
+  fmpi::FixedVector<int> sources(indegree);
+  fmpi::FixedVector<int> destinations(outdegree);
+
+  FMPI_CHECK_MPI(MPI_Dist_graph_neighbors(
+      comm.mpiComm(),
+      indegree,
+      sources.data(),
+      MPI_UNWEIGHTED,
+      outdegree,
+      destinations.data(),
+      MPI_UNWEIGHTED));
+
+  auto nslots = std::array<std::size_t, detail::n_types>{
+      static_cast<std::size_t>(indegree),
+      static_cast<std::size_t>(outdegree)};
+
+  auto promise = collective_promise{};
+  auto future  = promise.get_future();
+  auto schedule_state =
+      std::make_unique<fmpi::ScheduleCtx>(nslots, std::move(promise));
+
+  // setup dispatcher dispatcher
+  auto&      dispatcher = static_dispatcher_pool();
+  auto const hdl        = dispatcher.submit(std::move(schedule_state));
+  auto       finalizer =
+      rtlx::scope_exit([&dispatcher, hdl]() { dispatcher.commit(hdl); });
+
+  for (auto&& src : sources) {
+    dispatcher.schedule(
+        hdl,
+        message_type::IRECV,
+        make_receive(
+            recvbuf,
+            recvcount,
+            recvtype,
+            static_cast<mpi::Rank>(src),
+            TAG_NEIGHBOR_ALLTOALL_GRAPH,
+            comm.mpiComm()));
+
+    recvbuf = add(recvbuf, recvextent * recvcount);
+  }
+
+  for (auto&& dest : destinations) {
+    dispatcher.schedule(
+        hdl,
+        message_type::ISEND,
+        make_send(
+            sendbuf,
+            sendcount,
+            sendtype,
+            static_cast<mpi::Rank>(dest),
+            TAG_NEIGHBOR_ALLTOALL_GRAPH,
+            comm.mpiComm()));
+
+    sendbuf = add(sendbuf, sendextent * sendcount);
+  }
+
+  return future;
+}
+
+collective_future NeighborAlltoallCtx::execute() {
+  if (topology == MPI_CART) {
+    return alltoall_cartesian();
+  } else if (topology == MPI_DIST_GRAPH) {
+    return alltoall_dist_graph();
+  } else {
+    throw NotSupportedException{};
+  }
 }
 
 }  // namespace detail

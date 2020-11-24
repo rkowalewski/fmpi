@@ -111,8 +111,6 @@ vector_times merge_async(
       future.wait();
     }
 
-    // FMPI_DBG(rtlx::to_seconds(d_idle.second));
-
     parallel_merge(chunks, out, nr * blocksize);
     return times;
   }

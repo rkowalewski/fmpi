@@ -10,19 +10,17 @@
 #include "benchmark.hpp"
 
 void CustomArguments(benchmark::internal::Benchmark* b) {
-  constexpr long min_procs = 16;
-  constexpr long max_procs = debug ? min_procs : 64;
+  constexpr long pmin = 4;
+  constexpr long pmax = debug ? pmin : 64;
 
-  constexpr long min_blocksz = 256;
-  constexpr long max_blocksz = debug ? min_blocksz : 1 << 20;
+  constexpr long smin = pmax * sizeof(value_t);    // 1024 bytes
+  constexpr long smax = debug ? smin : (1 << 30);  // 1 GB
 
-  for (long np = min_procs; np <= max_procs; np *= 2) {
-    for (long block_bytes = min_blocksz; block_bytes <= max_blocksz;
-         block_bytes *= 4) {
+  for (long size = smin; size <= smax; size *= 4) {
+    for (long np = pmin; np <= pmax; np *= 4) {
       constexpr long ws = 0;
 
-      b->Args(
-          {np, block_bytes, ws, static_cast<long>(omp_get_max_threads())});
+      b->Args({size, np, ws, static_cast<long>(omp_get_max_threads())});
     }
   }
 }

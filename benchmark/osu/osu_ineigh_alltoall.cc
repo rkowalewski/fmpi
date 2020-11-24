@@ -22,8 +22,29 @@ double dummy_compute(double seconds) {
   return test_time;
 }
 
-constexpr int ndims   = 2;
-constexpr int periods = 1;
+constexpr int ndims   = 3;
+constexpr int periods = 0;
+
+mpi::Context make_cartesian_comm(mpi::Context const& old_comm) {
+  MPI_Comm               comm_cube{};
+  std::array<int, ndims> cart_dimensions{};
+  std::array<int, ndims> cart_periodicity{};
+  cart_periodicity.fill(periods);
+
+  MPI_Dims_create(old_comm.size(), ndims, cart_dimensions.data());
+
+  FMPI_DBG(cart_dimensions);
+
+  MPI_Cart_create(
+      old_comm.mpiComm(),
+      ndims,
+      cart_dimensions.data(),
+      cart_periodicity.data(),
+      periods,
+      &comm_cube);
+
+  return mpi::Context{comm_cube};
+}
 
 int main(int argc, char* argv[]) {
   // Initialize MPI
@@ -38,22 +59,7 @@ int main(int argc, char* argv[]) {
   auto const  rank     = world.rank();
   auto const  numprocs = world.size();
 
-  MPI_Comm               comm_cube{};
-  std::array<int, ndims> cart_dimensions;
-  std::array<int, ndims> cart_periodicity;
-  std::array<int, ndims> cart_coords;
-
-  /* Create a 2D cartesian topology of the processes */
-  MPI_Dims_create(world.size(), ndims, &cart_dimensions[0]);
-  MPI_Cart_create(
-      world.mpiComm(),
-      ndims,
-      &cart_dimensions[0],
-      &cart_periodicity[0],
-      periods,
-      &comm_cube);
-
-  mpi::Context ctx_cube{comm_cube};
+  mpi::Context mycomm = make_cartesian_comm(world);
 
   if (numprocs < 2) {
     if (rank == 0) {
@@ -75,8 +81,9 @@ int main(int argc, char* argv[]) {
 
   auto const bufsize = options.smax * numprocs;
 
-  value_t* sendbuf = NULL;
-  value_t* recvbuf = NULL;
+  value_t* sendbuf     = NULL;
+  value_t* recvbuf     = NULL;
+  value_t* recvbuf_mpi = NULL;
 
   if (allocate_memory_coll((void**)&sendbuf, bufsize * sizeof(value_t))) {
     fprintf(stderr, "Could Not Allocate Memory [rank %d]\n", rank.mpiRank());
@@ -84,7 +91,7 @@ int main(int argc, char* argv[]) {
   }
 
 #if FMPI_DEBUG_ASSERT
-  std::iota(sendbuf, sendbuf + bufsize, world.rank() * bufsize);
+  std::iota(sendbuf, sendbuf + bufsize, mycomm.rank() * bufsize);
 #else
   std::memset(sendbuf, 1, bufsize * sizeof(value_t));
 #endif
@@ -94,7 +101,35 @@ int main(int argc, char* argv[]) {
     world.abort(EXIT_FAILURE);
   }
 
+  if (allocate_memory_coll((void**)&recvbuf_mpi, bufsize * sizeof(value_t))) {
+    fprintf(stderr, "Could Not Allocate Memory [rank %d]\n", rank.mpiRank());
+    world.abort(EXIT_FAILURE);
+  }
+
   std::memset(recvbuf, 0, bufsize);
+
+  {
+    auto const size = options.smax;
+    MPI_Neighbor_alltoall(
+        sendbuf,
+        size,
+        mpi_type,
+        recvbuf_mpi,
+        size,
+        mpi_type,
+        mycomm.mpiComm());
+    auto future = fmpi::neighbor_alltoall(
+        sendbuf, size, mpi_type, recvbuf, size, mpi_type, mycomm);
+    FMPI_DBG_RANGE(recvbuf_mpi, recvbuf_mpi + bufsize);
+    future.wait();
+    FMPI_DBG_RANGE(recvbuf, recvbuf + bufsize);
+  }
+
+  if (not std::equal(recvbuf_mpi, recvbuf_mpi + options.smax, recvbuf)) {
+    throw std::runtime_error("invalid result");
+  }
+
+  return 0;
 
   print_preamble_nbc(rank, std::string_view("osu_ialltoall"));
 
@@ -104,7 +139,7 @@ int main(int argc, char* argv[]) {
       options.iterations = options.iterations_large;
     }
 
-    MPI_CHECK(MPI_Barrier(world.mpiComm()));
+    MPI_CHECK(MPI_Barrier(mycomm.mpiComm()));
 
     double timer   = 0.0;
     double t_start = 0.0;
@@ -114,10 +149,10 @@ int main(int argc, char* argv[]) {
       t_start = MPI_Wtime();
 #if 0
       auto future = fmpi::alltoall_tune(
-          sendbuf, size, mpi_type, recvbuf, size, mpi_type, world);
+          sendbuf, size, mpi_type, recvbuf, size, mpi_type, mycomm);
 #else
       auto future = fmpi::neighbor_alltoall(
-          sendbuf, size, mpi_type, recvbuf, size, mpi_type, world);
+          sendbuf, size, mpi_type, recvbuf, size, mpi_type, mycomm);
 
       return 0;
 #endif
@@ -129,13 +164,13 @@ int main(int argc, char* argv[]) {
       if (i >= options.warmups) {
         timer += t_stop - t_start;
       }
-      MPI_CHECK(MPI_Barrier(world.mpiComm()));
+      MPI_CHECK(MPI_Barrier(mycomm.mpiComm()));
     }
 
     FMPI_DBG("after warmups");
     // clear trace everything
 
-    MPI_CHECK(MPI_Barrier(world.mpiComm()));
+    MPI_CHECK(MPI_Barrier(mycomm.mpiComm()));
 
     /* This is the pure comm. time */
     auto const latency = (timer * 1e6) / options.iterations;
@@ -147,7 +182,7 @@ int main(int argc, char* argv[]) {
 
     init_arrays(latency_in_secs);
 
-    MPI_CHECK(MPI_Barrier(world.mpiComm()));
+    MPI_CHECK(MPI_Barrier(mycomm.mpiComm()));
 
     timer              = 0.0;
     double tcomp_total = 0.0;
@@ -162,10 +197,10 @@ int main(int argc, char* argv[]) {
 
 #if 0
       auto future = fmpi::alltoall_tune(
-          sendbuf, size, mpi_type, recvbuf, size, mpi_type, world);
+          sendbuf, size, mpi_type, recvbuf, size, mpi_type, mycomm);
 #else
       auto future = fmpi::neighbor_alltoall(
-          sendbuf, size, mpi_type, recvbuf, size, mpi_type, world);
+          sendbuf, size, mpi_type, recvbuf, size, mpi_type, mycomm);
 #endif
 
       init_time = MPI_Wtime() - init_time;
@@ -193,10 +228,10 @@ int main(int argc, char* argv[]) {
         wait_total += wait_time;
       }
 
-      MPI_CHECK(MPI_Barrier(world.mpiComm()));
+      MPI_CHECK(MPI_Barrier(mycomm.mpiComm()));
     }
 
-    MPI_Barrier(world.mpiComm());
+    MPI_Barrier(mycomm.mpiComm());
 
     calculate_and_print_stats(
         rank,
@@ -208,7 +243,7 @@ int main(int argc, char* argv[]) {
         tcomp_total,
         wait_total,
         init_total,
-        world,
+        mycomm,
         1);
   }
 
