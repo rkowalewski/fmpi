@@ -77,8 +77,12 @@ collective_future::collective_future(
 }
 
 std::shared_ptr<collective_future::simple_message_queue> const&
-collective_future::allocate_queue(std::size_t n) {
-  partials_ = std::make_shared<simple_message_queue>(n);
+collective_future::allocate_queue(std::size_t cap, std::size_t expected) {
+  FMPI_ASSERT(not partials_);
+  partials_ = std::make_shared<simple_message_queue>(cap);
+
+  expected_ = (expected == 0) ? cap : expected;
+
   return partials_;
 }
 
@@ -110,6 +114,10 @@ bool collective_future::is_ready() const noexcept {
 
 bool collective_future::is_deferred() const noexcept {
   return valid() && sptr_->is_deferred();
+}
+
+std::size_t collective_future::expected() const noexcept {
+  return expected_;
 }
 
 mpi::return_code collective_future::get() {

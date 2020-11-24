@@ -57,12 +57,14 @@ int main(int argc, char* argv[]) {
     return EXIT_SUCCESS;
   }
 
+  MPI_Barrier(world.mpiComm());
+
   if (world.rank() == 0) {
     benchmark::write_csv_header(std::cout);
   }
 
-  params.smax = tlx::round_down_to_power_of_two(params.smax + 1);
-  params.smin = tlx::round_up_to_power_of_two(params.smin + 1);
+  // params.smax = tlx::round_down_to_power_of_two(params.smax + 1);
+  // params.smin = tlx::round_up_to_power_of_two(params.smin + 1);
 
   if (params.smin < sizeof(value_t)) {
     params.smin = sizeof(value_t);
@@ -103,7 +105,7 @@ int main(int argc, char* argv[]) {
 
     auto                  clock           = SynchronizedClock{};
     [[maybe_unused]] bool is_clock_synced = clock.Init(ctx.mpiComm());
-    assert(is_clock_synced);
+    //assert(is_clock_synced);
 
     for (std::size_t blocksize = params.smin; blocksize <= params.smax;
          blocksize <<= 1) {
@@ -148,7 +150,7 @@ int main(int argc, char* argv[]) {
           // time, so this is a real barrier
           auto       barrier         = clock.Barrier(ctx.mpiComm());
           auto const barrier_success = barrier.Success(ctx.mpiComm());
-          assert(barrier_success);
+          //assert(barrier_success);
 
           auto times = benchmark.run(coll_args);
 
@@ -171,7 +173,7 @@ int main(int argc, char* argv[]) {
         m.nprocs    = ctx.size();
         m.nthreads  = omp_get_max_threads();
         m.me        = ctx.rank();
-        m.nbytes    = nels * ctx.size() * sizeof(value_t);
+        m.nbytes    = nels * sizeof(value_t);
         m.blocksize = blocksize;
         m.algorithm = benchmark.name();
 

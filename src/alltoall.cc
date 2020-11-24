@@ -275,15 +275,14 @@ collective_future AlltoallCtx::execute() {
 class BruckAlgorithm {
   using buffer_t = fmpi::SimpleVector<std::byte>;
 
-  buffer_t          tmpbuf;
-  void*             recvbuffer;
-  std::size_t const blocksize;
-  mpi::Rank const   rank{};
-  uint32_t const    size;
-  uint32_t const    nrounds;
-  mutable uint32_t  round = 0;
-  // buffer_t::iterator sbuf;
-  // buffer_t::iterator rbuf;
+  buffer_t             tmpbuf;
+  void*                recvbuffer;
+  std::size_t const    blocksize;
+  mpi::Rank const      rank{};
+  uint32_t const       size;
+  uint32_t const       nrounds;
+  mutable uint32_t     round = 0;
+  std::vector<Message> messages;
 
  public:
   BruckAlgorithm(
@@ -320,7 +319,7 @@ class BruckAlgorithm {
   bool done() const FMPI_NOEXCEPT {
     round++;
     FMPI_ASSERT(round <= nrounds);
-    return round == nrounds;
+    return round >= nrounds;
   }
 
   void rotate_down() {
@@ -370,8 +369,23 @@ collective_future AlltoallCtx::comm_intermediate() {
   auto schedule_state =
       std::make_unique<ScheduleCtx>(nslots, std::move(promise));
 
+  auto uptr = std::make_unique<std::vector<Message>>();
+  uptr->reserve(comm.size());
+
+  auto local_message = make_receive(
+      recv_offset(comm.rank()),
+      recvcount,
+      recvtype,
+      comm.rank(),
+      sendrecvtag,
+      comm.mpiComm());
+
   schedule_state->register_callback(
-      message_type::IRECV, [sptr = algo](const std::vector<Message>& msgs) {
+      message_type::IRECV,
+      [sptr  = algo,
+       queue = future.allocate_queue(w + 1),  // +1 for the local message
+       uptr  = std::move(uptr),
+       local_message](const std::vector<Message>& msgs) {
         FMPI_ASSERT(msgs.size() == 1);
         auto const& message = msgs.front();
         FMPI_ASSERT(message.sendtype() == message.recvtype());
@@ -384,8 +398,15 @@ collective_future AlltoallCtx::comm_intermediate() {
         //
         // otherwise: always unpack, and rotate down in the last round
         sptr->unpack(message);
+        //uptr->emplace_back(message);
         if (done) {
           sptr->rotate_down();
+          // now all pieces are in the right place, so let's push it into the
+          // queue
+          //queue->push(local_message);
+          //for (auto&& m : *uptr) {
+          //  queue->push(m);
+          //}
         } else {
           // sptr->unpack(message);
         }
@@ -411,6 +432,8 @@ collective_future AlltoallCtx::comm_intermediate() {
     // rotate leftwards
     std::rotate_copy(first, n_first, last, algo->buffer().data());
   }
+
+  // local copy is already done
 
   // note: this can be included with associative-decomposable functions
   // local copy
@@ -504,19 +527,35 @@ collective_future alltoall_tune(
 
   std::uint32_t winsz = 0;
 
-  if (p <= 64 and n >= 2 * kb) {
-    winsz = 4;
-  } else if (p <= 128 and n >= 256) {
-    winsz = n > 4 * kb ? 64 : 1;
-  } else if (p > 128 and n >= 512) {
-    winsz = n > 4 * kb ? 64 : 1;
+  constexpr auto win_type = ScheduleOpts::WindowType::fixed;
+
+  if (p <= 8 and n >= 4 * kb) {
+    winsz = ctx.size();
+  } else if (p < 64) {
+    winsz = ctx.num_nodes();
+  } else if (p >= 64) {
+    if (n < 256) {
+      auto bruck = Bruck{ctx};
+      auto opts  = ScheduleOpts{bruck, winsz, "", win_type};
+      auto coll  = detail::AlltoallCtx{
+          sendbuf,
+          sendcount,
+          sendtype,
+          recvbuf,
+          recvcount,
+          recvtype,
+          ctx,
+          opts};
+      return coll.execute();
+    } else {
+      winsz = 64;
+    }
   }
 
   if (winsz != 0u) {
-    auto           one_factor = OneFactor{ctx};
-    constexpr auto win_type   = ScheduleOpts::WindowType::fixed;
-    auto           opts       = ScheduleOpts{one_factor, winsz, "", win_type};
-    auto           coll       = detail::AlltoallCtx{
+    auto one_factor = OneFactor{ctx};
+    auto opts       = ScheduleOpts{one_factor, winsz, "", win_type};
+    auto coll       = detail::AlltoallCtx{
         sendbuf,
         sendcount,
         sendtype,

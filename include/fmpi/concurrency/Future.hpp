@@ -105,6 +105,7 @@ class collective_future {
 
   std::shared_ptr<detail::future_shared_state> sptr_;
   // Partial arrivals
+  std::size_t                                  expected_ = 0;
   std::shared_ptr<rigtorp::MPMCQueue<Message>> partials_;
 
   explicit collective_future(std::shared_ptr<detail::future_shared_state> p);
@@ -121,12 +122,14 @@ class collective_future {
 
   void swap(collective_future& rhs);
 
-  const std::shared_ptr<simple_message_queue>& allocate_queue(std::size_t n);
+  const std::shared_ptr<simple_message_queue>& allocate_queue(
+      std::size_t capacity, std::size_t expected = 0);
   const std::shared_ptr<simple_message_queue>& arrival_queue();
 
   [[nodiscard]] bool                            valid() const noexcept;
   [[nodiscard]] bool                            is_ready() const noexcept;
   [[nodiscard]] bool                            is_deferred() const noexcept;
+  [[nodiscard]] std::size_t                     expected() const noexcept;
   void                                          wait();
   mpi::return_code                              get();
   std::vector<MPI_Request>&                     native_handles() noexcept;
