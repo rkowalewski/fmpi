@@ -368,23 +368,15 @@ collective_future AlltoallCtx::comm_intermediate() {
   auto schedule_state =
       std::make_unique<ScheduleCtx>(nslots, std::move(promise));
 
-  auto uptr = std::make_unique<std::vector<Message>>();
-  uptr->reserve(comm.size());
-
-  auto local_message = make_receive(
-      recv_offset(comm.rank()),
-      recvcount,
-      recvtype,
-      comm.rank(),
-      sendrecvtag,
-      comm.mpiComm());
+  // auto uptr = std::make_unique<std::vector<Message>>();
+  // uptr->reserve(comm.size());
 
   schedule_state->register_callback(
       message_type::IRECV,
-      [sptr  = algo,
-       queue = future.allocate_queue(w + 1),  // +1 for the local message
-       uptr  = std::move(uptr),
-       local_message](const std::vector<Message>& msgs) {
+      [sptr = algo
+       // queue = future.allocate_queue(w + 1),  // +1 for the local message
+       // uptr  = std::move(uptr),
+       /*local_message*/](const std::vector<Message>& msgs) {
         FMPI_ASSERT(msgs.size() == 1);
         auto const& message = msgs.front();
         FMPI_ASSERT(message.sendtype() == message.recvtype());
@@ -397,13 +389,13 @@ collective_future AlltoallCtx::comm_intermediate() {
         //
         // otherwise: always unpack, and rotate down in the last round
         sptr->unpack(message);
-        //uptr->emplace_back(message);
+        // uptr->emplace_back(message);
         if (done) {
           sptr->rotate_down();
           // now all pieces are in the right place, so let's push it into the
           // queue
-          //queue->push(local_message);
-          //for (auto&& m : *uptr) {
+          // queue->push(local_message);
+          // for (auto&& m : *uptr) {
           //  queue->push(m);
           //}
         } else {
