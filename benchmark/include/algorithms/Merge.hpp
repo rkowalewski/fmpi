@@ -228,8 +228,14 @@ vector_times merge_pieces(
       auto* last  = std::next(first, blocksize);
       chunks.emplace_back(first, last);
 #else
-    auto pieces = merge_arrivals(n_exchanges, blocksize, queue, out);
-    std::swap(pieces, chunks);
+#pragma omp parallel
+    {
+#pragma omp single
+      {
+        auto pieces = merge_arrivals(n_exchanges, blocksize, queue, out);
+        std::swap(pieces, chunks);
+      }
+    }
 #endif
   }
 
