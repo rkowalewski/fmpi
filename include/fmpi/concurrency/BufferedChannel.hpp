@@ -14,7 +14,7 @@
 #include <condition_variable>
 #include <cstddef>
 #include <cstdint>
-#include <fmpi/Config.hpp>
+#include <fmpi/Memory.hpp>
 #include <fmpi/detail/Assert.hpp>
 #include <memory>
 #include <mutex>

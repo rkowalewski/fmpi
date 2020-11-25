@@ -4,6 +4,7 @@
 #include <mpi.h>
 
 #include <fmpi/Message.hpp>
+#include <fmpi/common/Porting.hpp>
 #include <fmpi/concurrency/BufferedChannel.hpp>
 #include <fmpi/concurrency/Future.hpp>
 #include <fmpi/container/FixedVector.hpp>

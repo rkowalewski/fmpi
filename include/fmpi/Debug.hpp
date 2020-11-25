@@ -1,10 +1,12 @@
 #ifndef FMPI_DEBUG_HPP
 #define FMPI_DEBUG_HPP
 
-#ifndef NDEBUG
+#if FMPI_DEBUG_ASSERT
 
 #include <dbg.h>
 #include <mpi.h>
+
+#include <fmpi/Config.hpp>
 
 namespace fmpi {
 namespace detail {
@@ -105,7 +107,7 @@ auto operator<<(std::ostream& os, std::pair<F, T> const& p) -> std::ostream& {
 }  // namespace std
 #endif
 
-#ifndef NDEBUG
+#if FMPI_DEBUG_ASSERT
 
 #define FMPI_DBG(...)                                                   \
   fmpi::detail::DebugOutput(__FILE__, __LINE__, __func__, #__VA_ARGS__) \
