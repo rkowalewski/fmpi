@@ -93,7 +93,8 @@ vector_times merge_async(
   using duration     = scoped_timer::duration;
 
   // if (1) {
-  if (future.is_deferred() || future.is_ready()) {
+  if (future.is_deferred() || future.is_ready() ||
+      not future.arrival_queue()) {
     vector_times times;
     times.emplace_back(detail::idle, duration{});
     times.emplace_back(detail::merge, duration{});

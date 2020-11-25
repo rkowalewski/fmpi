@@ -281,10 +281,12 @@ struct ScheduleOpts {
       Schedule         schedule_,
       uint32_t         winsz_,
       std::string_view name_,
-      WindowType       type_)
+      WindowType       type_,
+      bool             assoc_decomp = false)
     : schedule(schedule_)
     , winsz(std::min(schedule.phaseCount(), winsz_))
     , type(type_)
+    , associative_decomposable(assoc_decomp)
 #ifndef NDEBUG
     , name(name_)
 #endif
@@ -293,8 +295,9 @@ struct ScheduleOpts {
   }
 
   detail::Schedule const schedule;
-  uint32_t const         winsz = 0;
-  WindowType const       type  = WindowType::fixed;
+  uint32_t const         winsz                    = 0;
+  WindowType const       type                     = WindowType::fixed;
+  bool                   associative_decomposable = false;
 #ifndef NDEBUG
   std::string const name;
 #endif

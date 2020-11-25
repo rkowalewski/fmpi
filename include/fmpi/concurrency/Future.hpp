@@ -122,8 +122,7 @@ class collective_future {
 
   void swap(collective_future& rhs);
 
-  const std::shared_ptr<simple_message_queue>& allocate_queue(
-      std::size_t capacity, std::size_t expected = 0);
+  const std::shared_ptr<simple_message_queue>& allocate_queue(std::size_t n);
   const std::shared_ptr<simple_message_queue>& arrival_queue();
 
   [[nodiscard]] bool                            valid() const noexcept;

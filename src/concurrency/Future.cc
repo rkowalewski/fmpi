@@ -77,11 +77,12 @@ collective_future::collective_future(
 }
 
 std::shared_ptr<collective_future::simple_message_queue> const&
-collective_future::allocate_queue(std::size_t cap, std::size_t expected) {
+collective_future::allocate_queue(std::size_t cap) {
   FMPI_ASSERT(not partials_);
-  partials_ = std::make_shared<simple_message_queue>(cap);
 
-  expected_ = (expected == 0) ? cap : expected;
+  if (cap != 0u) {
+    partials_ = std::make_shared<simple_message_queue>(cap);
+  }
 
   return partials_;
 }
