@@ -53,7 +53,8 @@ int main(int argc, char* argv[]) {
 #if FMPI_DEBUG_ASSERT
   using value_t = int;
   auto mpi_type = MPI_INT;
-#pragma message("WARNING: You are compiling in debug mode. Be careful with benchmarks.")
+#pragma message( \
+    "WARNING: You are compiling in debug mode. Be careful with benchmarks.")
 #else
   using value_t = char;
   auto mpi_type = MPI_CHAR;

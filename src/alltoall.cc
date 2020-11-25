@@ -520,27 +520,29 @@ collective_future alltoall_tune(
 
   constexpr auto win_type = ScheduleOpts::WindowType::fixed;
 
-  if (p <= 8 and n >= 4 * kb) {
-    winsz = ctx.size();
-  } else if (p < 64) {
-    winsz = ctx.num_nodes();
-  } else if (p >= 64) {
-    if (n < 256) {
-      auto bruck = Bruck{ctx};
-      auto opts  = ScheduleOpts{bruck, winsz, "", win_type};
-      auto coll  = detail::AlltoallCtx{
-          sendbuf,
-          sendcount,
-          sendtype,
-          recvbuf,
-          recvcount,
-          recvtype,
-          ctx,
-          opts};
-      return coll.execute();
-    } else {
-      winsz = 64;
+  if (p <= 32) {
+    if (p <= 8 and n >= 8 * kb) {
+      winsz = ctx.size();
+    } else if (p <= 16 and n >= 2 * kb) {
+      winsz = ctx.size();
+    } else if (n >= 128) {
+      winsz = ctx.size();
     }
+  } else if (n < 256) {
+    auto bruck = Bruck{ctx};
+    auto opts  = ScheduleOpts{bruck, winsz, "", win_type};
+    auto coll  = detail::AlltoallCtx{
+        sendbuf,
+        sendcount,
+        sendtype,
+        recvbuf,
+        recvcount,
+        recvtype,
+        ctx,
+        opts};
+    return coll.execute();
+  } else {
+    winsz = std::min(ctx.size(), 64u);
   }
 
   if (winsz != 0u) {
