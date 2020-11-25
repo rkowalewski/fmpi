@@ -72,7 +72,7 @@ collective_future AlltoallCtx::execute() {
   auto const& schedule = opts.schedule;
   auto const& ctx      = comm;
 
-  FMPI_DBG_STREAM("running algorithm " << opts.name);
+  FMPI_DBG_STREAM("running algorithm " << schedule.name());
 
   // auto         trace = MultiTrace{std::string_view(opts.name)};
   // steady_timer t_schedule{trace.duration(kScheduleTime)};

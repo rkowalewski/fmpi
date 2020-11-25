@@ -304,16 +304,16 @@ class Alltoall_Runner {
   [[nodiscard]] fmpi::collective_future run(
       benchmark::CollectiveArgs coll_args) const {
     auto sched = Schedule{coll_args.comm};
-    auto opts  = fmpi::ScheduleOpts{sched, NReqs, name(), WinT};
-    return fmpi::alltoall(
+    // auto opts  = fmpi::ScheduleOpts{sched, NReqs, name(), WinT};
+    return fmpi::alltoall_tune(
         coll_args.sendbuf,
         coll_args.sendcount,
         coll_args.sendtype,
         coll_args.recvbuf,
         coll_args.recvcount,
         coll_args.recvtype,
-        coll_args.comm,
-        opts);
+        coll_args.comm
+        /*,opts*/);
   }
 };
 
@@ -374,6 +374,7 @@ std::vector<Runner> algorithm_list(
   auto algorithms = std::vector<Runner>({
     Runner{Alltoall_Runner<void, win_t::fixed, 0>()},
         Runner{Alltoall_Runner<fmpi::FlatHandshake, win_t::fixed, 4>()},
+#if 0
         Runner{Alltoall_Runner<fmpi::FlatHandshake, win_t::fixed, 8>()},
         Runner{Alltoall_Runner<fmpi::FlatHandshake, win_t::fixed, 16>()},
         Runner{Alltoall_Runner<fmpi::FlatHandshake, win_t::sliding, 4>()},
@@ -385,6 +386,7 @@ std::vector<Runner> algorithm_list(
         Runner{Alltoall_Runner<fmpi::OneFactor, win_t::sliding, 4>()},
         Runner{Alltoall_Runner<fmpi::OneFactor, win_t::sliding, 8>()},
         Runner{Alltoall_Runner<fmpi::OneFactor, win_t::sliding, 16>()},
+#endif
 #if 0
           // Bruck Algorithms, first the original one, then a modified
           // version which omits the last local rotation step
