@@ -298,7 +298,9 @@ class Alltoall_Runner {
     : name_(detail::schedule_name<Schedule, WinT, NReqs>()) {
   }
   [[nodiscard]] std::string_view name() const noexcept {
-    return name_;
+    using namespace std::literals::string_view_literals;
+    return "FMPI"sv;
+    //return name_;
   }
 
   [[nodiscard]] fmpi::collective_future run(
