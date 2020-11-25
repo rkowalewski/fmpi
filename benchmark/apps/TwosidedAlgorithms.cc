@@ -108,7 +108,7 @@ int main(int argc, char* argv[]) {
     assert(is_clock_synced);
 
     for (std::size_t blocksize = params.smin; blocksize <= params.smax;
-         blocksize <<= 1) {
+         blocksize *= 4) {
       auto const sendcount = blocksize / sizeof(value_t);
 
       // Required by good old 32-bit MPI

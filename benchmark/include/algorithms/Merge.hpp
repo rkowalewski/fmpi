@@ -126,9 +126,9 @@ vector_times merge_async(
           return std::make_pair(f, l);
         });
 
-    std::random_device rd;
-    std::mt19937       g(rd());
-    std::shuffle(chunks.begin(), chunks.end(), g);
+    //std::random_device rd;
+    //std::mt19937       g(rd());
+    //std::shuffle(chunks.begin(), chunks.end(), g);
 
     {
       using scoped_timer_switch = rtlx::ScopedTimerSwitch<scoped_timer>;
