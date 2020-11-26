@@ -70,7 +70,8 @@ collective_future alltoall_tune(
     void*               recvbuf,
     std::size_t         recvcount,
     MPI_Datatype        recvtype,
-    mpi::Context const& ctx);
+    mpi::Context const& ctx,
+    bool                assoc_decomp = false);
 
 }  // namespace fmpi
 

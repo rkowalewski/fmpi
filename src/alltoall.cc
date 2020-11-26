@@ -276,6 +276,7 @@ class BruckAlgorithm {
 
   buffer_t             tmpbuf;
   void*                recvbuffer;
+  void const*          sendbuf;
   std::size_t const    blocksize;
   mpi::Rank const      rank{};
   uint32_t const       size;
@@ -285,9 +286,14 @@ class BruckAlgorithm {
 
  public:
   BruckAlgorithm(
-      void* rbuf, std::size_t blen, mpi::Context const& ctx, uint32_t rounds)
+      void*               rbuf,
+      void const*         sbuf,
+      std::size_t         blen,
+      mpi::Context const& ctx,
+      uint32_t            rounds)
     : tmpbuf(blen * ctx.size())
     , recvbuffer(rbuf)
+    , sendbuf(sbuf)
     , blocksize(blen)
     , rank(ctx.rank())
     , size(ctx.size())
@@ -321,19 +327,32 @@ class BruckAlgorithm {
     return round >= nrounds;
   }
 
+  void rotate_up() {
+    // Phase 1: rotate
+    // O(p * blocksize)
+    using ptr_t = const std::byte*;
+
+    auto const me      = static_cast<uint32_t>(rank);
+    auto const first   = static_cast<ptr_t>(sendbuf);
+    auto const n_first = static_cast<ptr_t>(add(sendbuf, me * blocksize));
+    auto const last    = static_cast<ptr_t>(add(sendbuf, size * blocksize));
+
+    // rotate leftwards
+    std::rotate_copy(first, n_first, last, tmpbuf.data());
+  }
+
   void rotate_down() {
+    using ptr_t       = std::byte*;
+    using const_ptr_t = const std::byte*;
     for (auto&& b_src : fmpi::range(size)) {
       auto const my_rank = static_cast<uint32_t>(rank);
       auto const b_dest  = (my_rank - b_src + size) % size;
       auto const offset  = b_src * blocksize;
 
-      auto const first =
-          static_cast<std::byte const*>(add(tmpbuf.data(), offset));
-      auto const last = first + blocksize;
-      auto const d_first =
-          static_cast<std::byte*>(add(recvbuffer, b_dest * blocksize));
+      auto const f = static_cast<const_ptr_t>(add(tmpbuf.data(), offset));
+      auto const d = static_cast<ptr_t>(add(recvbuffer, b_dest * blocksize));
 
-      std::copy(first, last, d_first);
+      std::copy(f, f + blocksize, d);
     }
   }
 
@@ -349,9 +368,6 @@ class BruckAlgorithm {
 collective_future AlltoallCtx::comm_intermediate() {
   constexpr auto r = 2u;
   // w = log_2 n
-  /*
-   auto const w = static_cast<uint32_t>(std::ceil(fmpi::log(r, comm.size())));
-  */
   auto const w = static_cast<uint32_t>(tlx::integer_log2_ceil(comm.size()));
 
   auto  promise    = collective_promise{};
@@ -359,45 +375,27 @@ collective_future AlltoallCtx::comm_intermediate() {
   auto& dispatcher = static_dispatcher_pool();
 
   auto const blocksize = sendextent * sendcount;
-  auto algo = std::make_shared<BruckAlgorithm>(recvbuf, blocksize, comm, w);
-  // algo->sbuf            = algo->tmpbuf.begin() + blocksize * comm.size();
-  // algo->rbuf            = algo->sbuf + blocksize * comm.size() / 2;
+  auto       algo =
+      std::make_shared<BruckAlgorithm>(recvbuf, sendbuf, blocksize, comm, w);
 
   std::array<std::size_t, detail::n_types> nslots{};
   nslots.fill(r - 1);
   auto schedule_state =
       std::make_unique<ScheduleCtx>(nslots, std::move(promise));
 
-  // auto uptr = std::make_unique<std::vector<Message>>();
-  // uptr->reserve(comm.size());
-
   schedule_state->register_callback(
       message_type::IRECV,
-      [sptr = algo
-       // queue = future.allocate_queue(w + 1),  // +1 for the local message
-       // uptr  = std::move(uptr),
-       /*local_message*/](const std::vector<Message>& msgs) {
+      [sptr = algo, assoc_decomp = opts.associative_decomposable](
+          const std::vector<Message>& msgs) {
         FMPI_ASSERT(msgs.size() == 1);
         auto const& message = msgs.front();
         FMPI_ASSERT(message.sendtype() == message.recvtype());
 
         auto const done = sptr->done();
 
-        // note: if we have an associative-decomposable function,
-        // unpacking is only needed in communication rounds
-        // and the rotate_down can be omitted.
-        //
-        // otherwise: always unpack, and rotate down in the last round
         sptr->unpack(message);
-        // uptr->emplace_back(message);
-        if (done) {
+        if (done and not assoc_decomp) {
           sptr->rotate_down();
-          // now all pieces are in the right place, so let's push it into the
-          // queue
-          // queue->push(local_message);
-          // for (auto&& m : *uptr) {
-          //  queue->push(m);
-          //}
         } else {
           // sptr->unpack(message);
         }
@@ -412,30 +410,9 @@ collective_future AlltoallCtx::comm_intermediate() {
   auto       finalizer =
       rtlx::scope_exit([&dispatcher, hdl]() { dispatcher.commit(hdl); });
 
-  {
-    // Phase 1: rotate
-    // O(p * blocksize)
-    auto r_size  = static_cast<mpi::Rank>(comm.size());
-    auto first   = static_cast<const std::byte*>(sendbuf);
-    auto n_first = static_cast<const std::byte*>(send_offset(comm.rank()));
-    auto last    = static_cast<const std::byte*>(send_offset(r_size));
+  algo->rotate_up();
 
-    // rotate leftwards
-    std::rotate_copy(first, n_first, last, algo->buffer().data());
-  }
-
-  // local copy is already done
-
-  // note: this can be included with associative-decomposable functions
-  // local copy
-  // std::copy_n(
-  //    static_cast<std::byte const*>(send_offset(comm.rank())),
-  //    sendcount * sendextent,
-  //    static_cast<std::byte*>(recvbuf));
-
-  // auto blocks = fmpi::FixedVector<int>(comm.size());
   auto displs = fmpi::FixedVector<int>(comm.size());
-  // auto blens  = fmpi::FixedVector<int>(comm.size());
 
   MPI_Datatype packed_type{};
 
@@ -490,12 +467,17 @@ collective_future AlltoallCtx::comm_intermediate() {
 
       dispatcher.schedule(hdl, message_type::ISENDRECV, msg);
     }
-
-    // not needed here because we have winsz == 1
-    // dispatcher.schedule(hdl, message_type::BARRIER);
-    //}
   }
   return future;
+}
+
+template <class Schedule>
+ScheduleOpts make_opts(
+    mpi::Context const&      ctx,
+    uint32_t                 winsz,
+    ScheduleOpts::WindowType type,
+    bool                     assoc_decomp) {
+  return ScheduleOpts{Schedule{ctx}, winsz, "", type, assoc_decomp};
 }
 
 }  // namespace detail
@@ -507,7 +489,8 @@ collective_future alltoall_tune(
     void*               recvbuf,
     std::size_t         recvcount,
     MPI_Datatype        recvtype,
-    mpi::Context const& ctx) {
+    mpi::Context const& ctx,
+    bool                assoc_decomp) {
   MPI_Aint extent, lb;
   MPI_Type_get_extent(sendtype, &lb, &extent);
 
@@ -529,9 +512,8 @@ collective_future alltoall_tune(
       winsz = ctx.size();
     }
   } else if (n < 256) {
-    auto bruck = Bruck{ctx};
-    auto opts  = ScheduleOpts{bruck, winsz, "", win_type};
-    auto coll  = detail::AlltoallCtx{
+    auto opts = detail::make_opts<Bruck>(ctx, winsz, win_type, assoc_decomp);
+    auto coll = detail::AlltoallCtx{
         sendbuf,
         sendcount,
         sendtype,
@@ -546,9 +528,9 @@ collective_future alltoall_tune(
   }
 
   if (winsz != 0u) {
-    auto one_factor = OneFactor{ctx};
-    auto opts       = ScheduleOpts{one_factor, winsz, "", win_type};
-    auto coll       = detail::AlltoallCtx{
+    auto opts =
+        detail::make_opts<OneFactor>(ctx, winsz, win_type, assoc_decomp);
+    auto coll = detail::AlltoallCtx{
         sendbuf,
         sendcount,
         sendtype,

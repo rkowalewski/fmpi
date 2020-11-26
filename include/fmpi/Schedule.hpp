@@ -297,7 +297,7 @@ struct ScheduleOpts {
   detail::Schedule const schedule;
   uint32_t const         winsz                    = 0;
   WindowType const       type                     = WindowType::fixed;
-  bool                   associative_decomposable = false;
+  bool const             associative_decomposable = false;
 #ifndef NDEBUG
   std::string const name;
 #endif
