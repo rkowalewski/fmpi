@@ -300,13 +300,14 @@ class Alltoall_Runner {
   [[nodiscard]] std::string_view name() const noexcept {
     using namespace std::literals::string_view_literals;
     return "FMPI"sv;
-    //return name_;
+    // return name_;
   }
 
   [[nodiscard]] fmpi::collective_future run(
       benchmark::CollectiveArgs coll_args) const {
     auto sched = Schedule{coll_args.comm};
     // auto opts  = fmpi::ScheduleOpts{sched, NReqs, name(), WinT};
+    constexpr bool assoc_decomp = true;
     return fmpi::alltoall_tune(
         coll_args.sendbuf,
         coll_args.sendcount,
@@ -314,7 +315,8 @@ class Alltoall_Runner {
         coll_args.recvbuf,
         coll_args.recvcount,
         coll_args.recvtype,
-        coll_args.comm
+        coll_args.comm,
+        assoc_decomp
         /*,opts*/);
   }
 };
