@@ -2,7 +2,6 @@
 #define FMPI_SCHEDULE_HPP
 
 #include <fmpi/Config.hpp>
-#include <fmpi/Debug.hpp>
 #include <fmpi/mpi/Environment.hpp>
 #include <fmpi/util/Math.hpp>
 
@@ -96,7 +95,6 @@ class FlatHandshake {
   constexpr FlatHandshake(uint32_t nodes, Rank rank) FMPI_NOEXCEPT
     : rank_(rank),
       nodes_(nodes) {
-    FMPI_DBG(std::make_pair(rank_, nodes_));
   }
 
   [[nodiscard]] constexpr Rank sendRank(uint32_t phase) const FMPI_NOEXCEPT {

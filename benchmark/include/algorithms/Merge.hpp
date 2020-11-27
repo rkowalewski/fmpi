@@ -126,9 +126,9 @@ vector_times merge_async(
           return std::make_pair(f, l);
         });
 
-    //std::random_device rd;
-    //std::mt19937       g(rd());
-    //std::shuffle(chunks.begin(), chunks.end(), g);
+    // std::random_device rd;
+    // std::mt19937       g(rd());
+    // std::shuffle(chunks.begin(), chunks.end(), g);
 
     {
       using scoped_timer_switch = rtlx::ScopedTimerSwitch<scoped_timer>;
@@ -218,11 +218,13 @@ vector_times merge_pieces(
 
   steady_timer t_idle{d_idle};
 
-  auto const& ctx         = collective_args.comm;
-  auto const  blocksize   = collective_args.recvcount;
-  auto const  nels        = ctx.size() * blocksize;
-  std::size_t n_exchanges = ctx.size();
-  auto        queue       = future.arrival_queue();
+  auto const& ctx        = collective_args.comm;
+  auto const  blocksize  = collective_args.recvcount;
+  auto const  nels       = ctx.size() * blocksize;
+  std::size_t n_expected = future.expected();
+  auto        queue      = future.arrival_queue();
+  FMPI_ASSERT(n_expected != 0u);
+  FMPI_DBG(n_expected);
   // auto        buf_alloc   = thread_alloc{};
 
   // auto const* begin = static_cast<value_type
@@ -248,7 +250,7 @@ vector_times merge_pieces(
     {
 #pragma omp single
       {
-        auto pieces = intermediate_merge(n_exchanges, blocksize, queue, out);
+        auto pieces = intermediate_merge(n_expected, blocksize, queue, out);
         std::swap(pieces, chunks);
       }
     }

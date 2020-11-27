@@ -158,14 +158,14 @@ bool check_result(
     std::ostringstream os;
     os << "[ERROR] [Rank " << args.comm.rank() << "] " << name
        << ": incorrect sequence -- ";
-    //    std::copy(recvbuf, recvbuf + size, std::ostream_iterator<R>(os, ",
-    //    ")); os << "\ncorrect: ";
-    //
-    //    std::copy(
-    //        correct_begin,
-    //        correct_begin + size,
-    //        std::ostream_iterator<R>(os, ", "));
-    //
+    std::copy(recvbuf, recvbuf + size, std::ostream_iterator<R>(os, ","));
+    os << "\ncorrect: ";
+
+    std::copy(
+        correct_begin,
+        correct_begin + size,
+        std::ostream_iterator<R>(os, ", "));
+
     os << "\n";
 
     std::cout << os.str();

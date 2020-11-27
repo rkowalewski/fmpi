@@ -385,7 +385,7 @@ collective_future AlltoallCtx::comm_intermediate() {
 
   schedule_state->register_callback(
       message_type::IRECV,
-      [sptr = algo, assoc_decomp = opts.associative_decomposable](
+      [sptr = algo /*, assoc_decomp = opts.associative_decomposable*/](
           const std::vector<Message>& msgs) {
         FMPI_ASSERT(msgs.size() == 1);
         auto const& message = msgs.front();
@@ -394,7 +394,7 @@ collective_future AlltoallCtx::comm_intermediate() {
         auto const done = sptr->done();
 
         sptr->unpack(message);
-        if (done and not assoc_decomp) {
+        if (done) {
           sptr->rotate_down();
         } else {
           // sptr->unpack(message);
