@@ -107,7 +107,7 @@ int main(int argc, char* argv[]) {
     assert(is_clock_synced);
 
     for (std::size_t blocksize = params.smin; blocksize <= params.smax;
-         blocksize *= 4) {
+         blocksize *= 2) {
       auto const sendcount = blocksize / sizeof(value_t);
 
       // Required by good old 32-bit MPI
@@ -298,7 +298,7 @@ class Alltoall_Runner {
   }
   [[nodiscard]] std::string_view name() const noexcept {
     using namespace std::literals::string_view_literals;
-    return "FMPI"sv;
+    return "FMPI.partial"sv;
     // return name_;
   }
 
