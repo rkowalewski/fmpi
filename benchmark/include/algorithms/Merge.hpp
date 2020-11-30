@@ -44,8 +44,8 @@ RandomAccessIterator2 parallel_merge(
       typename std::iterator_traits<RandomAccessIterator1>::value_type;
 
   // threshold to switch from sequential to parallel merge
-  constexpr std::size_t parallel_threshold        = 512u * 1024u;
-  constexpr std::size_t sequential_sort_threshold = 2u * 1024u;
+  constexpr std::size_t parallel_threshold        = 512u * 1024u; // 512 kb
+  constexpr std::size_t sequential_sort_threshold = 2u * 1024u; // 2kb
 
   auto const count = std::accumulate(
       std::begin(seqs),
@@ -253,7 +253,7 @@ vector_times merge_pieces(
         auto pieces = intermediate_merge(n_expected, blocksize, queue, out);
         std::swap(pieces, chunks);
       }
-    }
+    } // here is an implicit barrier and all tasks are guaranteed to be complete
 #endif
   }
 

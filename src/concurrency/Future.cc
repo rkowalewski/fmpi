@@ -101,9 +101,10 @@ collective_future::~collective_future() {
   }
 }
 void collective_future::wait() {
+  FMPI_DBG("< wait");
   FMPI_ASSERT(valid());
   sptr_->wait();
-  FMPI_DBG("notify");
+  FMPI_DBG("wait >");
 }
 
 bool collective_future::valid() const noexcept {

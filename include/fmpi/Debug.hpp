@@ -1,12 +1,12 @@
 #ifndef FMPI_DEBUG_HPP
 #define FMPI_DEBUG_HPP
 
+#include <fmpi/Config.hpp>
+
 #if FMPI_DEBUG_ASSERT
 
 #include <dbg.h>
 #include <mpi.h>
-
-#include <fmpi/Config.hpp>
 
 namespace fmpi {
 namespace detail {
