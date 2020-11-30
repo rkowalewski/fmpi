@@ -148,6 +148,7 @@ int main(int argc, char** argv) {
 
     auto const tag_space = nthreads * neighbors;
 
+#if 0
     schedule_state->register_callback(
         fmpi::message_type::IRECV,
         [sptr = future.allocate_queue(tag_space)](
@@ -156,6 +157,7 @@ int main(int argc, char** argv) {
             sptr->push(msg);
           }
         });
+#endif
 
     auto const hdl = dispatcher.submit(std::move(schedule_state));
 
