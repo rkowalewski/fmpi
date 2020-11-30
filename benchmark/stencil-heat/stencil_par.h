@@ -24,20 +24,21 @@
 #define ind(i, j) (j) * (bx + 2) + (i)
 
 void printarr_par(
-    int      iter,
-    double*  array,
-    int      size,
-    int      px,
-    int      py,
-    int      rx,
-    int      ry,
-    int      bx,
-    int      by,
-    int      offx,
-    int      offy,
-    MPI_Comm comm);
+    int         iter,
+    double*     array,
+    int         size,
+    int         px,
+    int         py,
+    int         rx,
+    int         ry,
+    int         bx,
+    int         by,
+    int         offx,
+    int         offy,
+    const char* fname,
+    MPI_Comm    comm);
 
-void setup(
+bool setup(
     int                 argc,
     char**              argv,
     int*                n_ptr,
@@ -45,7 +46,7 @@ void setup(
     int*                niters_ptr,
     int*                px_ptr,
     int*                py_ptr,
-    int*                final_flag,
+    std::string&        str,
     mpi::Context const& ctx);
 
 #endif /* STENCIL_PAR_H_ */

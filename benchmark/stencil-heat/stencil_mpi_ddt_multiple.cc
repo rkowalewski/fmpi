@@ -8,6 +8,8 @@
 #include <omp.h>
 
 #include <iostream>
+#include <rtlx/Ostream.hpp>
+#include <tlx/cmdline_parser.hpp>
 
 #include "stencil_par.h"
 
@@ -29,22 +31,14 @@ void init_sources(
     int*      locnsources_ptr,
     int       locsources[][2]);
 
-int update_omp(int& old) {
-  int ret;
-#pragma omp atomic capture
-  {
-    ret = old;
-    old++;
-  }
-  return ret;
-}
-
 int main(int argc, char** argv) {
   int n, energy, niters, px, py;
 
   int rx, ry;
   int north, south, west, east;
   int bx, by, offx, offy;
+
+  std::string fname;
 
   /* three heat sources */
   const int nsources = 3;
@@ -58,8 +52,6 @@ int main(int argc, char** argv) {
 
   double heat, rheat;
 
-  int final_flag;
-
   int nthreads, Thx;
 
   /* initialize MPI envrionment */
@@ -71,9 +63,10 @@ int main(int argc, char** argv) {
   int32_t const rank = world.rank();
 
   /* argument checking and setting */
-  setup(argc, argv, &n, &energy, &niters, &px, &py, &final_flag, world);
+  auto const good =
+      setup(argc, argv, &n, &energy, &niters, &px, &py, fname, world);
 
-  if (final_flag == 1) {
+  if (not good) {
     return 0;
   }
 
@@ -151,8 +144,20 @@ int main(int argc, char** argv) {
     auto future  = promise.get_future();
     auto schedule_state =
         std::make_unique<fmpi::ScheduleCtx>(nslots, std::move(promise));
-    auto&      dispatcher = fmpi::static_dispatcher_pool();
-    auto const hdl        = dispatcher.submit(std::move(schedule_state));
+    auto& dispatcher = fmpi::static_dispatcher_pool();
+
+    auto const tag_space = nthreads * neighbors;
+
+    schedule_state->register_callback(
+        fmpi::message_type::IRECV,
+        [sptr = future.allocate_queue(tag_space)](
+            const std::vector<fmpi::Message>& msgs) {
+          for (auto&& msg : msgs) {
+            sptr->push(msg);
+          }
+        });
+
+    auto const hdl = dispatcher.submit(std::move(schedule_state));
 
     std::atomic_int32_t count_down = nthreads;
 
@@ -162,33 +167,8 @@ int main(int argc, char** argv) {
       int xstart    = THX_START;
       int xend      = THX_END;
 
-      /* create request arrays */
-      MPI_Request north_reqs[2];
-      MPI_Request south_reqs[2];
-      MPI_Request east_reqs[2];
-      MPI_Request west_reqs[2];
-
       /* exchange data with neighbors */
       if (south >= 0) {
-#if 1
-        MPI_Isend(
-            &aold[ind(xstart, by)] /* south */,
-            1,
-            north_south_type,
-            south,
-            9,
-            world.mpiComm(),
-            &south_reqs[0]);
-        MPI_Irecv(
-            &aold[ind(xstart, by + 1)] /* south */,
-            1,
-            north_south_type,
-            south,
-            9,
-            world.mpiComm(),
-            &south_reqs[1]);
-        MPI_Waitall(2, south_reqs, MPI_STATUSES_IGNORE);
-#else
         dispatcher.schedule(
             hdl,
             fmpi::message_type::ISENDRECV,
@@ -204,28 +184,8 @@ int main(int argc, char** argv) {
                 static_cast<mpi::Rank>(south),
                 9,
                 world.mpiComm()});
-#endif
       }
       if (north >= 0) {
-#if 1
-        MPI_Isend(
-            &aold[ind(xstart, 1)] /* north */,
-            1,
-            north_south_type,
-            north,
-            9,
-            world.mpiComm(),
-            &north_reqs[0]);
-        MPI_Irecv(
-            &aold[ind(xstart, 0)] /* north */,
-            1,
-            north_south_type,
-            north,
-            9,
-            world.mpiComm(),
-            &north_reqs[1]);
-        MPI_Waitall(2, north_reqs, MPI_STATUSES_IGNORE);
-#else
         dispatcher.schedule(
             hdl,
             fmpi::message_type::ISENDRECV,
@@ -241,29 +201,8 @@ int main(int argc, char** argv) {
                 static_cast<mpi::Rank>(north),
                 9,
                 world.mpiComm()});
-#endif
       }
       if ((west >= 0) && (xstart == 1)) {
-#if 1
-        MPI_Isend(
-            &aold[ind(1, 1)] /* west */,
-            1,
-            east_west_type,
-            west,
-            9,
-            world.mpiComm(),
-            &west_reqs[0]);
-        MPI_Irecv(
-            &aold[ind(0, 1)] /* east */,
-            1,
-            east_west_type,
-            west,
-            9,
-            world.mpiComm(),
-            &west_reqs[1]);
-        MPI_Waitall(2, west_reqs, MPI_STATUSES_IGNORE);
-#else
-
         dispatcher.schedule(
             hdl,
             fmpi::message_type::ISENDRECV,
@@ -279,29 +218,8 @@ int main(int argc, char** argv) {
                 static_cast<mpi::Rank>(west),
                 9,
                 world.mpiComm()});
-
-#endif
       }
       if ((east >= 0) && (xend == bx + 1)) {
-#if 1
-        MPI_Isend(
-            &aold[ind(bx, 1)] /* east */,
-            1,
-            east_west_type,
-            east,
-            9,
-            world.mpiComm(),
-            &east_reqs[0]);
-        MPI_Irecv(
-            &aold[ind(bx + 1, 1)] /* west */,
-            1,
-            east_west_type,
-            east,
-            9,
-            world.mpiComm(),
-            &east_reqs[1]);
-        MPI_Waitall(2, east_reqs, MPI_STATUSES_IGNORE);
-#else
         dispatcher.schedule(
             hdl,
             fmpi::message_type::ISENDRECV,
@@ -317,13 +235,22 @@ int main(int argc, char** argv) {
                 static_cast<mpi::Rank>(east),
                 9,
                 world.mpiComm()});
-
-#endif
       }
 
       if (count_down.fetch_sub(1, std::memory_order_relaxed) == 1) {
-        // this was the last decrement, so schedule the barrier
+        // the last thread schedules commits the collective comm
         dispatcher.commit(hdl);
+      }
+
+      // update inner grid points
+      for (j = 2; j < by; ++j) {
+        for (i = std::max(2, xstart); i < std::min(xend, bx); ++i) {
+          anew[ind(i, j)] = aold[ind(i, j)] / 2.0 +
+                            (aold[ind(i - 1, j)] + aold[ind(i + 1, j)] +
+                             aold[ind(i, j - 1)] + aold[ind(i, j + 1)]) /
+                                4.0 / 2.0;
+          heat += anew[ind(i, j)];
+        }
       }
 
 #pragma omp single
@@ -332,14 +259,41 @@ int main(int argc, char** argv) {
         // implicit barrier here after single construct
       }
 
-      /* update grid */
-      for (j = 1; j < by + 1; ++j) {
-        for (i = xstart; i < xend; ++i) {
+      // update outer grid points
+      for (j = 1; j < by + 1; j += by - 1) {
+        /* north, south -- two elements less per row (first and last) to
+         avoid "double computation" in next loop! */
+        for (i = std::max(2, xstart); i < std::min(xend, bx); ++i) {
           anew[ind(i, j)] = aold[ind(i, j)] / 2.0 +
                             (aold[ind(i - 1, j)] + aold[ind(i + 1, j)] +
                              aold[ind(i, j - 1)] + aold[ind(i, j + 1)]) /
                                 4.0 / 2.0;
           heat += anew[ind(i, j)];
+        }
+      }
+
+      if ((west >= 0) && (xstart == 1)) {
+        // update outer grid points
+        for (j = 1; j < by + 1; ++j) {
+          for (i = 1; i < 2; ++i) {  // west -- full column
+            anew[ind(i, j)] = aold[ind(i, j)] / 2.0 +
+                              (aold[ind(i - 1, j)] + aold[ind(i + 1, j)] +
+                               aold[ind(i, j - 1)] + aold[ind(i, j + 1)]) /
+                                  4.0 / 2.0;
+            heat += anew[ind(i, j)];
+          }
+        }
+      }
+
+      if ((east >= 0) && (xend == bx + 1)) {
+        for (j = 1; j < by + 1; ++j) {
+          for (i = bx; i < bx + 1; ++i) {  // east -- full column
+            anew[ind(i, j)] = aold[ind(i, j)] / 2.0 +
+                              (aold[ind(i - 1, j)] + aold[ind(i + 1, j)] +
+                               aold[ind(i, j - 1)] + aold[ind(i, j + 1)]) /
+                                  4.0 / 2.0;
+            heat += anew[ind(i, j)];
+          }
         }
       }
 
@@ -362,6 +316,7 @@ int main(int argc, char** argv) {
           by,
           offx,
           offy,
+          fname.c_str(),
           world.mpiComm());
     }
   }
@@ -377,7 +332,7 @@ int main(int argc, char** argv) {
   return 0;
 }
 
-void setup(
+bool setup(
     int                 argc,
     char**              argv,
     int*                n_ptr,
@@ -385,37 +340,43 @@ void setup(
     int*                niters_ptr,
     int*                px_ptr,
     int*                py_ptr,
-    int*                final_flag,
+    std::string&        output,
     mpi::Context const& ctx) {
-  int n, energy, niters, px, py;
+  bool good = false;
 
-  (*final_flag) = 0;
+  tlx::CmdlineParser cp;
 
-  if (argc < 6) {
-    if (ctx.rank() == 0u)
-      printf("usage: stencil_mpi <n> <energy> <niters> <px> <py>\n");
-    (*final_flag) = 1;
-    return;
+  // add description and author
+  cp.set_description("Stencil Example with FMPI.");
+  cp.set_author("Roger Kowalewski <roger.kowaleski@nm.ifi.lmu.de>");
+
+  cp.add_param_int("length", *n_ptr, "Size of a dimension in global grid.");
+  cp.add_param_int(
+      "energy", *energy_ptr, "energy to be injected per iteration");
+  cp.add_param_int("iterations", *niters_ptr, "Number of iterations.");
+  cp.add_param_int("px", *px_ptr, "Number of processors in x-dimension");
+  cp.add_param_int("py", *py_ptr, "Number of processors in y-dimension");
+  cp.add_param_string("output", output, "Output file");
+
+  auto const me = ctx.rank();
+
+  if (me == 0) {
+    good = cp.process(argc, argv, std::cout);
+  } else {
+    rtlx::onullstream os;
+    good = cp.process(argc, argv, os);
   }
 
-  n      = atoi(argv[1]); /* nxn grid */
-  energy = atoi(argv[2]); /* energy to be injected per iteration */
-  niters = atoi(argv[3]); /* number of iterations */
-  px     = atoi(argv[4]); /* 1st dim processes */
-  py     = atoi(argv[5]); /* 2nd dim processes */
+  if (not good) {
+    return false;
+  }
 
-  if (px * py != static_cast<int>(ctx.size()))
-    MPI_Abort(ctx.mpiComm(), 1); /* abort if px or py are wrong */
-  if (n % py != 0)
-    MPI_Abort(ctx.mpiComm(), 2); /* abort px needs to divide n */
-  if (n % px != 0)
-    MPI_Abort(ctx.mpiComm(), 3); /* abort py needs to divide n */
+  if (*px_ptr * (*py_ptr) != static_cast<int>(ctx.size()))
+    ctx.abort(1);                          /* abort if px or py are wrong */
+  if (*n_ptr % *py_ptr != 0) ctx.abort(2); /* abort px needs to divide n */
+  if (*n_ptr % *px_ptr != 0) ctx.abort(3); /* abort py needs to divide n */
 
-  (*n_ptr)      = n;
-  (*energy_ptr) = energy;
-  (*niters_ptr) = niters;
-  (*px_ptr)     = px;
-  (*py_ptr)     = py;
+  return good;
 }
 
 void init_sources(
