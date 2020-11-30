@@ -55,7 +55,7 @@ int main(int argc, char** argv) {
   int nthreads, Thx;
 
   /* initialize MPI envrionment */
-  mpi::initialize(&argc, &argv, mpi::ThreadLevel::Multiple);
+  mpi::initialize(&argc, &argv, mpi::ThreadLevel::Serialized);
   auto finalizer = rtlx::scope_exit([]() { mpi::finalize(); });
 
   auto& world = mpi::Context::world();
