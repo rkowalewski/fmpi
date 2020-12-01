@@ -144,14 +144,14 @@ int main(int argc, char** argv) {
   MPI_Type_vector(by, 1, bx + 2, MPI_DOUBLE, &east_west_type);
   MPI_Type_commit(&east_west_type);
 
-  t1 = MPI_Wtime(); /* take time */
-
   // setup dispatcher
   constexpr std::size_t n_types   = 2;
   constexpr std::size_t neighbors = 4;
   // std::size_t const                n_exchanges = nthreads;
   std::array<std::size_t, n_types> nslots{};
   nslots.fill(nthreads);
+
+  t1 = MPI_Wtime(); /* take time */
 
   for (iter = 0; iter < niters; ++iter) {
     /* refresh heat sources */
@@ -360,7 +360,13 @@ int main(int argc, char** argv) {
 
   /* get final heat in the system */
   MPI_Allreduce(&heat, &rheat, 1, MPI_DOUBLE, MPI_SUM, world.mpiComm());
-  if (!rank) printf("[%i] last heat: %f time: %f\n", rank, rheat, t2 - t1);
+
+  auto const t_local  = t2 - t1;
+  auto       t_global = t_local;
+
+  MPI_Reduce(&t_local, &t_global, 1, MPI_DOUBLE, MPI_MAX, 0, world.mpiComm());
+
+  if (!rank) printf("[%i] last heat: %f time: %f\n", rank, rheat, t_global);
   return 0;
 }
 
