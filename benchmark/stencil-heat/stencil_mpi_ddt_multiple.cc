@@ -118,8 +118,8 @@ int main(int argc, char** argv) {
 
   /* printf("nthreads: %d, Thx: %d\n", nthreads, Thx); */
 
-  /* printf("%i (%i,%i) - w: %i, e: %i, n: %i, s: %i\n", rank,
-   * ry,rx,west,east,north,south); */
+  printf("%i:%i (%i,%i) - w: %i, e: %i, n: %i, s: %i\n", rank, nthreads,
+    ry,rx,west,east,north,south);
 
   /* allocate working arrays & communication buffers */
   using value_t     = double;
