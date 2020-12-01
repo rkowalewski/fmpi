@@ -737,8 +737,10 @@ std::ostream& operator<<(std::ostream& os, CommTask const& task) {
   } else if (task.type == message_type::ISENDRECV) {
     ss << "type: ISENDRECV";
     ss << ", id: " << task.id.id();
-    ss << ", source: " << task.message.source();
     ss << ", dest: " << task.message.dest();
+    ss << ", stag: " << task.message.sendtag();
+    ss << ", source: " << task.message.source();
+    ss << ", rtag: " << task.message.recvtag();
   } else if (task.type == message_type::COMMIT) {
     ss << "type: COMMIT";
     ss << ", id: " << task.id.id();

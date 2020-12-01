@@ -7,6 +7,7 @@
 
 #include <omp.h>
 
+#include <fmpi/Debug.hpp>
 #include <iostream>
 #include <rtlx/Ostream.hpp>
 #include <tlx/cmdline_parser.hpp>
@@ -30,6 +31,23 @@ void init_sources(
     int       sources[][2],
     int*      locnsources_ptr,
     int       locsources[][2]);
+
+struct ThreadComm {
+  int west, east, north, south;
+};
+
+void neighbor_alltoallv(
+    const void*          sbuf,
+    const int*           scounts,
+    const int*           sdispls,
+    MPI_Datatype         stype,
+    void*                rbuf,
+    const int*           rcounts,
+    const int*           rdispls,
+    MPI_Datatype         rtype,
+    mpi::Context const&  comm,
+    fmpi::ScheduleHandle hdl) {
+}
 
 int main(int argc, char** argv) {
   int n, energy, niters, px, py;
@@ -84,6 +102,8 @@ int main(int argc, char** argv) {
   east = ry * px + rx + 1;
   if (rx + 1 >= px) east = MPI_PROC_NULL;
 
+  FMPI_DBG(std::make_tuple(west, east, north, south));
+
   /* decompose the domain */
   bx   = n / px;  /* block size in x */
   by   = n / py;  /* block size in y */
@@ -93,6 +113,8 @@ int main(int argc, char** argv) {
   /* divide blocks in x amongst threads */
   nthreads = omp_get_max_threads();
   Thx      = bx / nthreads;
+
+  FMPI_DBG(nthreads);
 
   /* printf("nthreads: %d, Thx: %d\n", nthreads, Thx); */
 
@@ -125,10 +147,11 @@ int main(int argc, char** argv) {
   t1 = MPI_Wtime(); /* take time */
 
   // setup dispatcher
-  constexpr std::size_t            n_types   = 2;
-  constexpr std::size_t            neighbors = 4;
+  constexpr std::size_t n_types   = 2;
+  constexpr std::size_t neighbors = 4;
+  // std::size_t const                n_exchanges = nthreads;
   std::array<std::size_t, n_types> nslots{};
-  nslots.fill(neighbors);
+  nslots.fill(nthreads);
 
   for (iter = 0; iter < niters; ++iter) {
     /* refresh heat sources */
@@ -146,18 +169,16 @@ int main(int argc, char** argv) {
         std::make_unique<fmpi::ScheduleCtx>(nslots, std::move(promise));
     auto& dispatcher = fmpi::static_dispatcher_pool();
 
-    auto const tag_space = nthreads * neighbors;
+    int const tag_base = nthreads * neighbors;
 
-#if 0
     schedule_state->register_callback(
         fmpi::message_type::IRECV,
-        [sptr = future.allocate_queue(tag_space)](
+        [sptr = future.allocate_queue(tag_base)](
             const std::vector<fmpi::Message>& msgs) {
           for (auto&& msg : msgs) {
             sptr->push(msg);
           }
         });
-#endif
 
     auto const hdl = dispatcher.submit(std::move(schedule_state));
 
@@ -169,6 +190,27 @@ int main(int argc, char** argv) {
       int xstart    = THX_START;
       int xend      = THX_END;
 
+      const int     tag_start = tag_base - (thread_id * neighbors);
+      constexpr int dim0      = 0;
+      constexpr int dim1      = 1;
+
+      if (north >= 0) {
+        dispatcher.schedule(
+            hdl,
+            fmpi::message_type::ISENDRECV,
+            fmpi::Message{
+                &aold[ind(xstart, 1)] /* north */,
+                1,
+                north_south_type,
+                static_cast<mpi::Rank>(north),
+                tag_start - 2 * dim1 - 1,  // 0: 97, 24: 1
+                &aold[ind(xstart, 0)] /* north */,
+                1,
+                north_south_type,
+                static_cast<mpi::Rank>(north),
+                tag_start - 2 * dim1,  // 0: 98, 24: 2
+                world.mpiComm()});
+      }
       /* exchange data with neighbors */
       if (south >= 0) {
         dispatcher.schedule(
@@ -179,32 +221,19 @@ int main(int argc, char** argv) {
                 1,
                 north_south_type,
                 static_cast<mpi::Rank>(south),
-                9,
+                tag_start - 2 * dim1,  // 0: 98, 24: 2
                 &aold[ind(xstart, by + 1)] /* south */,
                 1,
                 north_south_type,
                 static_cast<mpi::Rank>(south),
-                9,
-                world.mpiComm()});
-      }
-      if (north >= 0) {
-        dispatcher.schedule(
-            hdl,
-            fmpi::message_type::ISENDRECV,
-            fmpi::Message{
-                &aold[ind(xstart, 1)] /* north */,
-                1,
-                north_south_type,
-                static_cast<mpi::Rank>(north),
-                9,
-                &aold[ind(xstart, 0)] /* north */,
-                1,
-                north_south_type,
-                static_cast<mpi::Rank>(north),
-                9,
+                tag_start - 2 * dim1 - 1,  // 0: 97, 24: 1
                 world.mpiComm()});
       }
       if ((west >= 0) && (xstart == 1)) {
+        assert(thread_id == 0);
+        // we receive from last thread in west
+        int const tag_west = tag_base - ((nthreads - 1) * neighbors);
+
         dispatcher.schedule(
             hdl,
             fmpi::message_type::ISENDRECV,
@@ -213,15 +242,16 @@ int main(int argc, char** argv) {
                 1,
                 east_west_type,
                 static_cast<mpi::Rank>(west),
-                9,
+                tag_west - 2 * dim0 - 1,  // 0: 3, 24: -
                 &aold[ind(0, 1)] /* east */,
                 1,
                 east_west_type,
                 static_cast<mpi::Rank>(west),
-                9,
+                tag_start - 2 * dim0,  // 0: 100, 24: -
                 world.mpiComm()});
       }
       if ((east >= 0) && (xend == bx + 1)) {
+        assert(thread_id == nthreads - 1);
         dispatcher.schedule(
             hdl,
             fmpi::message_type::ISENDRECV,
@@ -230,12 +260,12 @@ int main(int argc, char** argv) {
                 1,
                 east_west_type,
                 static_cast<mpi::Rank>(east),
-                9,
+                tag_base - 2 * dim0,  // 0: -, 24: 100
                 &aold[ind(bx + 1, 1)] /* west */,
                 1,
                 east_west_type,
                 static_cast<mpi::Rank>(east),
-                9,
+                tag_start - 2 * dim0 - 1,  // 0: -, 24: 3
                 world.mpiComm()});
       }
 
