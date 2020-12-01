@@ -335,7 +335,7 @@ int main(int argc, char** argv) {
     std::swap(aold, anew);
 
     /* optional - print image */
-    if (iter == niters - 1) {
+    if (false && iter == niters - 1) {
       printarr_par(
           iter,
           anew.data(),
