@@ -423,8 +423,8 @@ void ScheduleCtx::release_slot(message_type type, int slot) {
   slots_[ti].push_front(slot);
 }
 
-void ScheduleCtx::dispatch_sendrecv(CommTask task) {
-  auto& message = task.message;
+void ScheduleCtx::dispatch_sendrecv(CommTask const& task) {
+  auto message = task.message;
 
   auto const slot_recv = acquire_slot(message_type::IRECV);
   auto const slot_send = acquire_slot(message_type::ISEND);

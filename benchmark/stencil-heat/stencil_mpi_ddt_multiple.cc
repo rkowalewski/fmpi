@@ -5,21 +5,33 @@
  *
  */
 
+#include <fmpi/concurrency/SPSCQueue.h>
 #include <omp.h>
 
 #include <fmpi/Debug.hpp>
+#include <fmpi/util/NumericRange.hpp>
 #include <iostream>
 #include <rtlx/Ostream.hpp>
 #include <tlx/cmdline_parser.hpp>
 
 #include "stencil_par.h"
 
-#define THX_START \
-  (thread_id % nthreads) == 0 ? 1 : (thread_id % nthreads) * Thx + 1
-#define THX_END                          \
-  (thread_id % nthreads) == nthreads - 1 \
-      ? bx + 1                           \
-      : ((thread_id + 1) % nthreads) * Thx + 1
+constexpr int THX_START(int tid, int nthreads, int Thx) {
+  return (tid % nthreads) == 0 ? 1 : (tid % nthreads) * Thx + 1;
+}
+
+constexpr int THX_END(int tid, int nthreads, int Thx, int bx) {
+  return (tid % nthreads) == nthreads - 1 ? bx + 1
+                                          : ((tid + 1) % nthreads) * Thx + 1;
+}
+
+template <class RandomAccessIterator>
+constexpr auto stencil(RandomAccessIterator src, int i, int j, int bx) ->
+    typename std::iterator_traits<RandomAccessIterator>::value_type {
+  return src[ind(i, j)] / 2.0 + (src[ind(i - 1, j)] + src[ind(i + 1, j)] +
+                                 src[ind(i, j - 1)] + src[ind(i, j + 1)]) /
+                                    4.0 / 2.0;
+}
 
 void init_sources(
     int       bx,
@@ -118,8 +130,16 @@ int main(int argc, char** argv) {
 
   /* printf("nthreads: %d, Thx: %d\n", nthreads, Thx); */
 
-  printf("%i:%i (%i,%i) - w: %i, e: %i, n: %i, s: %i\n", rank, nthreads,
-    ry,rx,west,east,north,south);
+  printf(
+      "%i:%i (%i,%i) - w: %i, e: %i, n: %i, s: %i\n",
+      rank,
+      nthreads,
+      ry,
+      rx,
+      west,
+      east,
+      north,
+      south);
 
   /* allocate working arrays & communication buffers */
   using value_t     = double;
@@ -153,6 +173,24 @@ int main(int argc, char** argv) {
 
   t1 = MPI_Wtime(); /* take time */
 
+  int32_t n_expected = 0;
+
+  if (north >= 0) {
+    n_expected += nthreads;
+  }
+
+  if (south >= 0) {
+    n_expected += nthreads;
+  }
+
+  if (east >= 0) {
+    n_expected += 1;
+  }
+
+  if (west >= 0) {
+    n_expected += 1;
+  }
+
   for (iter = 0; iter < niters; ++iter) {
     /* refresh heat sources */
     for (i = 0; i < locnsources; ++i) {
@@ -171,6 +209,8 @@ int main(int argc, char** argv) {
 
     int const tag_base = nthreads * neighbors;
 
+    // fmpi::SimpleVector<rigtorp::SPSCQueue<int>> queues(nthreads);
+
     schedule_state->register_callback(
         fmpi::message_type::IRECV,
         [sptr = future.allocate_queue(tag_base)](
@@ -182,13 +222,14 @@ int main(int argc, char** argv) {
 
     auto const hdl = dispatcher.submit(std::move(schedule_state));
 
-    std::atomic_int32_t count_down = nthreads;
+    std::atomic_int32_t countdown_threads = nthreads;
+    std::atomic_int32_t countdown_queue   = n_expected;
 
 #pragma omp parallel private(i, j) reduction(+ : heat)
     {
       int thread_id = omp_get_thread_num();
-      int xstart    = THX_START;
-      int xend      = THX_END;
+      int xstart    = THX_START(thread_id, nthreads, Thx);
+      int xend      = THX_END(thread_id, nthreads, Thx, bx);
 
       const int     tag_start = tag_base - (thread_id * neighbors);
       constexpr int dim0      = 0;
@@ -269,7 +310,7 @@ int main(int argc, char** argv) {
                 world.mpiComm()});
       }
 
-      if (count_down.fetch_sub(1, std::memory_order_relaxed) == 1) {
+      if (countdown_threads.fetch_sub(1, std::memory_order_relaxed) == 1) {
         // the last thread schedules commits the collective comm
         dispatcher.commit(hdl);
       }
@@ -277,13 +318,71 @@ int main(int argc, char** argv) {
       // update inner grid points
       for (j = 2; j < by; ++j) {
         for (i = std::max(2, xstart); i < std::min(xend, bx); ++i) {
-          anew[ind(i, j)] = aold[ind(i, j)] / 2.0 +
-                            (aold[ind(i - 1, j)] + aold[ind(i + 1, j)] +
-                             aold[ind(i, j - 1)] + aold[ind(i, j + 1)]) /
-                                4.0 / 2.0;
+          anew[ind(i, j)] = stencil(aold.data(), i, j, bx);
           heat += anew[ind(i, j)];
         }
       }
+
+#if 1
+      for (;;) {
+        if (countdown_queue.fetch_sub(1, std::memory_order_relaxed) <= 0) {
+          // all tasks done
+          break;
+        }
+
+        fmpi::Message msg;
+        future.arrival_queue()->pop(msg);
+
+        // 0: west, 1: south, 2: north, 3: east
+        auto const reltag = msg.recvtag() % static_cast<int>(neighbors);
+        auto const tid    = (tag_base - msg.recvtag()) / nthreads;
+
+        auto const xs = THX_START(tid, nthreads, Thx);
+        auto const xe = THX_END(tid, nthreads, Thx, bx);
+
+        assert(0 <= reltag && reltag < 4);
+
+        if (reltag == 1) {
+          // south -- two elements less per row
+          // j: by
+          // i: [std::max(2, xs), i < std::min(xe, bx), 1]
+
+          j = by;
+          for (i = std::max(2, xs); i < std::min(xe, bx); ++i) {
+            anew[ind(i, j)] = stencil(aold.data(), i, j, bx);
+            heat += anew[ind(i, j)];
+          }
+
+        } else if (reltag == 2) {
+          // north -- two elements less per row
+          // j: 1
+          // i: [max(2, xs), i < std::min(xe, bx), 1]
+          j = 1;
+          for (i = std::max(2, xs); i < std::min(xe, bx); ++i) {
+            anew[ind(i, j)] = stencil(aold.data(), i, j, bx);
+            heat += anew[ind(i, j)];
+          }
+        } else if (reltag == 3) {
+          // east -- full columns
+          // j: [1, by + 1, 1]
+          // i: bx
+          i = bx;
+          for (j = 1; j < by + 1; ++j) {
+            anew[ind(i, j)] = stencil(aold.data(), i, j, bx);
+            heat += anew[ind(i, j)];
+          }
+        } else {
+          // west -- full column
+          // j: [1, by + 1, 1]
+          // i: 1
+          i = 1;
+          for (j = 1; j < by + 1; ++j) {
+            anew[ind(i, j)] = stencil(aold.data(), i, j, bx);
+            heat += anew[ind(i, j)];
+          }
+        }
+      }
+#else
 
 #pragma omp single
       {
@@ -296,10 +395,7 @@ int main(int argc, char** argv) {
         /* north, south -- two elements less per row (first and last) to
          avoid "double computation" in next loop! */
         for (i = std::max(2, xstart); i < std::min(xend, bx); ++i) {
-          anew[ind(i, j)] = aold[ind(i, j)] / 2.0 +
-                            (aold[ind(i - 1, j)] + aold[ind(i + 1, j)] +
-                             aold[ind(i, j - 1)] + aold[ind(i, j + 1)]) /
-                                4.0 / 2.0;
+          anew[ind(i, j)] = stencil(aold.data(), i, j, bx);
           heat += anew[ind(i, j)];
         }
       }
@@ -308,10 +404,7 @@ int main(int argc, char** argv) {
         // update outer grid points
         for (j = 1; j < by + 1; ++j) {
           for (i = 1; i < 2; ++i) {  // west -- full column
-            anew[ind(i, j)] = aold[ind(i, j)] / 2.0 +
-                              (aold[ind(i - 1, j)] + aold[ind(i + 1, j)] +
-                               aold[ind(i, j - 1)] + aold[ind(i, j + 1)]) /
-                                  4.0 / 2.0;
+            anew[ind(i, j)] = stencil(aold.data(), i, j, bx);
             heat += anew[ind(i, j)];
           }
         }
@@ -320,14 +413,12 @@ int main(int argc, char** argv) {
       if ((east >= 0) && (xend == bx + 1)) {
         for (j = 1; j < by + 1; ++j) {
           for (i = bx; i < bx + 1; ++i) {  // east -- full column
-            anew[ind(i, j)] = aold[ind(i, j)] / 2.0 +
-                              (aold[ind(i - 1, j)] + aold[ind(i + 1, j)] +
-                               aold[ind(i, j - 1)] + aold[ind(i, j + 1)]) /
-                                  4.0 / 2.0;
+            anew[ind(i, j)] = stencil(aold.data(), i, j, bx);
             heat += anew[ind(i, j)];
           }
         }
       }
+#endif
 
     } /* end parallel region */
 

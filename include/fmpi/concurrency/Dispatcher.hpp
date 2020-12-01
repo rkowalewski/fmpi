@@ -124,7 +124,7 @@ class ScheduleCtx {
   void test_all();
   int  complete_any(message_type type);
   void dispatch_task(CommTask task);
-  void dispatch_sendrecv(CommTask task);
+  void dispatch_sendrecv(CommTask const& task);
   void notify_ready();
 
   int  acquire_slot(message_type type);
