@@ -2,9 +2,14 @@
 #define FMPI_MEMORY_CONTIGUOUSPOOLALLOCATOR_HPP
 
 #include <cassert>
+#include <cstddef>
 #include <memory>
+#include <stdexcept>
+#include <limits>
 
 namespace fmpi {
+
+using ssize_t = std::ptrdiff_t;
 
 //==============================================================================
 //                        struct ContiguousPoolAllocator
